@@ -1,26 +1,51 @@
-import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { getDatabase } from '../utils/db.js';
 
-const userSchema = new mongoose.Schema(
-  {
-    username: { type: String, required: true, unique: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
-    isGameMaster: { type: Boolean, default: false },
-  },
-  { timestamps: true },
-);
-
-userSchema.pre('save', async function hashPassword(next) {
-  if (!this.isModified('password')) return next();
-
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
-
-userSchema.methods.comparePassword = function comparePassword(password) {
-  return bcrypt.compare(password, this.password);
+const mapUserRow = (row) => {
+  if (!row) return null;
+  return {
+    _id: String(row.id),
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    password: row.password,
+    isGameMaster: Boolean(row.isGameMaster),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 };
 
-export const User = mongoose.model('User', userSchema);
+export const findUserByEmailOrUsername = async ({ email, username }) => {
+  const db = getDatabase();
+  const row = await db.get(
+    'SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1',
+    email,
+    username,
+  );
+  return mapUserRow(row);
+};
+
+export const findUserByIdentifier = async (identifier) => {
+  const db = getDatabase();
+  const row = await db.get(
+    'SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1',
+    identifier,
+    identifier,
+  );
+  return mapUserRow(row);
+};
+
+export const createUser = async ({ username, email, password, isGameMaster }) => {
+  const db = getDatabase();
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const result = await db.run(
+    `INSERT INTO users (username, email, password, isGameMaster)
+     VALUES (?, ?, ?, ?)`,
+    username,
+    email,
+    hashedPassword,
+    isGameMaster ? 1 : 0,
+  );
+  const row = await db.get('SELECT * FROM users WHERE id = ?', result.lastID);
+  return mapUserRow(row);
+};

@@ -1,5 +1,5 @@
 import path from 'path';
-import { Map } from '../models/Map.js';
+import { createMap } from '../models/Map.js';
 
 /**
  * Handle an uploaded map image, create the database entry and return the stored
@@ -15,7 +15,7 @@ export const uploadMap = async (req, res) => {
   const safeName = req.body.name || originalname;
 
   try {
-    const map = await Map.create({
+    const map = await createMap({
       name: safeName,
       imagePath: path.posix.join('uploads', filename),
       campaignId,

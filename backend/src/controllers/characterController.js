@@ -1,7 +1,12 @@
-import { Character } from '../models/Character.js';
+import {
+  createCharacter as createCharacterModel,
+  findCharacterById,
+  listCharacters,
+  updateCharacterById,
+} from '../models/Character.js';
 
 const isOwnerOrGameMaster = (character, user) =>
-  character.owner?.toString() === user.id || user.isGameMaster;
+  character.owner === String(user.id) || user.isGameMaster;
 
 /**
  * Retrieve all characters for the current campaign. In the future this can be
@@ -11,11 +16,13 @@ export const getCharacters = async (req, res) => {
   const campaignId = req.query.campaignId || 'default';
 
   try {
-    const characters = await Character.find({ campaignId }).sort({ createdAt: 1 });
+    const characters = await listCharacters(campaignId);
     return res.json(characters);
   } catch (error) {
     console.error('[Character] Fetch error', error);
-    return res.status(500).json({ message: 'Erreur lors de la récupération des personnages' });
+    return res
+      .status(500)
+      .json({ message: 'Erreur lors de la récupération des personnages' });
   }
 };
 
@@ -27,19 +34,22 @@ export const createCharacter = async (req, res) => {
   const { name, health, mana, imageUrl, campaignId = 'default' } = req.body;
 
   try {
-    const character = await Character.create({
+    const ownerId = Number.parseInt(req.user?.id, 10);
+    const character = await createCharacterModel({
       name,
       health,
       mana,
       imageUrl,
-      owner: req.user.id,
+      ownerId: Number.isNaN(ownerId) ? null : ownerId,
       campaignId,
     });
 
     return res.status(201).json(character);
   } catch (error) {
     console.error('[Character] Create error', error);
-    return res.status(500).json({ message: 'Erreur lors de la création du personnage' });
+    return res
+      .status(500)
+      .json({ message: 'Erreur lors de la création du personnage' });
   }
 };
 
@@ -50,9 +60,14 @@ export const createCharacter = async (req, res) => {
 export const updateCharacter = async (req, res) => {
   const { id } = req.params;
   const { name, health, mana, imageUrl } = req.body;
+  const numericId = Number.parseInt(id, 10);
+
+  if (Number.isNaN(numericId)) {
+    return res.status(400).json({ message: 'Identifiant de personnage invalide' });
+  }
 
   try {
-    const character = await Character.findById(id);
+    const character = await findCharacterById(numericId);
 
     if (!character) {
       return res.status(404).json({ message: 'Personnage introuvable' });
@@ -62,16 +77,18 @@ export const updateCharacter = async (req, res) => {
       return res.status(403).json({ message: 'Action non autorisée' });
     }
 
-    character.name = name ?? character.name;
-    character.health = health ?? character.health;
-    character.mana = mana ?? character.mana;
-    character.imageUrl = imageUrl ?? character.imageUrl;
+    const updated = await updateCharacterById(numericId, {
+      name,
+      health,
+      mana,
+      imageUrl,
+    });
 
-    await character.save();
-
-    return res.json(character);
+    return res.json(updated);
   } catch (error) {
     console.error('[Character] Update error', error);
-    return res.status(500).json({ message: 'Erreur lors de la mise à jour du personnage' });
+    return res
+      .status(500)
+      .json({ message: 'Erreur lors de la mise à jour du personnage' });
   }
 };

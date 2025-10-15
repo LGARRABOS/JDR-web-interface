@@ -1,6 +1,6 @@
 # Chronicles of Eternita
 
-Chronicles of Eternita est une table virtuelle privée pensée pour les campagnes de jeu de rôle. Elle fournit un backend Node.js + MongoDB et un frontend React + Tailwind permettant de jouer localement avec synchronisation temps réel.
+Chronicles of Eternita est une table virtuelle privée pensée pour les campagnes de jeu de rôle. Elle fournit un backend Node.js + SQLite et un frontend React + Tailwind permettant de jouer localement avec synchronisation temps réel.
 
 ## Structure du projet
 
@@ -24,7 +24,7 @@ chronicles-of-eternita/
 ## Pré-requis
 
 - Node.js >= 18
-- MongoDB en local (`mongodb://localhost:27017/eternita` par défaut)
+- Aucune base à installer : SQLite est embarqué côté backend
 
 ## Installation
 
@@ -42,6 +42,7 @@ npm run dev
 ```
 
 Le frontend Vite est accessible sur `http://localhost:5173` et interroge automatiquement l'API sur `http://localhost:4000`.
+Le backend crée automatiquement la base SQLite définie dans `SQLITE_PATH` (par défaut `backend/data/eternita.sqlite`).
 
 ## Fonctionnalités clés
 
@@ -56,7 +57,7 @@ Le frontend Vite est accessible sur `http://localhost:5173` et interroge automat
 
 ### Backend
 
-- Express, Mongoose et Socket.IO
+- Express, SQLite et Socket.IO
 - Routes REST :
   - `POST /api/auth/register`
   - `POST /api/auth/login`
@@ -79,7 +80,7 @@ Le frontend Vite est accessible sur `http://localhost:5173` et interroge automat
 ## Évolutions possibles
 
 - Gestion multi-campagnes avec sélection côté UI
-- Persistances des jetons / états de carte dans MongoDB
+- Persistances des jetons / états de carte dans SQLite
 - Permissions avancées (MJ, co-MJ, joueurs spectateurs)
 - Support de plusieurs cartes par campagne et navigation entre elles
 
