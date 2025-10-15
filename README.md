@@ -45,6 +45,21 @@ Le frontend Vite est accessible sur `http://localhost:5173` et interroge automat
 Le backend crée automatiquement la base SQLite définie dans `SQLITE_PATH` (par défaut `backend/data/eternita.sqlite`).
 La variable d'environnement `CORS_ORIGINS` (par défaut `http://localhost:5173`) permet de préciser les origines autorisées pour les requêtes HTTP et WebSocket.
 
+## Tests
+
+Le backend embarque une petite suite de tests unitaires pour garantir la fiabilité du parseur de dés et des utilitaires JWT.
+
+```bash
+cd backend
+npm test
+```
+
+Les tests n'ont pas besoin d'une base SQLite active : ils utilisent uniquement des stubs en mémoire afin de s'exécuter rapidement.
+
+> 💡 Si `npm install` échoue avec un message `No matching version found for sqlite@^5.2.4`, supprimez l'ancien `package-lock.json`
+> (et éventuellement le dossier `node_modules`) avant de relancer l'installation. Le backend n'utilise plus le paquet `sqlite`
+> mais uniquement `sqlite3@5.1.6`.
+
 ## Fonctionnalités clés
 
 - Authentification JWT (inscription/connexion)
