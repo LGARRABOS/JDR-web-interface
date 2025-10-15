@@ -22,9 +22,19 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
 const server = http.createServer(app);
+
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',');
+
+const corsOptions = {
+  origin: allowedOrigins.map((origin) => origin.trim()),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 const io = new SocketServer(server, {
   cors: {
-    origin: '*',
+    ...corsOptions,
   },
 });
 
@@ -33,7 +43,8 @@ registerMapSocket(io);
 registerDiceSocket(io);
 
 // Global middleware
-app.use(cors());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 

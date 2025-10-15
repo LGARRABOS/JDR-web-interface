@@ -43,6 +43,7 @@ npm run dev
 
 Le frontend Vite est accessible sur `http://localhost:5173` et interroge automatiquement l'API sur `http://localhost:4000`.
 Le backend crée automatiquement la base SQLite définie dans `SQLITE_PATH` (par défaut `backend/data/eternita.sqlite`).
+La variable d'environnement `CORS_ORIGINS` (par défaut `http://localhost:5173`) permet de préciser les origines autorisées pour les requêtes HTTP et WebSocket.
 
 ## Fonctionnalités clés
 
