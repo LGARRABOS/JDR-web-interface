@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
+
 let dbInstance;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -72,82 +74,15 @@ export const connectDatabase = async () => {
   const databasePath = resolveDatabasePath();
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
-  dbInstance = await createDatabaseConnection(databasePath);
+  dbInstance = await open({
+    filename: databasePath,
+    driver: sqlite3.Database,
+  });
 
   await applyMigrations(dbInstance);
 
   console.log(`[SQLite] Base initialisée dans ${databasePath}`);
   return dbInstance;
-};
-
-const createDatabaseConnection = (filename) =>
-  new Promise((resolve, reject) => {
-    const rawDb = new sqlite3.Database(filename, (err) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(wrapDatabase(rawDb));
-    });
-  });
-
-const wrapDatabase = (rawDb) => {
-  const normalizeParams = (params) => {
-    if (params.length === 1 && Array.isArray(params[0])) {
-      return params[0];
-    }
-    return params;
-  };
-
-  return {
-    get(sql, ...params) {
-      const normalized = normalizeParams(params);
-      return new Promise((resolve, reject) => {
-        rawDb.get(sql, normalized, (err, row) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          resolve(row);
-        });
-      });
-    },
-    all(sql, ...params) {
-      const normalized = normalizeParams(params);
-      return new Promise((resolve, reject) => {
-        rawDb.all(sql, normalized, (err, rows) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          resolve(rows);
-        });
-      });
-    },
-    run(sql, ...params) {
-      const normalized = normalizeParams(params);
-      return new Promise((resolve, reject) => {
-        rawDb.run(sql, normalized, function runCallback(err) {
-          if (err) {
-            reject(err);
-            return;
-          }
-          resolve({ lastID: this.lastID, changes: this.changes });
-        });
-      });
-    },
-    exec(sql) {
-      return new Promise((resolve, reject) => {
-        rawDb.exec(sql, (err) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          resolve();
-        });
-      });
-    },
-  };
 };
 
 export const getDatabase = () => {
