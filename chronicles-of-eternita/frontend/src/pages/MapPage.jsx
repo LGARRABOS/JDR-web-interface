@@ -99,6 +99,23 @@ const MapPage = () => {
     }
   }, []);
 
+  const loadMapCatalog = useCallback(
+    async (searchTerm = '') => {
+      if (!isMJ) {
+        return;
+      }
+      setMapCatalogLoading(true);
+      try {
+        const params = searchTerm ? { search: searchTerm } : {};
+        const { data } = await MapService.list(params);
+        setMapCatalog(data.maps);
+      } finally {
+        setMapCatalogLoading(false);
+      }
+    },
+    [isMJ]
+  );
+
   useEffect(() => {
     loadCharacters();
   }, [loadCharacters]);
@@ -151,6 +168,24 @@ const MapPage = () => {
     }, 4000);
     return () => clearTimeout(handler);
   }, [mapSearchMessage]);
+
+  useEffect(() => {
+    if (isMJ) {
+      loadMapCatalog();
+    } else {
+      setMapCatalog([]);
+    }
+  }, [isMJ, loadMapCatalog]);
+
+  useEffect(() => {
+    if (!isMJ) {
+      return undefined;
+    }
+    const handler = setTimeout(() => {
+      loadMapCatalog(mapSearch.trim());
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [isMJ, loadMapCatalog, mapSearch]);
 
   useEffect(() => {
     if (!socket) {
@@ -258,6 +293,7 @@ const MapPage = () => {
     const { data } = await MapService.upload(formData);
     const uploadedPath = buildMapPath(data.map.filePath);
     setMapImage(uploadedPath);
+    setMapCatalog((prev) => [data.map, ...prev.filter((map) => map.id !== data.map.id)]);
     socket?.emit('map:update', { mapImage: uploadedPath });
     setMapSearchMessage(`Carte "${data.map.name}" mise en ligne et activée.`);
     event.target.value = '';
@@ -308,6 +344,43 @@ const MapPage = () => {
     };
     setTokens((prev) => [...prev, newToken]);
     setEnemyForm((prev) => ({ ...prev, name: '' }));
+    socket?.emit('token:add', newToken);
+  };
+
+  const handleRemoveEnemyToken = (tokenId) => {
+    setTokens((prev) => prev.filter((token) => token.id !== tokenId));
+    socket?.emit('token:remove', { id: tokenId });
+  };
+
+  const handleMapSelect = (map) => {
+    const selectedPath = buildMapPath(map.filePath);
+    setMapImage(selectedPath);
+    socket?.emit('map:update', { mapImage: selectedPath });
+  };
+
+  const handleEnemyFormChange = (field) => (event) => {
+    const value = event.target.value;
+    setEnemyForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddEnemyToken = (event) => {
+    event.preventDefault();
+    const name = enemyForm.name.trim();
+    const image = enemyForm.image.trim();
+    if (!name || !image) {
+      return;
+    }
+    const newToken = {
+      id: createEnemyTokenId(),
+      type: 'enemy',
+      ownerId: null,
+      label: name,
+      image,
+      x: 50,
+      y: 50
+    };
+    setTokens((prev) => [...prev, newToken]);
+    setEnemyForm({ name: '', image: '' });
     socket?.emit('token:add', newToken);
   };
 
