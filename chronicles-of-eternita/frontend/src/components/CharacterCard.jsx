@@ -7,9 +7,14 @@ const CharacterCard = ({ character, isEditable = false, onUpdate }) => {
     setDraft(character);
   }, [character]);
 
-  const handleChange = (field) => (event) => {
-    const value = field === 'name' ? event.target.value : Number(event.target.value);
+  const handleChange = (field, parser = (value) => value) => (event) => {
+    const value = parser(event.target.value);
     setDraft((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const parseNumber = (value) => {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
   };
 
   const handleBlur = async () => {
@@ -39,17 +44,19 @@ const CharacterCard = ({ character, isEditable = false, onUpdate }) => {
           ) : (
             <h3 className="text-lg font-semibold">{draft.name}</h3>
           )}
-          <p className="text-sm text-slate-400">PV : {draft.hp} — Mana : {draft.mana}</p>
+          <p className="text-sm text-slate-400">
+            PV : {draft.hp} — Mana : {draft.mana} — Vitesse : {draft.speed}
+          </p>
         </div>
       </div>
       {isEditable && (
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <label className="flex flex-col gap-1">
             <span>PV</span>
             <input
               type="number"
               value={draft.hp}
-              onChange={handleChange('hp')}
+              onChange={handleChange('hp', parseNumber)}
               onBlur={handleBlur}
               className="rounded bg-slate-900 px-2 py-1 focus:outline-none"
             />
@@ -59,8 +66,29 @@ const CharacterCard = ({ character, isEditable = false, onUpdate }) => {
             <input
               type="number"
               value={draft.mana}
-              onChange={handleChange('mana')}
+              onChange={handleChange('mana', parseNumber)}
               onBlur={handleBlur}
+              className="rounded bg-slate-900 px-2 py-1 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span>Vitesse</span>
+            <input
+              type="number"
+              value={draft.speed}
+              onChange={handleChange('speed', parseNumber)}
+              onBlur={handleBlur}
+              className="rounded bg-slate-900 px-2 py-1 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1 sm:col-span-2">
+            <span>Image de profil (URL)</span>
+            <input
+              type="text"
+              value={draft.image || ''}
+              onChange={handleChange('image')}
+              onBlur={handleBlur}
+              placeholder="https://..."
               className="rounded bg-slate-900 px-2 py-1 focus:outline-none"
             />
           </label>

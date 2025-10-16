@@ -1,14 +1,23 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-const MapCanvas = ({ mapImage, tokens, onTokenMove, isMJ }) => {
+const MapCanvas = ({ mapImage, tokens, onTokenMove }) => {
   const containerRef = useRef(null);
-  const [dragging, setDragging] = useState(null);
+  const tokensRef = useRef(tokens);
+  const [draggingId, setDraggingId] = useState(null);
+
+  useEffect(() => {
+    tokensRef.current = tokens;
+  }, [tokens]);
 
   const updatePosition = useCallback(
     (event) => {
-      if (!dragging || !isMJ) {
+      if (!draggingId) {
+        return;
+      }
+      const token = tokensRef.current.find((item) => item.id === draggingId);
+      if (!token?.draggable) {
         return;
       }
       const container = containerRef.current;
@@ -18,33 +27,34 @@ const MapCanvas = ({ mapImage, tokens, onTokenMove, isMJ }) => {
       const rect = container.getBoundingClientRect();
       const xPercent = clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
       const yPercent = clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100);
-      onTokenMove?.({ id: dragging, x: xPercent, y: yPercent });
+      onTokenMove?.({ id: draggingId, x: xPercent, y: yPercent });
     },
-    [dragging, isMJ, onTokenMove]
+    [draggingId, onTokenMove]
   );
 
   const handlePointerDown = (id) => (event) => {
-    if (!isMJ) {
+    const token = tokensRef.current.find((item) => item.id === id);
+    if (!token?.draggable) {
       return;
     }
     event.preventDefault();
-    setDragging(id);
+    setDraggingId(id);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const handlePointerMove = (event) => {
-    if (!dragging) {
+    if (!draggingId) {
       return;
     }
     updatePosition(event);
   };
 
   const handlePointerUp = (event) => {
-    if (!dragging) {
+    if (!draggingId) {
       return;
     }
     updatePosition(event);
-    setDragging(null);
+    setDraggingId(null);
   };
 
   return (
@@ -68,11 +78,30 @@ const MapCanvas = ({ mapImage, tokens, onTokenMove, isMJ }) => {
             left: `${token.x}%`,
             top: `${token.y}%`
           }}
-          className={`absolute flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 select-none items-center justify-center rounded-full border-2 border-emerald-400 bg-slate-800 text-xs font-semibold uppercase ${
-            isMJ ? 'cursor-grab' : 'cursor-default'
-          }`}
+          className="absolute -translate-x-1/2 -translate-y-1/2 select-none"
         >
-          {token.label.slice(0, 3)}
+          <div
+            className={`relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border-2 ${
+              token.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+            }`}
+            style={{
+              borderColor: token.type === 'enemy' ? 'transparent' : token.color || '#34d399'
+            }}
+          >
+            {token.type === 'enemy' && token.image ? (
+              <img src={token.image} alt={token.label} className="h-full w-full object-cover" />
+            ) : (
+              <div
+                className="flex h-full w-full items-center justify-center text-xs font-semibold uppercase text-slate-900"
+                style={{ backgroundColor: token.color || '#34d399' }}
+              >
+                {token.label.slice(0, 3)}
+              </div>
+            )}
+          </div>
+          <p className="pointer-events-none mt-1 text-center text-[10px] font-semibold uppercase text-emerald-200">
+            {token.label}
+          </p>
         </div>
       ))}
     </div>

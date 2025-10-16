@@ -19,6 +19,7 @@ export const CharacterService = {
 };
 
 export const MapService = {
+  list: (params = {}) => api.get('/maps', { params }),
   upload: (formData) =>
     api.post('/maps/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
