@@ -9,8 +9,8 @@ Chronicles of Eternita est une application web complète permettant à un Maîtr
 npm run setup
 
 # Démarrage des serveurs
-cd backend && npm run dev
-cd frontend && npm run dev
+npm run dev
+# (lance backend et frontend en parallèle)
 ```
 
 Consultez les sous-répertoires `backend` et `frontend` pour plus de détails sur la configuration spécifique.
