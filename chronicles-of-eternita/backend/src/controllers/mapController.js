@@ -1,5 +1,7 @@
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { Op } from 'sequelize';
 import Map from '../models/Map.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,4 +16,40 @@ export const uploadMap = async (req, res) => {
     filePath: path.relative(path.join(__dirname, '../../'), req.file.path)
   });
   return res.status(201).json({ map });
+};
+
+export const listMaps = async (req, res) => {
+  const { search } = req.query;
+  const where = search
+    ? {
+        name: {
+          [Op.like]: `%${search}%`
+        }
+      }
+    : undefined;
+  const options = {
+    order: [['createdAt', 'DESC']]
+  };
+  if (where) {
+    options.where = where;
+  }
+  const maps = await Map.findAll(options);
+  return res.json({ maps });
+};
+
+export const deleteMap = async (req, res) => {
+  const { id } = req.params;
+  const map = await Map.findByPk(id);
+
+  if (!map) {
+    return res.status(404).json({ message: 'Carte introuvable' });
+  }
+
+  const absolutePath = path.join(__dirname, '../../', map.filePath);
+  if (fs.existsSync(absolutePath)) {
+    await fs.promises.unlink(absolutePath).catch(() => {});
+  }
+
+  await map.destroy();
+  return res.status(204).send();
 };

@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { requireRole, isAuthenticated } from '../middleware/auth.js';
-import { uploadMap } from '../controllers/mapController.js';
+import { deleteMap, listMaps, uploadMap } from '../controllers/mapController.js';
 
 const router = Router();
 
@@ -26,6 +26,8 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+router.get('/', isAuthenticated, requireRole('MJ'), listMaps);
 router.post('/upload', isAuthenticated, requireRole('MJ'), upload.single('map'), uploadMap);
+router.delete('/:id', isAuthenticated, requireRole('MJ'), deleteMap);
 
 export default router;

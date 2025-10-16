@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/authRoutes.js';
 import characterRoutes from './routes/characterRoutes.js';
 import mapRoutes from './routes/mapRoutes.js';
+import assetRoutes from './routes/assetRoutes.js';
 import rollRoutes from './routes/rollRoutes.js';
 import { connectDatabase } from './utils/database.js';
 import { initSockets } from './sockets/index.js';
@@ -49,6 +50,7 @@ const createApp = () => {
   app.use('/api/auth', authRoutes);
   app.use('/api/characters', characterRoutes);
   app.use('/api/maps', mapRoutes);
+  app.use('/api/assets', assetRoutes);
   app.use('/api/roll', rollRoutes);
 
   const httpServer = http.createServer(app);

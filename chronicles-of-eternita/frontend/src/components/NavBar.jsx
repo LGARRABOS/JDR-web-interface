@@ -17,6 +17,11 @@ const NavBar = () => {
         <Link className="text-sm text-slate-300 hover:text-white" to="/map">
           Carte
         </Link>
+        {user?.role === 'MJ' && (
+          <Link className="text-sm text-slate-300 hover:text-white" to="/resources">
+            Ressources
+          </Link>
+        )}
       </div>
       <div className="flex items-center gap-4 text-sm">
         {user && <span className="font-medium">{user.username} — {user.role}</span>}

@@ -20,6 +20,11 @@ Character.init(
       allowNull: false,
       defaultValue: 0
     },
+    speed: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0
+    },
     image: {
       type: DataTypes.STRING,
       allowNull: true
