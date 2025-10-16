@@ -19,14 +19,25 @@ export const CharacterService = {
 };
 
 export const MapService = {
+  list: (params = {}) => api.get('/maps', { params }),
   upload: (formData) =>
     api.post('/maps/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    }),
+  remove: (id) => api.delete(`/maps/${id}`)
 };
 
 export const DiceService = {
   roll: (expression) => api.post('/roll', { expression })
+};
+
+export const AssetService = {
+  list: (params = {}) => api.get('/assets', { params }),
+  upload: (formData) =>
+    api.post('/assets/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+  remove: (id) => api.delete(`/assets/${id}`)
 };
 
 export default api;

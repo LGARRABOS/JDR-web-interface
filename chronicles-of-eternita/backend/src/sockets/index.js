@@ -6,6 +6,14 @@ export const initSockets = (io) => {
       socket.broadcast.emit('token:move', payload);
     });
 
+    socket.on('token:add', (payload) => {
+      socket.broadcast.emit('token:add', payload);
+    });
+
+    socket.on('token:remove', (payload) => {
+      socket.broadcast.emit('token:remove', payload);
+    });
+
     socket.on('map:update', (payload) => {
       socket.broadcast.emit('map:update', payload);
     });

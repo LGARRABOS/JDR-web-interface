@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import MapPage from './pages/MapPage.jsx';
+import ResourceManagerPage from './pages/ResourceManagerPage.jsx';
 import { AuthProvider, useAuth } from './hooks/useAuth.jsx';
 
 const ProtectedRoute = ({ children }) => {
@@ -41,6 +42,14 @@ const AppRoutes = () => (
       element={
         <ProtectedRoute>
           <MapPage />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/resources"
+      element={
+        <ProtectedRoute>
+          <ResourceManagerPage />
         </ProtectedRoute>
       }
     />
