@@ -66,14 +66,10 @@ const MapPage = () => {
   const [diceLog, setDiceLog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [colorAssignments, setColorAssignments] = useState({});
+  const [mapCatalog, setMapCatalog] = useState([]);
   const [mapSearch, setMapSearch] = useState('');
-  const [mapSearchLoading, setMapSearchLoading] = useState(false);
-  const [mapSearchMessage, setMapSearchMessage] = useState('');
-  const [enemyForm, setEnemyForm] = useState({ name: '', asset: null });
-  const [assetBank, setAssetBank] = useState([]);
-  const [assetSearch, setAssetSearch] = useState('');
-  const [assetBankLoading, setAssetBankLoading] = useState(false);
-  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
+  const [mapCatalogLoading, setMapCatalogLoading] = useState(false);
+  const [enemyForm, setEnemyForm] = useState({ name: '', image: '' });
 
   const isMJ = useMemo(() => user?.role === 'MJ', [user]);
 
@@ -98,6 +94,23 @@ const MapPage = () => {
       setLoading(false);
     }
   }, []);
+
+  const loadMapCatalog = useCallback(
+    async (searchTerm = '') => {
+      if (!isMJ) {
+        return;
+      }
+      setMapCatalogLoading(true);
+      try {
+        const params = searchTerm ? { search: searchTerm } : {};
+        const { data } = await MapService.list(params);
+        setMapCatalog(data.maps);
+      } finally {
+        setMapCatalogLoading(false);
+      }
+    },
+    [isMJ]
+  );
 
   useEffect(() => {
     loadCharacters();
@@ -153,6 +166,24 @@ const MapPage = () => {
     }, 4000);
     return () => clearTimeout(handler);
   }, [mapSearchMessage]);
+
+  useEffect(() => {
+    if (isMJ) {
+      loadMapCatalog();
+    } else {
+      setMapCatalog([]);
+    }
+  }, [isMJ, loadMapCatalog]);
+
+  useEffect(() => {
+    if (!isMJ) {
+      return undefined;
+    }
+    const handler = setTimeout(() => {
+      loadMapCatalog(mapSearch.trim());
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [isMJ, loadMapCatalog, mapSearch]);
 
   useEffect(() => {
     if (!socket) {
@@ -260,6 +291,7 @@ const MapPage = () => {
     const { data } = await MapService.upload(formData);
     const uploadedPath = buildMapPath(data.map.filePath);
     setMapImage(uploadedPath);
+    setMapCatalog((prev) => [data.map, ...prev.filter((map) => map.id !== data.map.id)]);
     socket?.emit('map:update', { mapImage: uploadedPath });
     setMapSearchMessage(`Carte "${data.map.name}" mise en ligne et activée.`);
     event.target.value = '';
@@ -327,6 +359,43 @@ const MapPage = () => {
     socket?.emit('token:remove', { id: tokenId });
   };
 
+  const handleMapSelect = (map) => {
+    const selectedPath = buildMapPath(map.filePath);
+    setMapImage(selectedPath);
+    socket?.emit('map:update', { mapImage: selectedPath });
+  };
+
+  const handleEnemyFormChange = (field) => (event) => {
+    const value = event.target.value;
+    setEnemyForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddEnemyToken = (event) => {
+    event.preventDefault();
+    const name = enemyForm.name.trim();
+    const image = enemyForm.image.trim();
+    if (!name || !image) {
+      return;
+    }
+    const newToken = {
+      id: createEnemyTokenId(),
+      type: 'enemy',
+      ownerId: null,
+      label: name,
+      image,
+      x: 50,
+      y: 50
+    };
+    setTokens((prev) => [...prev, newToken]);
+    setEnemyForm({ name: '', image: '' });
+    socket?.emit('token:add', newToken);
+  };
+
+  const handleRemoveEnemyToken = (tokenId) => {
+    setTokens((prev) => prev.filter((token) => token.id !== tokenId));
+    socket?.emit('token:remove', { id: tokenId });
+  };
+
   const handleUpdateCharacter = async (updatedCharacter) => {
     await CharacterService.update(updatedCharacter.id, {
       name: updatedCharacter.name,
@@ -358,7 +427,10 @@ const MapPage = () => {
 
   const enemyTokens = useMemo(() => tokens.filter((token) => token.type === 'enemy'), [tokens]);
 
-  const selectedAsset = enemyForm.asset;
+  const normalizedCurrentMap = useMemo(
+    () => (mapImage ? mapImage.replace(/^\/*/, '') : null),
+    [mapImage]
+  );
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center text-xl">Chargement des données...</div>;
@@ -381,34 +453,47 @@ const MapPage = () => {
           {isMJ && (
             <div className="rounded-lg border border-slate-700 bg-slate-800 p-4">
               <div className="flex flex-col gap-3">
-                <h3 className="text-lg font-semibold text-emerald-300">Cartes enregistrées</h3>
-                <form onSubmit={handleMapSearchSubmit} className="flex flex-col gap-2 md:flex-row">
-                  <input
-                    type="text"
-                    value={mapSearch}
-                    onChange={(event) => {
-                      setMapSearch(event.target.value);
-                      setMapSearchMessage('');
-                    }}
-                    placeholder="Rechercher une carte par son nom"
-                    className="flex-1 rounded bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-emerald-300">Catalogue de cartes</h3>
                   <button
-                    type="submit"
-                    className="rounded bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-900 disabled:text-emerald-300"
-                    disabled={mapSearchLoading}
+                    type="button"
+                    onClick={() => loadMapCatalog(mapSearch.trim())}
+                    className="text-xs font-semibold text-emerald-400 hover:text-emerald-300"
                   >
-                    {mapSearchLoading ? 'Recherche...' : 'Charger'}
+                    Rafraîchir
                   </button>
-                </form>
-                {mapSearchMessage && (
-                  <p className="text-sm text-emerald-200">{mapSearchMessage}</p>
-                )}
-                <div className="flex flex-col gap-1 text-xs text-slate-300 md:flex-row md:items-center md:justify-between">
-                  <span>Utilisez la recherche pour activer rapidement une carte existante.</span>
-                  <Link to="/resources" className="text-emerald-400 hover:text-emerald-200">
-                    Gérer toutes les ressources visuelles
-                  </Link>
+                </div>
+                <input
+                  type="text"
+                  value={mapSearch}
+                  onChange={(event) => setMapSearch(event.target.value)}
+                  placeholder="Rechercher une carte..."
+                  className="w-full rounded bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+                <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                  {mapCatalogLoading ? (
+                    <p className="text-sm text-slate-400">Chargement du catalogue...</p>
+                  ) : mapCatalog.length === 0 ? (
+                    <p className="text-sm text-slate-400">Aucune carte disponible pour le moment.</p>
+                  ) : (
+                    mapCatalog.map((map) => {
+                      const normalizedPath = map.filePath.replace(/^\/*/, '');
+                      const isActive = normalizedCurrentMap === normalizedPath;
+                      return (
+                        <button
+                          type="button"
+                          key={map.id}
+                          onClick={() => handleMapSelect(map)}
+                          className={`flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm transition ${
+                            isActive ? 'bg-slate-700 text-emerald-300' : 'bg-slate-900 text-slate-200 hover:bg-slate-700'
+                          }`}
+                        >
+                          <span className="truncate">{map.name}</span>
+                          {isActive && <span className="text-xs uppercase text-emerald-400">Active</span>}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
@@ -420,104 +505,29 @@ const MapPage = () => {
             <div className="rounded-lg border border-slate-700 bg-slate-800 p-4">
               <div className="flex flex-col gap-3">
                 <h3 className="text-lg font-semibold text-emerald-300">Pions ennemis</h3>
-                <form onSubmit={handleAddEnemyToken} className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-2 md:flex-row">
-                    <input
-                      type="text"
-                      value={enemyForm.name}
-                      onChange={handleEnemyNameChange}
-                      placeholder="Nom de l'ennemi"
-                      className="flex-1 rounded bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                    <div className="flex flex-1 flex-col gap-2 sm:flex-row">
-                      <button
-                        type="button"
-                        onClick={toggleAssetPicker}
-                        className="flex-1 rounded border border-emerald-500 px-3 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/10"
-                      >
-                        {selectedAsset ? "Changer d'image" : 'Choisir une image'}
-                      </button>
-                      <label className="flex cursor-pointer items-center justify-center rounded bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-emerald-400">
-                        Ajouter une image
-                        <input type="file" className="hidden" accept="image/*" onChange={handleAssetUpload} />
-                      </label>
-                    </div>
-                  </div>
-                  {selectedAsset && (
-                    <div className="flex items-center gap-3 rounded border border-slate-700 bg-slate-900 p-3">
-                      <div className="h-12 w-12 overflow-hidden rounded-full border border-slate-600">
-                        <img
-                          src={buildMapPath(selectedAsset.filePath)}
-                          alt={selectedAsset.name}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-emerald-200">{selectedAsset.name}</span>
-                        <span className="text-xs text-slate-400">Sélectionnée pour le prochain pion ennemi</span>
-                      </div>
-                    </div>
-                  )}
+                <form onSubmit={handleAddEnemyToken} className="flex flex-col gap-2 md:flex-row">
+                  <input
+                    type="text"
+                    value={enemyForm.name}
+                    onChange={handleEnemyFormChange('name')}
+                    placeholder="Nom de l'ennemi"
+                    className="flex-1 rounded bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                  <input
+                    type="text"
+                    value={enemyForm.image}
+                    onChange={handleEnemyFormChange('image')}
+                    placeholder="URL de l'image"
+                    className="flex-1 rounded bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
                   <button
                     type="submit"
-                    className="self-start rounded bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-900 disabled:text-emerald-300"
-                    disabled={!enemyForm.name.trim() || !selectedAsset}
+                    className="rounded bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-900 disabled:text-emerald-300"
+                    disabled={!enemyForm.name.trim() || !enemyForm.image.trim()}
                   >
-                    Ajouter le pion
+                    Ajouter
                   </button>
                 </form>
-                {isAssetPickerOpen && (
-                  <div className="rounded border border-slate-700 bg-slate-900 p-3">
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-semibold text-emerald-300">Banque d'images</h4>
-                        <button
-                          type="button"
-                          onClick={closeAssetPicker}
-                          className="text-xs text-slate-400 hover:text-slate-200"
-                        >
-                          Fermer
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        value={assetSearch}
-                        onChange={(event) => setAssetSearch(event.target.value)}
-                        placeholder="Rechercher dans la banque..."
-                        className="rounded bg-slate-800 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                      <div className="max-h-48 overflow-y-auto">
-                        {assetBankLoading ? (
-                          <p className="text-xs text-slate-400">Chargement des images...</p>
-                        ) : assetBank.length === 0 ? (
-                          <p className="text-xs text-slate-400">Aucune image enregistrée pour le moment.</p>
-                        ) : (
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            {assetBank.map((asset) => {
-                              const publicPath = buildMapPath(asset.filePath);
-                              const isActive = selectedAsset?.id === asset.id;
-                              return (
-                                <button
-                                  type="button"
-                                  key={asset.id}
-                                  onClick={() => handleSelectAsset(asset)}
-                                  className={`overflow-hidden rounded border ${
-                                    isActive
-                                      ? 'border-emerald-400 ring-1 ring-emerald-300'
-                                      : 'border-slate-700 hover:border-emerald-400'
-                                  }`}
-                                >
-                                  <img src={publicPath} alt={asset.name} className="h-24 w-full object-cover" />
-                                  <span className="block truncate px-2 py-1 text-left text-[11px] text-slate-200">{asset.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
                 <div className="flex flex-wrap gap-3">
                   {enemyTokens.length === 0 ? (
                     <p className="text-sm text-slate-400">Aucun pion ennemi pour le moment.</p>

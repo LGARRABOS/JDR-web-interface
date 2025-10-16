@@ -36,20 +36,3 @@ export const listMaps = async (req, res) => {
   const maps = await Map.findAll(options);
   return res.json({ maps });
 };
-
-export const deleteMap = async (req, res) => {
-  const { id } = req.params;
-  const map = await Map.findByPk(id);
-
-  if (!map) {
-    return res.status(404).json({ message: 'Carte introuvable' });
-  }
-
-  const absolutePath = path.join(__dirname, '../../', map.filePath);
-  if (fs.existsSync(absolutePath)) {
-    await fs.promises.unlink(absolutePath).catch(() => {});
-  }
-
-  await map.destroy();
-  return res.status(204).send();
-};

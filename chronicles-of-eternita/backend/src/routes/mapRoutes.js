@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { requireRole, isAuthenticated } from '../middleware/auth.js';
-import { deleteMap, listMaps, uploadMap } from '../controllers/mapController.js';
+import { listMaps, uploadMap } from '../controllers/mapController.js';
 
 const router = Router();
 

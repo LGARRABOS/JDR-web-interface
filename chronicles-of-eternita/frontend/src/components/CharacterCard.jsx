@@ -64,11 +64,9 @@ const CharacterCard = ({ character, isEditable = false, onUpdate }) => {
           ) : (
             <h3 className="text-lg font-semibold text-white">{draft.name}</h3>
           )}
-          <div className="flex flex-wrap gap-2 text-xs text-slate-400">
-            <span>PV : {draft.hp}</span>
-            <span>Mana : {draft.mana}</span>
-            <span>Vitesse : {draft.speed}</span>
-          </div>
+          <p className="text-sm text-slate-400">
+            PV : {draft.hp} — Mana : {draft.mana} — Vitesse : {draft.speed}
+          </p>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -77,17 +75,49 @@ const CharacterCard = ({ character, isEditable = false, onUpdate }) => {
         {renderStatField('speed', 'Vitesse')}
       </div>
       {isEditable && (
-        <label className="flex flex-col gap-2 text-sm">
-          <span className="text-xs uppercase tracking-wide text-slate-400">Image de profil (URL)</span>
-          <input
-            type="text"
-            value={draft.image || ''}
-            onChange={handleChange('image')}
-            onBlur={handleBlur}
-            placeholder="https://..."
-            className="rounded bg-slate-900 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          />
-        </label>
+        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span>PV</span>
+            <input
+              type="number"
+              value={draft.hp}
+              onChange={handleChange('hp', parseNumber)}
+              onBlur={handleBlur}
+              className="rounded bg-slate-900 px-2 py-1 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span>Mana</span>
+            <input
+              type="number"
+              value={draft.mana}
+              onChange={handleChange('mana', parseNumber)}
+              onBlur={handleBlur}
+              className="rounded bg-slate-900 px-2 py-1 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span>Vitesse</span>
+            <input
+              type="number"
+              value={draft.speed}
+              onChange={handleChange('speed', parseNumber)}
+              onBlur={handleBlur}
+              className="rounded bg-slate-900 px-2 py-1 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1 sm:col-span-2">
+            <span>Image de profil (URL)</span>
+            <input
+              type="text"
+              value={draft.image || ''}
+              onChange={handleChange('image')}
+              onBlur={handleBlur}
+              placeholder="https://..."
+              className="rounded bg-slate-900 px-2 py-1 focus:outline-none"
+            />
+          </label>
+        </div>
       )}
     </div>
   );
