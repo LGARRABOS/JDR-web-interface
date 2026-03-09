@@ -39,7 +39,7 @@ HOSTNAME=${HOSTNAME:-$DEFAULT_HOSTNAME}
 read -r -p "RAM (Mo) [${DEFAULT_MEMORY}]: " MEMORY
 MEMORY=${MEMORY:-$DEFAULT_MEMORY}
 
-read -p "Disque (Go) [${DEFAULT_DISK}]: " DISK
+read -r -p "Disque (Go) [${DEFAULT_DISK}]: " DISK
 DISK=${DISK:-$DEFAULT_DISK}
 
 read -r -p "Stockage [${DEFAULT_STORAGE}]: " STORAGE
