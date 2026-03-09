@@ -1,0 +1,42 @@
+# Dépendances
+node_modules/
+
+# Build / artefacts
+frontend/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Base de données SQLite (données sensibles : users, parties, etc.)
+*.db
+*.sqlite
+*.sqlite3
+backend/data/
+backend/uploads/
+
+# Variables d'environnement et secrets
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Cache
+.cache/
+.go-build/
+
+# Coverage
+coverage/

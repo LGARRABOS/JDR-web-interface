@@ -1,0 +1,375 @@
+package httpapi
+
+import (
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+
+	"jdr-backend/internal/domain"
+)
+
+func (s *Server) registerTokenRoutes() {
+	s.mux.Route("/api/maps/{mapId}/tokens", func(r chi.Router) {
+		r.Use(s.requireAuth)
+		r.Get("/", s.handleListTokens)
+		r.Post("/", s.handleCreateToken)
+	})
+	s.mux.Route("/api/tokens/{id}", func(r chi.Router) {
+		r.Use(s.requireAuth)
+		r.Patch("/", s.handleUpdateToken)
+		r.Delete("/", s.handleDeleteToken)
+	})
+}
+
+var tokenColors = []string{
+	"#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6",
+	"#3b82f6", "#8b5cf6", "#ec4899", "#6366f1", "#84cc16",
+}
+
+func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
+	mapIDStr := chi.URLParam(r, "mapId")
+	mapID, err := strconv.ParseInt(mapIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
+		return
+	}
+
+	u := s.getSessionUser(r)
+	if u != nil {
+		var gameID int64
+		var role string
+		err = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
+		if err == nil {
+			var charName sql.NullString
+			err = s.db.QueryRow("SELECT role, character_name FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role, &charName)
+			if err == nil && role == "PLAYER" && u.ID > 0 {
+				var count int
+				_ = s.db.QueryRow("SELECT 1 FROM tokens WHERE map_id = ? AND owner_user_id = ?", mapID, u.ID).Scan(&count)
+				if count == 0 {
+					tokenName := u.DisplayName
+					if charName.Valid && charName.String != "" {
+						tokenName = charName.String
+					}
+					color := tokenColors[int(u.ID)%len(tokenColors)]
+					res, err := s.db.Exec(`
+						INSERT OR IGNORE INTO tokens (map_id, created_by, owner_user_id, kind, name, color, x, y, visible_to_players)
+						VALUES (?, ?, ?, 'PJ', ?, ?, 100, 100, 1)
+					`, mapID, u.ID, u.ID, tokenName, color)
+					if err == nil {
+						rows, _ := res.RowsAffected()
+						if rows > 0 {
+							id, _ := res.LastInsertId()
+							var t domain.Token
+							var ownerID sql.NullInt64
+							var iconURL sql.NullString
+							var visible int
+							var hp, maxHp sql.NullInt64
+							_ = s.db.QueryRow(`
+								SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp
+								FROM tokens WHERE id = ?
+							`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp)
+							if hp.Valid {
+								h := int(hp.Int64)
+								t.Hp = &h
+							}
+							if maxHp.Valid {
+								m := int(maxHp.Int64)
+								t.MaxHp = &m
+							}
+							t.OwnerUserID = &u.ID
+							t.VisibleToPlayers = true
+							if iconURL.Valid {
+								t.IconURL = iconURL.String
+							}
+							s.hub.Broadcast(gameID, "token.created", t)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	rows, err := s.db.Query(`
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp
+		FROM tokens WHERE map_id = ?
+	`, mapID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+		return
+	}
+	defer rows.Close()
+
+	var tokens []*domain.Token
+	for rows.Next() {
+		var t domain.Token
+		var ownerID sql.NullInt64
+		var iconURL sql.NullString
+		var visible int
+		var hp, maxHp sql.NullInt64
+		if err := rows.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp); err != nil {
+			continue
+		}
+		if ownerID.Valid {
+			t.OwnerUserID = &ownerID.Int64
+		}
+		if iconURL.Valid {
+			t.IconURL = iconURL.String
+		}
+		t.VisibleToPlayers = visible == 1
+		if hp.Valid {
+			h := int(hp.Int64)
+			t.Hp = &h
+		}
+		if maxHp.Valid {
+			m := int(maxHp.Int64)
+			t.MaxHp = &m
+		}
+		tokens = append(tokens, &t)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"tokens": tokens})
+}
+
+type createTokenReq struct {
+	Kind             string  `json:"kind"`
+	Name             string  `json:"name"`
+	Color            string  `json:"color"`
+	IconURL          string  `json:"iconUrl"`
+	X                float64 `json:"x"`
+	Y                float64 `json:"y"`
+	OwnerUserID      *int64  `json:"ownerUserId"`
+	VisibleToPlayers bool    `json:"visibleToPlayers"`
+	Hp               *int    `json:"hp"`
+	MaxHp            *int    `json:"maxHp"`
+}
+
+func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
+	mapIDStr := chi.URLParam(r, "mapId")
+	mapID, err := strconv.ParseInt(mapIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
+		return
+	}
+
+	var gameID int64
+	err = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Carte introuvable"})
+		return
+	}
+
+	u := s.getSessionUser(r)
+	var req createTokenReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Requête invalide"})
+		return
+	}
+	if req.Kind == "" {
+		req.Kind = "PNJ"
+	}
+	if req.Name == "" {
+		req.Name = "Token"
+	}
+	if req.Color == "" {
+		req.Color = "#6b7280"
+	}
+	visible := 0
+	if req.VisibleToPlayers {
+		visible = 1
+	}
+
+	res, err := s.db.Exec(`
+		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+		return
+	}
+	id, _ := res.LastInsertId()
+
+	t := &domain.Token{
+		ID:               id,
+		MapID:             mapID,
+		CreatedBy:         u.ID,
+		OwnerUserID:       req.OwnerUserID,
+		Kind:              req.Kind,
+		Name:              req.Name,
+		Color:             req.Color,
+		IconURL:           req.IconURL,
+		X:                 req.X,
+		Y:                 req.Y,
+		VisibleToPlayers:  req.VisibleToPlayers,
+		Hp:                req.Hp,
+		MaxHp:             req.MaxHp,
+	}
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"token": t})
+	s.hub.Broadcast(gameID, "token.created", t)
+}
+
+type updateTokenReq struct {
+	X                *float64 `json:"x"`
+	Y                *float64 `json:"y"`
+	Name             *string  `json:"name"`
+	Color            *string  `json:"color"`
+	VisibleToPlayers *bool    `json:"visibleToPlayers"`
+	Hp               *int     `json:"hp"`
+	MaxHp            *int     `json:"maxHp"`
+}
+
+func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
+		return
+	}
+
+	var mapID, gameID int64
+	err = s.db.QueryRow("SELECT map_id FROM tokens WHERE id = ?", id).Scan(&mapID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Token introuvable"})
+		return
+	}
+	_ = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
+
+	var req updateTokenReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Requête invalide"})
+		return
+	}
+
+	updates := []string{}
+	args := []interface{}{}
+	if req.X != nil {
+		updates = append(updates, "x = ?")
+		args = append(args, *req.X)
+	}
+	if req.Y != nil {
+		updates = append(updates, "y = ?")
+		args = append(args, *req.Y)
+	}
+	if req.Name != nil {
+		updates = append(updates, "name = ?")
+		args = append(args, *req.Name)
+	}
+	if req.Color != nil {
+		updates = append(updates, "color = ?")
+		args = append(args, *req.Color)
+	}
+	if req.VisibleToPlayers != nil {
+		v := 0
+		if *req.VisibleToPlayers {
+			v = 1
+		}
+		updates = append(updates, "visible_to_players = ?")
+		args = append(args, v)
+	}
+	if req.Hp != nil {
+		updates = append(updates, "hp = ?")
+		args = append(args, *req.Hp)
+	}
+	if req.MaxHp != nil {
+		updates = append(updates, "max_hp = ?")
+		args = append(args, *req.MaxHp)
+	}
+	if len(updates) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucune modification"})
+		return
+	}
+	args = append(args, id)
+
+	_, err = s.db.Exec("UPDATE tokens SET "+joinStrings(updates, ", ")+" WHERE id = ?", args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+		return
+	}
+
+	var t domain.Token
+	var ownerID sql.NullInt64
+	var iconURL sql.NullString
+	var visible int
+	var hp, maxHp sql.NullInt64
+	_ = s.db.QueryRow(`
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp
+		FROM tokens WHERE id = ?
+	`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp)
+	if ownerID.Valid {
+		t.OwnerUserID = &ownerID.Int64
+	}
+	if iconURL.Valid {
+		t.IconURL = iconURL.String
+	}
+	t.VisibleToPlayers = visible == 1
+	if hp.Valid {
+		h := int(hp.Int64)
+		t.Hp = &h
+	}
+	if maxHp.Valid {
+		m := int(maxHp.Int64)
+		t.MaxHp = &m
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"token": t})
+	s.hub.Broadcast(gameID, "token.updated", t)
+}
+
+func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
+		return
+	}
+
+	var mapID, gameID int64
+	err = s.db.QueryRow("SELECT map_id FROM tokens WHERE id = ?", id).Scan(&mapID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Token introuvable"})
+		return
+	}
+	_ = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
+
+	_, err = s.db.Exec("DELETE FROM tokens WHERE id = ?", id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Supprimé"})
+	s.hub.Broadcast(gameID, "token.deleted", map[string]interface{}{"id": id})
+}
+
+func nullInt64(p *int64) interface{} {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+func nullInt(p *int) interface{} {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+func nullString(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+func joinStrings(ss []string, sep string) string {
+	if len(ss) == 0 {
+		return ""
+	}
+	out := ss[0]
+	for i := 1; i < len(ss); i++ {
+		out += sep + ss[i]
+	}
+	return out
+}
