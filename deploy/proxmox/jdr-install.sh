@@ -21,6 +21,7 @@ if ! command -v go &>/dev/null || ! go version | grep -qE 'go1\.(2[1-9]|[3-9][0-
     tar -C /usr/local -xzf go.tar.gz
     rm go.tar.gz
     export PATH="/usr/local/go/bin:$PATH"
+    # shellcheck disable=SC2016
     echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile.d/go.sh
 fi
 export PATH="/usr/local/go/bin:${PATH}"

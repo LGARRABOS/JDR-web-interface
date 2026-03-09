@@ -30,26 +30,26 @@ echo "Proxmox VE détecté: $(pveversion)"
 echo ""
 
 # Paramètres (valeurs par défaut ou saisie)
-read -p "ID du conteneur [${DEFAULT_CTID}]: " CTID
+read -r -p "ID du conteneur [${DEFAULT_CTID}]: " CTID
 CTID=${CTID:-$DEFAULT_CTID}
 
-read -p "Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
+read -r -p "Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
 HOSTNAME=${HOSTNAME:-$DEFAULT_HOSTNAME}
 
-read -p "RAM (Mo) [${DEFAULT_MEMORY}]: " MEMORY
+read -r -p "RAM (Mo) [${DEFAULT_MEMORY}]: " MEMORY
 MEMORY=${MEMORY:-$DEFAULT_MEMORY}
 
 read -p "Disque (Go) [${DEFAULT_DISK}]: " DISK
 DISK=${DISK:-$DEFAULT_DISK}
 
-read -p "Stockage [${DEFAULT_STORAGE}]: " STORAGE
+read -r -p "Stockage [${DEFAULT_STORAGE}]: " STORAGE
 STORAGE=${STORAGE:-$DEFAULT_STORAGE}
 
-read -p "Bridge réseau [${DEFAULT_BRIDGE}]: " BRIDGE
+read -r -p "Bridge réseau [${DEFAULT_BRIDGE}]: " BRIDGE
 BRIDGE=${BRIDGE:-$DEFAULT_BRIDGE}
 
 echo ""
-read -p "IP statique (vide = DHCP) [DHCP]: " STATIC_IP
+read -r -p "IP statique (vide = DHCP) [DHCP]: " STATIC_IP
 echo ""
 
 # Vérifier que le CT n'existe pas déjà
@@ -77,7 +77,7 @@ fi
 echo "==> Création du conteneur ${CTID}..."
 NET_CFG="name=eth0,bridge=${BRIDGE}"
 if [ -n "${STATIC_IP}" ]; then
-    read -p "Passerelle (gw): " GATEWAY
+    read -r -p "Passerelle (gw): " GATEWAY
     NET_CFG="${NET_CFG},ip=${STATIC_IP}/24,gw=${GATEWAY}"
 else
     NET_CFG="${NET_CFG},ip=dhcp"
