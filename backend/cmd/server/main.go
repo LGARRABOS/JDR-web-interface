@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"jdr-backend/internal/httpapi"
 	"jdr-backend/internal/storage/sqlite"
@@ -19,7 +20,8 @@ func main() {
 		log.Fatalf("unable to migrate database: %v", err)
 	}
 
-	handler, err := httpapi.NewServer(db)
+	staticDir := os.Getenv("STATIC_DIR")
+	handler, err := httpapi.NewServer(db, staticDir)
 	if err != nil {
 		log.Fatalf("unable to create HTTP server: %v", err)
 	}

@@ -4,6 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -20,7 +24,8 @@ type Server struct {
 }
 
 // NewServer construit le routeur HTTP principal de l'API.
-func NewServer(db *sql.DB) (http.Handler, error) {
+// Si staticDir est non vide et existe, sert les fichiers statiques (frontend SPA) sur /.
+func NewServer(db *sql.DB, staticDir string) (http.Handler, error) {
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i)
@@ -75,12 +80,50 @@ func NewServer(db *sql.DB) (http.Handler, error) {
 	s.registerRollRoutes()
 	s.mux.Handle("/api/ws", s.wsHandler())
 
+	if staticDir != "" {
+		if info, err := os.Stat(staticDir); err == nil && info.IsDir() {
+			s.mux.Handle("/*", spaFileServer(staticDir))
+		}
+	}
+
 	return s.mux, nil
+}
+
+// spaFileServer sert les fichiers statiques avec fallback sur index.html pour le SPA.
+func spaFileServer(root string) http.Handler {
+	fs := http.FileServer(http.Dir(root))
+	absRoot, _ := filepath.Abs(root)
+	absRoot = filepath.Clean(absRoot) + string(filepath.Separator)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+		if requestPath == "." {
+			requestPath = ""
+		}
+		fullPath := filepath.Join(root, requestPath)
+		absFull, _ := filepath.Abs(fullPath)
+		if !strings.HasPrefix(absFull, absRoot) {
+			r.URL.Path = "/"
+			fs.ServeHTTP(w, r)
+			return
+		}
+		if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
+			fs.ServeHTTP(w, r)
+			return
+		}
+		r.URL.Path = "/"
+		fs.ServeHTTP(w, r)
+	})
 }
 
 func corsHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+		origin := "http://localhost:5173"
+		if o := os.Getenv("CORS_ORIGIN"); o != "" {
+			origin = o
+		} else if o := r.Header.Get("Origin"); o != "" {
+			origin = o
+		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == "OPTIONS" {

@@ -1,0 +1,73 @@
+#!/bin/bash
+# jdr-install.sh - Installation de l'app Table JDR dans un conteneur LXC
+# Exécuté dans le CT (via pct exec ou SSH)
+
+set -e
+
+REPO_URL="https://github.com/LGARRABOS/JDR-web-interface.git"
+INSTALL_DIR="/opt/jdr"
+GO_VERSION="1.21.13"
+NODE_VERSION="20"
+
+echo "==> Mise à jour et installation des paquets de base..."
+apt-get update
+apt-get install -y curl git build-essential gcc libc6-dev
+
+echo "==> Installation de Go ${GO_VERSION}..."
+if ! command -v go &>/dev/null || ! go version | grep -qE 'go1\.(2[1-9]|[3-9][0-9])'; then
+    cd /tmp
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o go.tar.gz
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf go.tar.gz
+    rm go.tar.gz
+    export PATH="/usr/local/go/bin:$PATH"
+    echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile.d/go.sh
+fi
+export PATH="/usr/local/go/bin:${PATH}"
+
+echo "==> Installation de Node.js ${NODE_VERSION}..."
+if ! command -v node &>/dev/null || ! node -v | grep -qE 'v(2[0-9]|[3-9][0-9])'; then
+    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
+    apt-get install -y nodejs
+fi
+
+echo "==> Clonage du dépôt..."
+rm -rf "${INSTALL_DIR}"
+git clone "${REPO_URL}" "${INSTALL_DIR}"
+cd "${INSTALL_DIR}"
+
+echo "==> Build de l'application..."
+npm ci
+cd frontend && npm ci && cd ..
+npm run build
+
+echo "==> Création des dossiers data et uploads..."
+mkdir -p "${INSTALL_DIR}/backend/data" "${INSTALL_DIR}/backend/uploads"
+
+echo "==> Création du service systemd..."
+cat > /etc/systemd/system/jdr.service << 'SVC'
+[Unit]
+Description=Table JDR - Backend Go
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDir=/opt/jdr/backend
+ExecStart=/opt/jdr/backend/server
+Environment=STATIC_DIR=/opt/jdr/frontend/dist
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SVC
+
+echo "==> Activation et démarrage du service..."
+systemctl daemon-reload
+systemctl enable --now jdr
+
+echo ""
+echo "==> Installation terminée."
+echo "    L'application est accessible sur http://<IP_CT>:4000"
+echo "    Configurez votre reverse proxy Nginx pour pointer vers ce port."

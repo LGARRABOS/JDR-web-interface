@@ -39,3 +39,30 @@ npm run build   # Build backend + frontend
 npm run lint    # Lint backend (go vet) + frontend (ESLint)
 npm run test    # Tests backend + frontend
 ```
+
+## Déploiement Proxmox
+
+Installation en une commande sur un hôte Proxmox VE (création d’un conteneur LXC Debian 12) :
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/LGARRABOS/JDR-web-interface/main/deploy/proxmox/jdr.sh)"
+```
+
+L’application écoute sur le port 4000 dans le CT. Configurez votre reverse proxy Nginx pour proxy vers `http://<IP_CT>:4000` :
+
+```nginx
+location / {
+    proxy_pass http://<IP_CT>:4000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+Mise à jour (depuis l’hôte Proxmox ou dans le CT) :
+
+```bash
+pct exec <CTID> -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/LGARRABOS/JDR-web-interface/main/deploy/proxmox/jdr-update.sh)"
+```

@@ -17,7 +17,7 @@ func TestHealthz(t *testing.T) {
 	if err := sqlite.AutoMigrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	handler, err := NewServer(db)
+	handler, err := NewServer(db, "")
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

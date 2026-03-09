@@ -20,7 +20,7 @@ func setupTestServer(t *testing.T) http.Handler {
 	if err := sqlite.AutoMigrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	handler, err := NewServer(db)
+	handler, err := NewServer(db, "")
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
