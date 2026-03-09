@@ -64,4 +64,4 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: Validate deploy scripts
-        run: shellcheck deploy/proxmox/*.sh
+        run: shellcheck deploy/proxmox/jdr.sh deploy/proxmox/jdr-install.sh deploy/proxmox/jdr-update.sh

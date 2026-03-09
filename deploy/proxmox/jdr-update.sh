@@ -11,7 +11,7 @@ if [ ! -d "${INSTALL_DIR}" ]; then
     exit 1
 fi
 
-cd "${INSTALL_DIR}"
+cd "${INSTALL_DIR}" || exit 1
 
 echo "==> Vérification des mises à jour..."
 git fetch origin
@@ -28,7 +28,7 @@ git pull origin main
 
 echo "==> Rebuild de l'application..."
 npm ci
-cd frontend && npm ci && cd ..
+(cd frontend && npm ci) || exit 1
 npm run build
 
 echo "==> Redémarrage du service..."

@@ -1,0 +1,2 @@
+# shellcheck disable=SC1090,SC1091  # curl | bash et sources externes sont intentionnels
+# shellcheck disable=SC2034  # variables inutilisées dans heredoc

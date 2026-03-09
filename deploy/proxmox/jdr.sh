@@ -97,7 +97,7 @@ pct start "${CTID}"
 
 echo "==> Attente du démarrage réseau..."
 sleep 5
-for i in $(seq 1 30); do
+for ((i=1; i<=30; i++)); do
     if pct exec "${CTID}" -- ip route get 1.1.1.1 &>/dev/null; then
         break
     fi
@@ -105,7 +105,7 @@ for i in $(seq 1 30); do
 done
 
 echo "==> Installation de l'application dans le CT..."
-pct exec "${CTID}" -- bash -c "$(curl -fsSL ${INSTALL_SCRIPT_URL})"
+pct exec "${CTID}" -- bash -c "$(curl -fsSL "${INSTALL_SCRIPT_URL}")"
 
 # Récupérer l'IP
 CT_IP=$(pct exec "${CTID}" -- hostname -I | awk '{print $1}')

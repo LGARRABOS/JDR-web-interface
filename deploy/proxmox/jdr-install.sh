@@ -15,7 +15,7 @@ apt-get install -y curl git build-essential gcc libc6-dev
 
 echo "==> Installation de Go ${GO_VERSION}..."
 if ! command -v go &>/dev/null || ! go version | grep -qE 'go1\.(2[1-9]|[3-9][0-9])'; then
-    cd /tmp
+    cd /tmp || exit 1
     curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o go.tar.gz
     rm -rf /usr/local/go
     tar -C /usr/local -xzf go.tar.gz
@@ -27,18 +27,18 @@ export PATH="/usr/local/go/bin:${PATH}"
 
 echo "==> Installation de Node.js ${NODE_VERSION}..."
 if ! command -v node &>/dev/null || ! node -v | grep -qE 'v(2[0-9]|[3-9][0-9])'; then
-    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
+    curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" | bash -
     apt-get install -y nodejs
 fi
 
 echo "==> Clonage du dépôt..."
 rm -rf "${INSTALL_DIR}"
 git clone "${REPO_URL}" "${INSTALL_DIR}"
-cd "${INSTALL_DIR}"
+cd "${INSTALL_DIR}" || exit 1
 
 echo "==> Build de l'application..."
 npm ci
-cd frontend && npm ci && cd ..
+(cd frontend && npm ci) || exit 1
 npm run build
 
 echo "==> Création des dossiers data et uploads..."
