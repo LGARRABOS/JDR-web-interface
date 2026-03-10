@@ -195,7 +195,11 @@ func AutoMigrate(db *sql.DB) error {
 		`ALTER TABLE dice_rolls ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0`,
 		stmts[8], // game_character_sheets
 		stmts[9], // game_music
+		`ALTER TABLE game_music ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE`,
+		`UPDATE game_music gm SET user_id = g.owner_id FROM games g WHERE g.id = gm.game_id AND gm.user_id IS NULL`,
 		stmts[10], // game_elements
+		`ALTER TABLE game_elements ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE`,
+		`UPDATE game_elements ge SET user_id = g.owner_id FROM games g WHERE g.id = ge.game_id AND ge.user_id IS NULL`,
 		stmts[11], // map_elements
 	}
 

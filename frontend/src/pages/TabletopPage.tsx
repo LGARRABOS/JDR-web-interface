@@ -590,12 +590,20 @@ export function TabletopPage() {
     [gameId, loadMessages]
   );
 
+  const [rollError, setRollError] = useState<string | null>(null);
   const handleRoll = useCallback(
     async (expression: string, hidden?: boolean) => {
+      setRollError(null);
       try {
         await RollsAPI.roll(gameId, { expression, hidden });
-      } catch {
-        // ignore
+      } catch (e) {
+        const msg =
+          (e as { response?: { data?: { message?: string }; status?: number } })
+            ?.response?.data?.message ??
+          (e as Error)?.message ??
+          'Erreur lors du lancer';
+        setRollError(msg);
+        console.error('[Roll]', msg, e);
       }
     },
     [gameId]
@@ -864,6 +872,7 @@ export function TabletopPage() {
           <DicePanel
             gameId={gameId}
             onRoll={handleRoll}
+            rollError={rollError}
             lastRoll={lastRoll}
             lastRollHidden={lastRollHidden}
             isGemma={game.isGemma}

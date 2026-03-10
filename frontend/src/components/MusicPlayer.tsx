@@ -3,6 +3,7 @@ import { MusicAPI } from '../api/client';
 
 interface Track {
   id: number;
+  gameId?: number;
   filename: string;
   url: string;
 }
@@ -55,10 +56,6 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
   }, [musicState, trackUrl]);
 
   if (!musicState || tracks.length === 0) return null;
-
-  const track = musicState.trackId
-    ? tracks.find((t) => t.id === musicState.trackId)
-    : null;
 
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">

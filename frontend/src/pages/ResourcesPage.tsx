@@ -7,6 +7,7 @@ import { Modal, ModalButtons, ModalConfirm } from '../components/Modal';
 
 interface MusicTrack {
   id: number;
+  gameId?: number;
   filename: string;
   url: string;
 }

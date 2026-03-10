@@ -36,9 +36,18 @@ func (s *Server) handleListElements(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	u := s.getSessionUser(r)
+	var role string
+	_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role)
+	if role != "MJ" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Réservé au MJ"})
+		return
+	}
+
+	// Éléments partagés : tous ceux uploadés par ce MJ (toutes parties confondues)
 	rows, err := s.db.Query(
-		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at FROM game_elements WHERE game_id = ? ORDER BY id",
-		gameID,
+		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at FROM game_elements WHERE user_id = ? ORDER BY id",
+		u.ID,
 	)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
@@ -153,8 +162,8 @@ func (s *Server) handleUploadElement(w http.ResponseWriter, r *http.Request) {
 
 	var id int64
 	err = s.db.QueryRow(
-		"INSERT INTO game_elements (game_id, name, image_url, category, tags) VALUES (?, ?, ?, ?, ?) RETURNING id",
-		gameID, name, imageURL, category, tagsJSON,
+		"INSERT INTO game_elements (game_id, user_id, name, image_url, category, tags) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+		gameID, u.ID, name, imageURL, category, tagsJSON,
 	).Scan(&id)
 	if err != nil {
 		os.Remove(storagePath)
@@ -235,7 +244,8 @@ func (s *Server) handleDeleteElement(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var imageURL string
-	err = s.db.QueryRow("SELECT image_url FROM game_elements WHERE id = ? AND game_id = ?", id, gameID).Scan(&imageURL)
+	var elemGameID int64
+	err = s.db.QueryRow("SELECT image_url, game_id FROM game_elements WHERE id = ? AND (user_id = ? OR game_id = ?)", id, u.ID, gameID).Scan(&imageURL, &elemGameID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Élément introuvable"})
 		return
@@ -244,12 +254,12 @@ func (s *Server) handleDeleteElement(w http.ResponseWriter, r *http.Request) {
 	if idx := strings.LastIndex(imageURL, "/file/"); idx >= 0 {
 		filename := imageURL[idx+6:]
 		if filename != "" && !strings.Contains(filename, "..") {
-			storagePath := filepath.Join(uploadsElementsBase, strconv.FormatInt(gameID, 10), filename)
+			storagePath := filepath.Join(uploadsElementsBase, strconv.FormatInt(elemGameID, 10), filename)
 			_ = os.Remove(storagePath)
 		}
 	}
 
-	_, err = s.db.Exec("DELETE FROM game_elements WHERE id = ? AND game_id = ?", id, gameID)
+	_, err = s.db.Exec("DELETE FROM game_elements WHERE id = ? AND user_id = ?", id, u.ID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return

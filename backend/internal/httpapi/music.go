@@ -92,16 +92,16 @@ func (s *Server) handleUploadMusic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.db.Exec(
-		"INSERT INTO game_music (game_id, filename, storage_path) VALUES (?, ?, ?)",
-		gameID, header.Filename, storagePath,
-	)
+	var trackID int64
+	err = s.db.QueryRow(
+		"INSERT INTO game_music (game_id, user_id, filename, storage_path) VALUES (?, ?, ?, ?) RETURNING id",
+		gameID, u.ID, header.Filename, storagePath,
+	).Scan(&trackID)
 	if err != nil {
 		os.Remove(storagePath)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	trackID, _ := res.LastInsertId()
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"track": map[string]interface{}{
@@ -132,7 +132,13 @@ func (s *Server) handleListMusic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query("SELECT id, filename FROM game_music WHERE game_id = ? ORDER BY created_at", gameID)
+	// Musique partagée : toutes les pistes des parties où ce MJ est présent
+	rows, err := s.db.Query(
+		`SELECT gm.id, gm.game_id, gm.filename FROM game_music gm
+		 INNER JOIN game_players gp ON gp.game_id = gm.game_id AND gp.user_id = ? AND gp.role = 'MJ'
+		 ORDER BY gm.created_at`,
+		u.ID,
+	)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
@@ -142,14 +148,16 @@ func (s *Server) handleListMusic(w http.ResponseWriter, r *http.Request) {
 	var tracks []map[string]interface{}
 	for rows.Next() {
 		var id int64
+		var trackGameID int64
 		var filename string
-		if err := rows.Scan(&id, &filename); err != nil {
+		if err := rows.Scan(&id, &trackGameID, &filename); err != nil {
 			continue
 		}
 		tracks = append(tracks, map[string]interface{}{
 			"id":       id,
+			"gameId":   trackGameID,
 			"filename": filename,
-			"url":      "/api/games/" + idStr + "/music/" + strconv.FormatInt(id, 10) + "/file",
+			"url":      "/api/games/" + strconv.FormatInt(trackGameID, 10) + "/music/" + strconv.FormatInt(id, 10) + "/file",
 		})
 	}
 
@@ -177,21 +185,42 @@ func (s *Server) handleGetMusicFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ok int
-	_ = s.db.QueryRow("SELECT 1 FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&ok)
-	if ok != 1 {
-		http.Error(w, "Accès refusé", http.StatusForbidden)
-		return
-	}
-
 	var storagePath, filename string
-	err = s.db.QueryRow("SELECT storage_path, filename FROM game_music WHERE id = ? AND game_id = ?", trackID, gameID).Scan(&storagePath, &filename)
+	var trackUserID sql.NullInt64
+	err = s.db.QueryRow(
+		"SELECT storage_path, filename, user_id FROM game_music WHERE id = ? AND game_id = ?",
+		trackID, gameID,
+	).Scan(&storagePath, &filename, &trackUserID)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Piste introuvable", http.StatusNotFound)
 		return
 	}
 	if err != nil {
 		http.Error(w, "Erreur serveur", http.StatusInternalServerError)
+		return
+	}
+
+	// Accès : utilisateur a accès au game OU partage une partie avec le propriétaire (joueurs qui écoutent la musique du MJ)
+	hasAccess := false
+	var ok int
+	_ = s.db.QueryRow("SELECT 1 FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&ok)
+	if ok == 1 {
+		hasAccess = true
+	}
+	if !hasAccess && trackUserID.Valid {
+		// Utilisateur partage une partie avec le propriétaire de la piste
+		_ = s.db.QueryRow(
+			`SELECT 1 FROM game_players gp1
+			 INNER JOIN game_players gp2 ON gp1.game_id = gp2.game_id AND gp2.user_id = ?
+			 WHERE gp1.user_id = ?`,
+			u.ID, trackUserID.Int64,
+		).Scan(&ok)
+		if ok == 1 {
+			hasAccess = true
+		}
+	}
+	if !hasAccess {
+		http.Error(w, "Accès refusé", http.StatusForbidden)
 		return
 	}
 
@@ -233,15 +262,13 @@ func (s *Server) handleDeleteMusic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var role string
-	_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role)
-	if role != "MJ" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Réservé au MJ"})
-		return
-	}
-
 	var storagePath string
-	err = s.db.QueryRow("SELECT storage_path FROM game_music WHERE id = ? AND game_id = ?", trackID, gameID).Scan(&storagePath)
+	var trackGameID int64
+	var trackUserID sql.NullInt64
+	err = s.db.QueryRow(
+		"SELECT storage_path, game_id, user_id FROM game_music WHERE id = ?",
+		trackID,
+	).Scan(&storagePath, &trackGameID, &trackUserID)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Piste introuvable"})
 		return
@@ -251,8 +278,23 @@ func (s *Server) handleDeleteMusic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	canDelete := false
+	if trackUserID.Valid && trackUserID.Int64 == u.ID {
+		canDelete = true
+	} else {
+		var role string
+		_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", trackGameID, u.ID).Scan(&role)
+		if role == "MJ" && trackGameID == gameID {
+			canDelete = true
+		}
+	}
+	if !canDelete {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Réservé au propriétaire"})
+		return
+	}
+
 	_ = os.Remove(storagePath)
-	_, err = s.db.Exec("DELETE FROM game_music WHERE id = ? AND game_id = ?", trackID, gameID)
+	_, err = s.db.Exec("DELETE FROM game_music WHERE id = ?", trackID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return

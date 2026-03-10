@@ -311,8 +311,15 @@ func (s *Server) handleSetCurrentMap(w http.ResponseWriter, r *http.Request) {
 
 	var mapGameID int64
 	err = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", req.MapID).Scan(&mapGameID)
-	if err != nil || mapGameID != gameID {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Carte invalide"})
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Carte introuvable"})
+		return
+	}
+	// Autoriser les cartes d'autres parties où l'utilisateur est MJ (partage entre parties)
+	var mapRole string
+	_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", mapGameID, u.ID).Scan(&mapRole)
+	if mapRole != "MJ" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Carte invalide (réservée aux cartes de vos parties)"})
 		return
 	}
 

@@ -3,6 +3,7 @@ import { useState } from 'react';
 interface DicePanelProps {
   gameId: number;
   onRoll: (expression: string, hidden?: boolean) => void;
+  rollError?: string | null;
   lastRoll?: {
     expression: string;
     result: number;
@@ -83,6 +84,7 @@ function DiceRollResultCard({
 export function DicePanel({
   gameId: _gameId,
   onRoll,
+  rollError,
   lastRoll,
   lastRollHidden,
   isGemma = false,
@@ -170,6 +172,9 @@ export function DicePanel({
           Lancer
         </button>
       </div>
+      {rollError && (
+        <p className="mt-2 text-fantasy-error text-xs">{rollError}</p>
+      )}
     </form>
   );
 

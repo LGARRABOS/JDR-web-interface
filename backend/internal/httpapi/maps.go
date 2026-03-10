@@ -34,7 +34,11 @@ func (s *Server) registerMapRoutes() {
 		r.Get("/", s.handleListMaps)
 		r.Post("/", s.handleCreateMap)
 		r.Post("/upload", s.handleUploadMap)
-		r.Get("/file/{filename}", s.handleGetMapFile)
+	})
+	s.mux.Route("/api/games/{gameId}/maps/file/{filename}", func(r chi.Router) {
+		r.Use(s.requireAuth)
+		r.Use(s.requireMapFileAccess)
+		r.Get("/", s.handleGetMapFile)
 	})
 	s.mux.Route("/api/maps/{mapId}", func(r chi.Router) {
 		r.Use(s.requireAuth)
@@ -58,9 +62,14 @@ func (s *Server) handleListMaps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	u := s.getSessionUser(r)
+	// Cartes partagées : toutes celles des parties où ce MJ est présent
 	rows, err := s.db.Query(
-		"SELECT id, game_id, name, image_url, width, height, grid_size, COALESCE(tags, '[]') FROM maps WHERE game_id = ? ORDER BY id",
-		gameID,
+		`SELECT m.id, m.game_id, m.name, m.image_url, m.width, m.height, m.grid_size, COALESCE(m.tags, '[]')
+		 FROM maps m
+		 INNER JOIN game_players gp ON gp.game_id = m.game_id AND gp.user_id = ? AND gp.role = 'MJ'
+		 ORDER BY m.id`,
+		u.ID,
 	)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
