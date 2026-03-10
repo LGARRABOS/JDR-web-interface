@@ -33,7 +33,17 @@ echo "==> Rebuild de l'application..."
 npm ci
 (cd frontend && npm ci) || exit 1
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=768}"
-npm run build
+# Build backend avec chemin absolu (go peut être hors PATH en pct exec)
+if [ -x /usr/local/go/bin/go ]; then
+  (cd backend && /usr/local/go/bin/go build ./cmd/server) || { echo "Erreur: build backend échoué."; exit 1; }
+elif command -v go &>/dev/null; then
+  (cd backend && go build ./cmd/server) || { echo "Erreur: build backend échoué."; exit 1; }
+else
+  echo "Erreur: Go introuvable. Exécutez jdr-install.sh pour une installation complète."
+  exit 1
+fi
+# Build frontend
+(cd frontend && npm run build) || { echo "Erreur: build frontend échoué."; exit 1; }
 
 echo "==> Redémarrage du service..."
 systemctl restart jdr
