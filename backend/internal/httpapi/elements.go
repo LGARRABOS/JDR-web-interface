@@ -151,16 +151,16 @@ func (s *Server) handleUploadElement(w http.ResponseWriter, r *http.Request) {
 		tagsJSON = string(b)
 	}
 
-	res, err := s.db.Exec(
-		"INSERT INTO game_elements (game_id, name, image_url, category, tags) VALUES (?, ?, ?, ?, ?)",
+	var id int64
+	err = s.db.QueryRow(
+		"INSERT INTO game_elements (game_id, name, image_url, category, tags) VALUES (?, ?, ?, ?, ?) RETURNING id",
 		gameID, name, imageURL, category, tagsJSON,
-	)
+	).Scan(&id)
 	if err != nil {
 		os.Remove(storagePath)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	id, _ := res.LastInsertId()
 
 	var createdAt string
 	_ = s.db.QueryRow("SELECT created_at FROM game_elements WHERE id = ?", id).Scan(&createdAt)

@@ -54,55 +54,54 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 						tokenName = charName.String
 					}
 					color := tokenColors[int(u.ID)%len(tokenColors)]
-					res, err := s.db.Exec(`
-						INSERT OR IGNORE INTO tokens (map_id, created_by, owner_user_id, kind, name, color, x, y, visible_to_players)
+					var id int64
+					err = s.db.QueryRow(`
+						INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, x, y, visible_to_players)
 						VALUES (?, ?, ?, 'PJ', ?, ?, 100, 100, 1)
-					`, mapID, u.ID, u.ID, tokenName, color)
+						ON CONFLICT (map_id, owner_user_id) WHERE kind = 'PJ' AND owner_user_id IS NOT NULL DO NOTHING
+						RETURNING id
+					`, mapID, u.ID, u.ID, tokenName, color).Scan(&id)
 					if err == nil {
-						rows, _ := res.RowsAffected()
-						if rows > 0 {
-							id, _ := res.LastInsertId()
-							var t domain.Token
-							var ownerID sql.NullInt64
-							var iconURL sql.NullString
-							var visible int
-							var hp, maxHp, mana, maxMana sql.NullInt64
-							var width, height sql.NullInt64
-							_ = s.db.QueryRow(`
-								SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height
-								FROM tokens WHERE id = ?
-							`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height)
-							if width.Valid {
-								w := int(width.Int64)
-								t.Width = &w
-							}
-							if height.Valid {
-								h := int(height.Int64)
-								t.Height = &h
-							}
-							if hp.Valid {
-								h := int(hp.Int64)
-								t.Hp = &h
-							}
-							if maxHp.Valid {
-								m := int(maxHp.Int64)
-								t.MaxHp = &m
-							}
-							if mana.Valid {
-								m := int(mana.Int64)
-								t.Mana = &m
-							}
-							if maxMana.Valid {
-								m := int(maxMana.Int64)
-								t.MaxMana = &m
-							}
-							t.OwnerUserID = &u.ID
-							t.VisibleToPlayers = true
-							if iconURL.Valid {
-								t.IconURL = iconURL.String
-							}
-							s.hub.Broadcast(gameID, "token.created", t)
+						var t domain.Token
+						var ownerID sql.NullInt64
+						var iconURL sql.NullString
+						var visible int
+						var hp, maxHp, mana, maxMana sql.NullInt64
+						var width, height sql.NullInt64
+						_ = s.db.QueryRow(`
+							SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height
+							FROM tokens WHERE id = ?
+						`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height)
+						if width.Valid {
+							w := int(width.Int64)
+							t.Width = &w
 						}
+						if height.Valid {
+							h := int(height.Int64)
+							t.Height = &h
+						}
+						if hp.Valid {
+							h := int(hp.Int64)
+							t.Hp = &h
+						}
+						if maxHp.Valid {
+							m := int(maxHp.Int64)
+							t.MaxHp = &m
+						}
+						if mana.Valid {
+							m := int(mana.Int64)
+							t.Mana = &m
+						}
+						if maxMana.Valid {
+							m := int(maxMana.Int64)
+							t.MaxMana = &m
+						}
+						t.OwnerUserID = &u.ID
+						t.VisibleToPlayers = true
+						if iconURL.Valid {
+							t.IconURL = iconURL.String
+						}
+						s.hub.Broadcast(gameID, "token.created", t)
 					}
 				}
 			}
@@ -218,15 +217,15 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		visible = 1
 	}
 
-	res, err := s.db.Exec(`
+	var id int64
+	err = s.db.QueryRow(`
 		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp), nullInt(req.Mana), nullInt(req.MaxMana), nullInt(req.Width), nullInt(req.Height))
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp), nullInt(req.Mana), nullInt(req.MaxMana), nullInt(req.Width), nullInt(req.Height)).Scan(&id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	id, _ := res.LastInsertId()
 
 	t := &domain.Token{
 		ID:               id,

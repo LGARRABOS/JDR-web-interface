@@ -100,15 +100,15 @@ func (s *Server) handleCreateMapElement(w http.ResponseWriter, r *http.Request) 
 		req.Height = 50
 	}
 
-	res, err := s.db.Exec(
-		"INSERT INTO map_elements (map_id, image_url, x, y, width, height) VALUES (?, ?, ?, ?, ?, ?)",
+	var id int64
+	err = s.db.QueryRow(
+		"INSERT INTO map_elements (map_id, image_url, x, y, width, height) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
 		mapID, req.ImageURL, req.X, req.Y, req.Width, req.Height,
-	)
+	).Scan(&id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	id, _ := res.LastInsertId()
 
 	var createdAt string
 	_ = s.db.QueryRow("SELECT created_at FROM map_elements WHERE id = ?", id).Scan(&createdAt)

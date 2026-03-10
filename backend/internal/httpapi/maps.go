@@ -119,15 +119,15 @@ func (s *Server) handleCreateMap(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := s.getSessionUser(r)
-	res, err := s.db.Exec(
-		"INSERT INTO maps (game_id, name, image_url, width, height, grid_size) VALUES (?, ?, ?, ?, ?, ?)",
+	var id int64
+	err := s.db.QueryRow(
+		"INSERT INTO maps (game_id, name, image_url, width, height, grid_size) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
 		gameID, req.Name, req.ImageURL, req.Width, req.Height, req.GridSize,
-	)
+	).Scan(&id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	id, _ := res.LastInsertId()
 
 	m := &domain.Map{
 		ID: id, GameID: gameID, Name: req.Name, ImageURL: req.ImageURL,
@@ -234,16 +234,16 @@ func (s *Server) handleUploadMap(w http.ResponseWriter, r *http.Request) {
 		tagsJSON = string(b)
 	}
 
-	res, err := s.db.Exec(
-		"INSERT INTO maps (game_id, name, image_url, width, height, grid_size, tags) VALUES (?, ?, ?, ?, ?, 50, ?)",
+	var mapID int64
+	err = s.db.QueryRow(
+		"INSERT INTO maps (game_id, name, image_url, width, height, grid_size, tags) VALUES (?, ?, ?, ?, ?, 50, ?) RETURNING id",
 		gameID, name, imageURL, width, height, tagsJSON,
-	)
+	).Scan(&mapID)
 	if err != nil {
 		os.Remove(storagePath)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	mapID, _ := res.LastInsertId()
 
 	m := &domain.Map{
 		ID: mapID, GameID: gameID, Name: name, ImageURL: imageURL,
@@ -503,15 +503,15 @@ func (s *Server) handleRevealFog(w http.ResponseWriter, r *http.Request) {
 	var gameID int64
 	_ = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
 
-	res, err := s.db.Exec(
-		"INSERT INTO fog_patches (map_id, shape_type, shape_data, revealed) VALUES (?, ?, ?, 1)",
+	var id int64
+	err = s.db.QueryRow(
+		"INSERT INTO fog_patches (map_id, shape_type, shape_data, revealed) VALUES (?, ?, ?, 1) RETURNING id",
 		mapID, req.ShapeType, req.ShapeData,
-	)
+	).Scan(&id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	id, _ := res.LastInsertId()
 
 	p := &domain.FogPatch{ID: id, MapID: mapID, ShapeType: req.ShapeType, ShapeData: req.ShapeData, Revealed: true}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"patch": p})
