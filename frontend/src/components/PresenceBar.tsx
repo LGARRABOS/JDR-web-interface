@@ -17,7 +17,9 @@ const ROLE_COLORS: Record<string, string> = {
 export function PresenceBar({ users }: PresenceBarProps) {
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-3">
-      <h3 className="text-sm font-semibold font-heading mb-2 text-fantasy-text-soft">Connectés ({users.length})</h3>
+      <h3 className="text-sm font-semibold font-heading mb-2 text-fantasy-text-soft">
+        Connectés ({users.length})
+      </h3>
       <div className="flex flex-wrap gap-2">
         {users.map((u) => (
           <div

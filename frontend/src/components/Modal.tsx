@@ -30,14 +30,18 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
     <div
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => (e.target as HTMLElement) === overlayRef.current && onClose()}
+      onClick={(e) =>
+        (e.target as HTMLElement) === overlayRef.current && onClose()
+      }
     >
       <div
         className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft shadow-xl max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 py-3 border-b border-fantasy-border-soft">
-          <h2 className="text-lg font-semibold font-heading text-fantasy-text-soft">{title}</h2>
+          <h2 className="text-lg font-semibold font-heading text-fantasy-text-soft">
+            {title}
+          </h2>
         </div>
         <div className="p-4 overflow-y-auto flex-1">{children}</div>
       </div>
@@ -153,7 +157,9 @@ export function ModalPrompt({
     <Modal open={open} onClose={onClose} title={title}>
       <form onSubmit={handleSubmit}>
         {label && (
-          <label className="block text-sm text-fantasy-muted-soft mb-2">{label}</label>
+          <label className="block text-sm text-fantasy-muted-soft mb-2">
+            {label}
+          </label>
         )}
         <input
           ref={inputRef}

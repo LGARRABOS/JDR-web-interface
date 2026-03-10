@@ -26,6 +26,12 @@ jobs:
       - name: Vet backend
         run: cd backend && go vet ./...
 
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: backend
+
       - name: Test backend
         run: cd backend && go test ./... -count=1 -v
 
@@ -51,6 +57,14 @@ jobs:
 
       - name: Lint frontend
         run: npm run lint:frontend
+
+      - name: Check Prettier format
+        run: npm run format:check --prefix frontend
+
+      - name: Audit dependencies
+        run: |
+          npm audit --audit-level=high || true
+          npm audit --audit-level=high --prefix frontend || true
 
       - name: Test frontend
         run: npm run test:frontend

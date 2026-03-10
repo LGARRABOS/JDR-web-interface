@@ -135,9 +135,12 @@ export const ElementsAPI = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw Object.assign(new Error((err as { message?: string }).message ?? res.statusText), {
-        response: { status: res.status, data: err },
-      });
+      throw Object.assign(
+        new Error((err as { message?: string }).message ?? res.statusText),
+        {
+          response: { status: res.status, data: err },
+        }
+      );
     }
     return { data: await res.json() };
   },

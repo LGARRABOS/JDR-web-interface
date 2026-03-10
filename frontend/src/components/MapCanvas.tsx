@@ -226,7 +226,11 @@ export function MapCanvas({
       rafRef.current = null;
     }
     if (wasDragging) {
-      onTokenDragEnd?.(wasDragging.tokenId, wasDragging.lastX, wasDragging.lastY);
+      onTokenDragEnd?.(
+        wasDragging.tokenId,
+        wasDragging.lastX,
+        wasDragging.lastY
+      );
     }
     dragRef.current = null;
     // Reset didDragRef after a tick so click handler can check it

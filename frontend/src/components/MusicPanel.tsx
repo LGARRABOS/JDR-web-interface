@@ -88,7 +88,9 @@ export function MusicPanel({
 
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
-      <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">Musique d&apos;ambiance</h3>
+      <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">
+        Musique d&apos;ambiance
+      </h3>
       <div className="space-y-2">
         {showUpload && (
           <input
@@ -105,7 +107,9 @@ export function MusicPanel({
           <ul className="space-y-1">
             {tracks.map((t) => (
               <li key={t.id} className="flex items-center gap-2 text-sm">
-                <span className="flex-1 truncate text-fantasy-text-soft">{t.filename}</span>
+                <span className="flex-1 truncate text-fantasy-text-soft">
+                  {t.filename}
+                </span>
                 {playingTrackId === t.id ? (
                   <button
                     onClick={handlePause}

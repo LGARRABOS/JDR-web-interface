@@ -23,10 +23,14 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-8 shadow-xl">
-        <h1 className="text-2xl font-bold font-heading text-center mb-6 text-fantasy-text-soft">Connexion</h1>
+        <h1 className="text-2xl font-bold font-heading text-center mb-6 text-fantasy-text-soft">
+          Connexion
+        </h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-fantasy-muted-soft mb-1">Email</label>
+            <label className="block text-sm text-fantasy-muted-soft mb-1">
+              Email
+            </label>
             <input
               type="email"
               value={email}
@@ -57,7 +61,10 @@ export function LoginPage() {
         </form>
         <p className="mt-4 text-center text-fantasy-muted-soft text-sm">
           Pas de compte ?{' '}
-          <Link to="/register" className="text-fantasy-accent-hover hover:underline">
+          <Link
+            to="/register"
+            className="text-fantasy-accent-hover hover:underline"
+          >
             S'inscrire
           </Link>
         </p>

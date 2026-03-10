@@ -62,9 +62,13 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
 
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
-      <h3 className="text-sm font-semibold font-heading mb-2 text-fantasy-text-soft">Musique</h3>
+      <h3 className="text-sm font-semibold font-heading mb-2 text-fantasy-text-soft">
+        Musique
+      </h3>
       {track && musicState.playing ? (
-        <p className="text-sm text-fantasy-text-soft truncate">▶ {track.filename}</p>
+        <p className="text-sm text-fantasy-text-soft truncate">
+          ▶ {track.filename}
+        </p>
       ) : (
         <p className="text-sm text-fantasy-muted-soft">En pause</p>
       )}

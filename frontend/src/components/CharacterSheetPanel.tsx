@@ -89,7 +89,9 @@ export function CharacterSheetPanel({
 
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
-      <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">Fiche personnage</h3>
+      <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">
+        Fiche personnage
+      </h3>
       {isGM ? (
         <div className="space-y-2">
           <label className="block text-xs text-fantasy-muted-soft">
@@ -147,11 +149,15 @@ export function CharacterSheetPanel({
             />
             {error && <p className="text-sm text-fantasy-error">{error}</p>}
             {uploading && (
-              <p className="text-sm text-fantasy-muted-soft">Envoi en cours...</p>
+              <p className="text-sm text-fantasy-muted-soft">
+                Envoi en cours...
+              </p>
             )}
           </div>
           {loading ? (
-            <p className="mt-2 text-sm text-fantasy-muted-soft">Chargement...</p>
+            <p className="mt-2 text-sm text-fantasy-muted-soft">
+              Chargement...
+            </p>
           ) : sheet ? (
             <div className="mt-3">
               <a
@@ -171,7 +177,9 @@ export function CharacterSheetPanel({
               )}
             </div>
           ) : (
-            <p className="mt-2 text-sm text-fantasy-muted-soft">Aucune fiche uploadée</p>
+            <p className="mt-2 text-sm text-fantasy-muted-soft">
+              Aucune fiche uploadée
+            </p>
           )}
         </>
       )}

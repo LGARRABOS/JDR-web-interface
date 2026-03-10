@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  TokensAPI,
-  MapElementsAPI,
-  MapsAPI,
-} from '../api/client';
+import { TokensAPI, MapElementsAPI, MapsAPI } from '../api/client';
 import { Modal, ModalButtons } from './Modal';
 import type { MapData } from './MapCanvas';
 import type { Token } from './MapCanvas';
@@ -57,7 +53,10 @@ export function MapEditor({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [decorSearch, setDecorSearch] = useState('');
   const [monsterSearch, setMonsterSearch] = useState('');
-  const [displaySize, setDisplaySize] = useState<{ w: number; h: number } | null>(null);
+  const [displaySize, setDisplaySize] = useState<{
+    w: number;
+    h: number;
+  } | null>(null);
   const [saveMessage, setSaveMessage] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
@@ -180,10 +179,8 @@ export function MapEditor({
     if ((e.target as HTMLElement).closest('[data-resize-handle]')) return;
 
     const mapRect = mapContainerRef.current.getBoundingClientRect();
-    const x =
-      ((e.clientX - mapRect.left) * selectedMap.width) / mapRect.width;
-    const y =
-      ((e.clientY - mapRect.top) * selectedMap.height) / mapRect.height;
+    const x = ((e.clientX - mapRect.left) * selectedMap.width) / mapRect.width;
+    const y = ((e.clientY - mapRect.top) * selectedMap.height) / mapRect.height;
     if (x < 0 || y < 0 || x > selectedMap.width || y > selectedMap.height)
       return;
 
@@ -253,7 +250,8 @@ export function MapEditor({
   };
 
   const handleMapMouseDown = (e: React.MouseEvent) => {
-    if (!selectedMap || (e.target as HTMLElement).closest('[data-token]')) return;
+    if (!selectedMap || (e.target as HTMLElement).closest('[data-token]'))
+      return;
     if ((e.target as HTMLElement).closest('[data-map-element]')) return;
     if ((e.target as HTMLElement).closest('[data-resize-handle]')) return;
     if (e.button === 0) {
@@ -270,8 +268,10 @@ export function MapEditor({
       if (dragRef.current && selectedMap && mapContainerRef.current) {
         const { type, id, startXMap, startYMap } = dragRef.current;
         const mapRect = mapContainerRef.current.getBoundingClientRect();
-        const x = ((e.clientX - mapRect.left) * selectedMap.width) / mapRect.width;
-        const y = ((e.clientY - mapRect.top) * selectedMap.height) / mapRect.height;
+        const x =
+          ((e.clientX - mapRect.left) * selectedMap.width) / mapRect.width;
+        const y =
+          ((e.clientY - mapRect.top) * selectedMap.height) / mapRect.height;
         const dx = x - startXMap;
         const dy = y - startYMap;
         const newX = Math.max(0, Math.min(selectedMap.width, startXMap + dx));
@@ -427,7 +427,9 @@ export function MapEditor({
       setSaveMessage(true);
       setTimeout(() => setSaveMessage(false), 2000);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de l\'enregistrement';
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Erreur lors de l'enregistrement";
       setSaveError(msg);
     } finally {
       setSaving(false);
@@ -447,12 +449,16 @@ export function MapEditor({
 
   return (
     <section className="h-full flex flex-col rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-6">
-      <h2 className="text-xl font-semibold mb-4 shrink-0">Modifier les cartes</h2>
+      <h2 className="text-xl font-semibold mb-4 shrink-0">
+        Modifier les cartes
+      </h2>
       <div className="flex gap-4 flex-1 min-h-0">
         {/* Gauche : Décor */}
         <div className="w-48 shrink-0 space-y-3">
           <div>
-            <label className="block text-sm text-fantasy-muted-soft mb-2">Décor</label>
+            <label className="block text-sm text-fantasy-muted-soft mb-2">
+              Décor
+            </label>
             <input
               type="text"
               value={decorSearch}
@@ -466,7 +472,9 @@ export function MapEditor({
                   key={el.id}
                   type="button"
                   onClick={() =>
-                    setPlacementElement(placementElement?.id === el.id ? null : el)
+                    setPlacementElement(
+                      placementElement?.id === el.id ? null : el
+                    )
                   }
                   className={`flex items-center gap-2 p-2 rounded text-left text-sm ${
                     placementElement?.id === el.id
@@ -514,7 +522,9 @@ export function MapEditor({
             </select>
             <div className="flex items-center gap-2">
               {saveMessage && (
-                <span className="text-sm text-fantasy-accent-hover">Carte enregistrée</span>
+                <span className="text-sm text-fantasy-accent-hover">
+                  Carte enregistrée
+                </span>
               )}
               <button
                 type="button"
@@ -525,224 +535,249 @@ export function MapEditor({
               </button>
             </div>
           </div>
-          <div ref={viewportRef} className="flex-1 min-h-0 rounded-lg overflow-hidden bg-fantasy-bg relative">
-          {!selectedMap ? (
-            <div className="absolute inset-0 flex items-center justify-center text-fantasy-muted-soft">
-              Sélectionnez une carte
-            </div>
-          ) : (
-            <>
-              <div className="absolute bottom-2 right-2 z-10 flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => updateScaleToFit()}
-                  className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft-hover text-sm"
-                  title="Ajuster à la fenêtre"
-                >
-                  ⊡
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScale((s) => Math.min(2, s * 1.2))}
-                  className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft-hover text-sm"
-                >
-                  +
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScale((s) => Math.max(0.25, s / 1.2))}
-                  className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft-hover text-sm"
-                >
-                  −
-                </button>
+          <div
+            ref={viewportRef}
+            className="flex-1 min-h-0 rounded-lg overflow-hidden bg-fantasy-bg relative"
+          >
+            {!selectedMap ? (
+              <div className="absolute inset-0 flex items-center justify-center text-fantasy-muted-soft">
+                Sélectionnez une carte
               </div>
-              <div
-                className="absolute inset-0 flex items-center justify-center overflow-hidden"
-              >
-                <div
-                  className="flex items-center justify-center overflow-hidden shrink-0"
-                  style={{
-                    aspectRatio: `${displayW} / ${displayH}`,
-                    width: '100%',
-                    height: '100%',
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    transform: `scale(${scale}) translate(${offset.x}px, ${offset.y}px)`,
-                  }}
-                >
-                  <div
-                    ref={mapContainerRef}
-                    className="relative cursor-crosshair w-full h-full"
-                    style={{ aspectRatio: `${displayW} / ${displayH}` }}
-                    onMouseDown={handleMapMouseDown}
-                    onClick={handleCanvasClick}
+            ) : (
+              <>
+                <div className="absolute bottom-2 right-2 z-10 flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => updateScaleToFit()}
+                    className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft-hover text-sm"
+                    title="Ajuster à la fenêtre"
                   >
-                  <img
-                    src={selectedMap.imageUrl}
-                    alt={selectedMap.name}
-                    className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                    draggable={false}
-                  />
-                  {mapElements.map((el) => (
+                    ⊡
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScale((s) => Math.min(2, s * 1.2))}
+                    className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft-hover text-sm"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScale((s) => Math.max(0.25, s / 1.2))}
+                    className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft-hover text-sm"
+                  >
+                    −
+                  </button>
+                </div>
+                <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+                  <div
+                    className="flex items-center justify-center overflow-hidden shrink-0"
+                    style={{
+                      aspectRatio: `${displayW} / ${displayH}`,
+                      width: '100%',
+                      height: '100%',
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      transform: `scale(${scale}) translate(${offset.x}px, ${offset.y}px)`,
+                    }}
+                  >
                     <div
-                      key={el.id}
-                      data-map-element
-                      className="absolute cursor-move"
-                      style={{
-                        left: `${(el.x / selectedMap.width) * 100}%`,
-                        top: `${(el.y / selectedMap.height) * 100}%`,
-                        width: el.width,
-                        height: el.height,
-                        transform: 'translate(-50%, -50%)',
-                        border:
-                          selectedMapElement?.id === el.id
-                            ? '2px solid #f59e0b'
-                            : 'none',
-                      }}
-                      onClick={(e) => handleMapElementClick(e, el)}
-                      onMouseDown={(e) => {
-                        if (e.button === 0 && mapContainerRef.current && selectedMap) {
-                          e.stopPropagation();
-                          const mapRect = mapContainerRef.current.getBoundingClientRect();
-                          const x = ((e.clientX - mapRect.left) * selectedMap.width) / mapRect.width;
-                          const y = ((e.clientY - mapRect.top) * selectedMap.height) / mapRect.height;
-                          dragRef.current = {
-                            type: 'mapElement',
-                            id: el.id,
-                            startXMap: el.x,
-                            startYMap: el.y,
-                            lastX: el.x,
-                            lastY: el.y,
-                          };
-                        }
-                      }}
+                      ref={mapContainerRef}
+                      className="relative cursor-crosshair w-full h-full"
+                      style={{ aspectRatio: `${displayW} / ${displayH}` }}
+                      onMouseDown={handleMapMouseDown}
+                      onClick={handleCanvasClick}
                     >
                       <img
-                        src={el.imageUrl}
-                        alt=""
-                        className="w-full h-full object-contain pointer-events-none"
+                        src={selectedMap.imageUrl}
+                        alt={selectedMap.name}
+                        className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                        draggable={false}
                       />
-                      {selectedMapElement?.id === el.id && (
-                        <>
-                          <div
-                            data-resize-handle
-                            className="absolute -bottom-1 -right-1 w-5 h-5 bg-fantasy-accent-hover cursor-se-resize rounded-sm z-10"
-                            onMouseDown={(e) => {
+                      {mapElements.map((el) => (
+                        <div
+                          key={el.id}
+                          data-map-element
+                          className="absolute cursor-move"
+                          style={{
+                            left: `${(el.x / selectedMap.width) * 100}%`,
+                            top: `${(el.y / selectedMap.height) * 100}%`,
+                            width: el.width,
+                            height: el.height,
+                            transform: 'translate(-50%, -50%)',
+                            border:
+                              selectedMapElement?.id === el.id
+                                ? '2px solid #f59e0b'
+                                : 'none',
+                          }}
+                          onClick={(e) => handleMapElementClick(e, el)}
+                          onMouseDown={(e) => {
+                            if (
+                              e.button === 0 &&
+                              mapContainerRef.current &&
+                              selectedMap
+                            ) {
                               e.stopPropagation();
-                              resizeRef.current = {
+                              const mapRect =
+                                mapContainerRef.current.getBoundingClientRect();
+                              const x =
+                                ((e.clientX - mapRect.left) *
+                                  selectedMap.width) /
+                                mapRect.width;
+                              const y =
+                                ((e.clientY - mapRect.top) *
+                                  selectedMap.height) /
+                                mapRect.height;
+                              dragRef.current = {
                                 type: 'mapElement',
                                 id: el.id,
-                                startX: e.clientX,
-                                startY: e.clientY,
-                                startW: el.width,
-                                startH: el.height,
-                                lastW: el.width,
-                                lastH: el.height,
-                                corner: 'se',
+                                startXMap: el.x,
+                                startYMap: el.y,
+                                lastX: el.x,
+                                lastY: el.y,
                               };
-                            }}
-                          />
-                        </>
-                      )}
-                    </div>
-                  ))}
-                  {tokens.map((t) => {
-                    const { w, h } = getTokenSize(t);
-                    return (
-                      <div
-                        key={t.id}
-                        data-token
-                        className="absolute cursor-pointer flex flex-col items-center relative"
-                        style={{
-                          left: `${(t.x / selectedMap.width) * 100}%`,
-                          top: `${(t.y / selectedMap.height) * 100}%`,
-                          transform: 'translate(-50%, -50%)',
-                          border:
-                            selectedToken?.id === t.id
-                              ? '2px solid #f59e0b'
-                              : 'none',
-                        }}
-                        onClick={(e) => handleTokenClick(e, t)}
-                        onMouseDown={(e) => {
-                          if (e.button === 0 && mapContainerRef.current && selectedMap) {
-                            e.stopPropagation();
-                            const mapRect = mapContainerRef.current.getBoundingClientRect();
-                            const x = ((e.clientX - mapRect.left) * selectedMap.width) / mapRect.width;
-                            const y = ((e.clientY - mapRect.top) * selectedMap.height) / mapRect.height;
-                            dragRef.current = {
-                              type: 'token',
-                              id: t.id,
-                              startXMap: t.x,
-                              startYMap: t.y,
-                              lastX: t.x,
-                              lastY: t.y,
-                            };
-                          }
-                        }}
-                      >
-                        {(t.maxHp != null || t.maxMana != null) && (
-                          <div className="flex gap-1 text-[9px] text-white drop-shadow mb-0.5">
-                            {t.maxHp != null &&
-                              `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
-                            {t.maxMana != null &&
-                              ` Mana ${t.mana ?? t.maxMana}/${t.maxMana}`}
-                          </div>
-                        )}
-                        {t.iconUrl ? (
+                            }
+                          }}
+                        >
                           <img
-                            src={t.iconUrl}
-                            alt={t.name}
-                            className="object-contain"
-                            style={{ width: w, height: h }}
+                            src={el.imageUrl}
+                            alt=""
+                            className="w-full h-full object-contain pointer-events-none"
                           />
-                        ) : (
+                          {selectedMapElement?.id === el.id && (
+                            <>
+                              <div
+                                data-resize-handle
+                                className="absolute -bottom-1 -right-1 w-5 h-5 bg-fantasy-accent-hover cursor-se-resize rounded-sm z-10"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  resizeRef.current = {
+                                    type: 'mapElement',
+                                    id: el.id,
+                                    startX: e.clientX,
+                                    startY: e.clientY,
+                                    startW: el.width,
+                                    startH: el.height,
+                                    lastW: el.width,
+                                    lastH: el.height,
+                                    corner: 'se',
+                                  };
+                                }}
+                              />
+                            </>
+                          )}
+                        </div>
+                      ))}
+                      {tokens.map((t) => {
+                        const { w, h } = getTokenSize(t);
+                        return (
                           <div
-                            className="rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+                            key={t.id}
+                            data-token
+                            className="absolute cursor-pointer flex flex-col items-center relative"
                             style={{
-                              width: w,
-                              height: h,
-                              backgroundColor: t.color,
+                              left: `${(t.x / selectedMap.width) * 100}%`,
+                              top: `${(t.y / selectedMap.height) * 100}%`,
+                              transform: 'translate(-50%, -50%)',
+                              border:
+                                selectedToken?.id === t.id
+                                  ? '2px solid #f59e0b'
+                                  : 'none',
+                            }}
+                            onClick={(e) => handleTokenClick(e, t)}
+                            onMouseDown={(e) => {
+                              if (
+                                e.button === 0 &&
+                                mapContainerRef.current &&
+                                selectedMap
+                              ) {
+                                e.stopPropagation();
+                                const mapRect =
+                                  mapContainerRef.current.getBoundingClientRect();
+                                const x =
+                                  ((e.clientX - mapRect.left) *
+                                    selectedMap.width) /
+                                  mapRect.width;
+                                const y =
+                                  ((e.clientY - mapRect.top) *
+                                    selectedMap.height) /
+                                  mapRect.height;
+                                dragRef.current = {
+                                  type: 'token',
+                                  id: t.id,
+                                  startXMap: t.x,
+                                  startYMap: t.y,
+                                  lastX: t.x,
+                                  lastY: t.y,
+                                };
+                              }
                             }}
                           >
-                            {t.name.slice(0, 2)}
+                            {(t.maxHp != null || t.maxMana != null) && (
+                              <div className="flex gap-1 text-[9px] text-white drop-shadow mb-0.5">
+                                {t.maxHp != null &&
+                                  `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
+                                {t.maxMana != null &&
+                                  ` Mana ${t.mana ?? t.maxMana}/${t.maxMana}`}
+                              </div>
+                            )}
+                            {t.iconUrl ? (
+                              <img
+                                src={t.iconUrl}
+                                alt={t.name}
+                                className="object-contain"
+                                style={{ width: w, height: h }}
+                              />
+                            ) : (
+                              <div
+                                className="rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+                                style={{
+                                  width: w,
+                                  height: h,
+                                  backgroundColor: t.color,
+                                }}
+                              >
+                                {t.name.slice(0, 2)}
+                              </div>
+                            )}
+                            {selectedToken?.id === t.id && (
+                              <div
+                                data-resize-handle
+                                className="absolute -bottom-1 -right-1 w-5 h-5 bg-fantasy-accent-hover cursor-se-resize rounded-sm z-10"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  const { w: cw, h: ch } = getTokenSize(t);
+                                  resizeRef.current = {
+                                    type: 'token',
+                                    id: t.id,
+                                    startX: e.clientX,
+                                    startY: e.clientY,
+                                    startW: cw,
+                                    startH: ch,
+                                    lastW: cw,
+                                    lastH: ch,
+                                    corner: 'se',
+                                  };
+                                }}
+                              />
+                            )}
                           </div>
-                        )}
-                        {selectedToken?.id === t.id && (
-                          <div
-                            data-resize-handle
-                            className="absolute -bottom-1 -right-1 w-5 h-5 bg-fantasy-accent-hover cursor-se-resize rounded-sm z-10"
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              const { w: cw, h: ch } = getTokenSize(t);
-                              resizeRef.current = {
-                                type: 'token',
-                                id: t.id,
-                                startX: e.clientX,
-                                startY: e.clientY,
-                                startW: cw,
-                                startH: ch,
-                                lastW: cw,
-                                lastH: ch,
-                                corner: 'se',
-                              };
-                            }}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            </>
-          )}
+              </>
+            )}
           </div>
         </div>
 
         {/* Droite : Monstres */}
         <div className="w-48 shrink-0 space-y-3">
           <div>
-            <label className="block text-sm text-fantasy-muted-soft mb-2">Monstres</label>
+            <label className="block text-sm text-fantasy-muted-soft mb-2">
+              Monstres
+            </label>
             <input
               type="text"
               value={monsterSearch}
@@ -756,7 +791,9 @@ export function MapEditor({
                   key={el.id}
                   type="button"
                   onClick={() =>
-                    setPlacementElement(placementElement?.id === el.id ? null : el)
+                    setPlacementElement(
+                      placementElement?.id === el.id ? null : el
+                    )
                   }
                   className={`flex items-center gap-2 p-2 rounded text-left text-sm ${
                     placementElement?.id === el.id
@@ -783,10 +820,14 @@ export function MapEditor({
           </div>
           {selectedToken && (
             <div className="space-y-2 p-2 rounded bg-fantasy-input-soft/50">
-              <div className="text-sm font-medium text-fantasy-text">{selectedToken.name}</div>
+              <div className="text-sm font-medium text-fantasy-text">
+                {selectedToken.name}
+              </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
-                  <label className="block text-fantasy-muted-soft mb-0.5">PV</label>
+                  <label className="block text-fantasy-muted-soft mb-0.5">
+                    PV
+                  </label>
                   <input
                     type="number"
                     min={0}
@@ -795,7 +836,9 @@ export function MapEditor({
                       const v = parseInt(e.target.value, 10);
                       if (!isNaN(v)) {
                         setTokens((prev) =>
-                          prev.map((t) => (t.id === selectedToken.id ? { ...t, hp: v } : t))
+                          prev.map((t) =>
+                            t.id === selectedToken.id ? { ...t, hp: v } : t
+                          )
                         );
                         TokensAPI.update(selectedToken.id, { hp: v });
                       }
@@ -804,7 +847,9 @@ export function MapEditor({
                   />
                 </div>
                 <div>
-                  <label className="block text-fantasy-muted-soft mb-0.5">PV max</label>
+                  <label className="block text-fantasy-muted-soft mb-0.5">
+                    PV max
+                  </label>
                   <input
                     type="number"
                     min={0}
@@ -813,7 +858,9 @@ export function MapEditor({
                       const v = parseInt(e.target.value, 10);
                       if (!isNaN(v) && v >= 0) {
                         setTokens((prev) =>
-                          prev.map((t) => (t.id === selectedToken.id ? { ...t, maxHp: v } : t))
+                          prev.map((t) =>
+                            t.id === selectedToken.id ? { ...t, maxHp: v } : t
+                          )
                         );
                         TokensAPI.update(selectedToken.id, { maxHp: v });
                       }
@@ -822,7 +869,9 @@ export function MapEditor({
                   />
                 </div>
                 <div>
-                  <label className="block text-fantasy-muted-soft mb-0.5">Mana</label>
+                  <label className="block text-fantasy-muted-soft mb-0.5">
+                    Mana
+                  </label>
                   <input
                     type="number"
                     min={0}
@@ -831,7 +880,9 @@ export function MapEditor({
                       const v = parseInt(e.target.value, 10);
                       if (!isNaN(v)) {
                         setTokens((prev) =>
-                          prev.map((t) => (t.id === selectedToken.id ? { ...t, mana: v } : t))
+                          prev.map((t) =>
+                            t.id === selectedToken.id ? { ...t, mana: v } : t
+                          )
                         );
                         TokensAPI.update(selectedToken.id, { mana: v });
                       }
@@ -840,7 +891,9 @@ export function MapEditor({
                   />
                 </div>
                 <div>
-                  <label className="block text-fantasy-muted-soft mb-0.5">Mana max</label>
+                  <label className="block text-fantasy-muted-soft mb-0.5">
+                    Mana max
+                  </label>
                   <input
                     type="number"
                     min={0}
@@ -849,7 +902,9 @@ export function MapEditor({
                       const v = parseInt(e.target.value, 10);
                       if (!isNaN(v) && v >= 0) {
                         setTokens((prev) =>
-                          prev.map((t) => (t.id === selectedToken.id ? { ...t, maxMana: v } : t))
+                          prev.map((t) =>
+                            t.id === selectedToken.id ? { ...t, maxMana: v } : t
+                          )
                         );
                         TokensAPI.update(selectedToken.id, { maxMana: v });
                       }
@@ -874,7 +929,10 @@ export function MapEditor({
 
       <Modal
         open={saveModalOpen}
-        onClose={() => { setSaveModalOpen(false); setSaveError(null); }}
+        onClose={() => {
+          setSaveModalOpen(false);
+          setSaveError(null);
+        }}
         title="Enregistrer la carte"
       >
         {saveError && (
@@ -887,7 +945,9 @@ export function MapEditor({
           }}
         >
           <div className="mb-4">
-            <label className="block text-sm text-fantasy-muted-soft mb-2">Nom</label>
+            <label className="block text-sm text-fantasy-muted-soft mb-2">
+              Nom
+            </label>
             <input
               type="text"
               value={saveName}
@@ -897,7 +957,9 @@ export function MapEditor({
             />
           </div>
           <div className="mb-4">
-            <label className="block text-sm text-fantasy-muted-soft mb-2">Tags</label>
+            <label className="block text-sm text-fantasy-muted-soft mb-2">
+              Tags
+            </label>
             <input
               type="text"
               value={saveTagInput}
@@ -919,7 +981,11 @@ export function MapEditor({
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-fantasy-input-soft text-xs"
                   >
                     {t}
-                    <button type="button" onClick={() => removeSaveTag(t)} className="text-fantasy-muted-soft hover:text-fantasy-text">
+                    <button
+                      type="button"
+                      onClick={() => removeSaveTag(t)}
+                      className="text-fantasy-muted-soft hover:text-fantasy-text"
+                    >
                       ×
                     </button>
                   </span>

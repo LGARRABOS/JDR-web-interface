@@ -6,7 +6,11 @@ interface ErrorPageLayoutProps {
   message: string;
 }
 
-export function ErrorPageLayout({ code, title, message }: ErrorPageLayoutProps) {
+export function ErrorPageLayout({
+  code,
+  title,
+  message,
+}: ErrorPageLayoutProps) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-8 shadow-xl text-center">

@@ -107,7 +107,9 @@ export function GameLobbyPage() {
         danger
       />
       <header className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold font-heading text-fantasy-text-soft">Table JDR</h1>
+        <h1 className="text-2xl font-bold font-heading text-fantasy-text-soft">
+          Table JDR
+        </h1>
         <div className="flex items-center gap-4">
           <span className="text-fantasy-muted-soft">{user?.displayName}</span>
           <button
@@ -121,7 +123,9 @@ export function GameLobbyPage() {
 
       <div className="max-w-2xl mx-auto space-y-8">
         <section className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-6">
-          <h2 className="text-lg font-semibold font-heading mb-2 text-fantasy-text-soft">Créer une partie</h2>
+          <h2 className="text-lg font-semibold font-heading mb-2 text-fantasy-text-soft">
+            Créer une partie
+          </h2>
           <p className="text-sm text-fantasy-muted-soft mb-4">
             Vous serez automatiquement le Maître du Jeu (MJ) de la partie.
           </p>
@@ -154,7 +158,9 @@ export function GameLobbyPage() {
         </section>
 
         <section className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-6">
-          <h2 className="text-lg font-semibold font-heading mb-4 text-fantasy-text-soft">Rejoindre une partie</h2>
+          <h2 className="text-lg font-semibold font-heading mb-4 text-fantasy-text-soft">
+            Rejoindre une partie
+          </h2>
           <form onSubmit={handleJoin} className="flex gap-2">
             <input
               type="text"
@@ -174,7 +180,9 @@ export function GameLobbyPage() {
         </section>
 
         <section className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-6">
-          <h2 className="text-lg font-semibold font-heading mb-4 text-fantasy-text-soft">Mes parties</h2>
+          <h2 className="text-lg font-semibold font-heading mb-4 text-fantasy-text-soft">
+            Mes parties
+          </h2>
           {loading ? (
             <p className="text-fantasy-muted-soft">Chargement...</p>
           ) : games.length === 0 ? (
@@ -189,7 +197,9 @@ export function GameLobbyPage() {
                   className="flex justify-between items-center p-3 rounded bg-fantasy-input-soft/50 hover:bg-fantasy-input-hover-soft border border-fantasy-border-soft"
                 >
                   <div>
-                    <span className="font-medium text-fantasy-text-soft">{g.name}</span>
+                    <span className="font-medium text-fantasy-text-soft">
+                      {g.name}
+                    </span>
                     {g.role === 'MJ' ? (
                       <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-medium bg-fantasy-accent/80 text-fantasy-bg">
                         MJ

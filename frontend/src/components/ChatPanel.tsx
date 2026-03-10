@@ -31,7 +31,9 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
 
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft flex flex-col h-64">
-      <h3 className="font-semibold font-heading p-2 border-b border-fantasy-border-soft text-fantasy-text-soft">Chat</h3>
+      <h3 className="font-semibold font-heading p-2 border-b border-fantasy-border-soft text-fantasy-text-soft">
+        Chat
+      </h3>
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
         {messages.map((m) => (
           <div key={m.id} className="text-sm">

@@ -88,20 +88,22 @@ export function TokenPanel({
   const [deleteTokenId, setDeleteTokenId] = useState<number | null>(null);
   const [deleteTokenName, setDeleteTokenName] = useState<string>('');
 
-  const canEditToken = (t: Token) =>
-    isGM || t.ownerUserId === currentUserId;
+  const canEditToken = (t: Token) => isGM || t.ownerUserId === currentUserId;
 
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scheduleTokenUpdate = useCallback(
-    (t: Token, data: {
-      hp?: number;
-      maxHp?: number;
-      mana?: number;
-      maxMana?: number;
-      width?: number;
-      height?: number;
-    }) => {
+    (
+      t: Token,
+      data: {
+        hp?: number;
+        maxHp?: number;
+        mana?: number;
+        maxMana?: number;
+        width?: number;
+        height?: number;
+      }
+    ) => {
       if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
       updateTimeoutRef.current = setTimeout(() => {
         updateTimeoutRef.current = null;
@@ -186,10 +188,14 @@ export function TokenPanel({
       />
       {isGM && (
         <>
-          <h3 className="text-sm font-medium mb-3 text-fantasy-text-soft">Ajouter un ennemi</h3>
+          <h3 className="text-sm font-medium mb-3 text-fantasy-text-soft">
+            Ajouter un ennemi
+          </h3>
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <div>
-              <label className="block text-xs text-fantasy-muted-soft mb-1">Nom</label>
+              <label className="block text-xs text-fantasy-muted-soft mb-1">
+                Nom
+              </label>
               <input
                 type="text"
                 value={name}
@@ -264,8 +270,8 @@ export function TokenPanel({
             )}
             <div className="flex gap-3">
               <div className="flex-1">
-<label className="block text-xs text-fantasy-muted-soft mb-1">
-                PV actuels
+                <label className="block text-xs text-fantasy-muted-soft mb-1">
+                  PV actuels
                 </label>
                 <input
                   type="number"
@@ -298,8 +304,8 @@ export function TokenPanel({
             </div>
             <div className="flex gap-3">
               <div className="flex-1">
-<label className="block text-xs text-fantasy-muted-soft mb-1">
-                Mana actuel
+                <label className="block text-xs text-fantasy-muted-soft mb-1">
+                  Mana actuel
                 </label>
                 <input
                   type="number"
@@ -314,8 +320,8 @@ export function TokenPanel({
                 />
               </div>
               <div className="flex-1">
-<label className="block text-xs text-fantasy-muted-soft mb-1">
-                Mana max
+                <label className="block text-xs text-fantasy-muted-soft mb-1">
+                  Mana max
                 </label>
                 <input
                   type="number"
@@ -341,7 +347,9 @@ export function TokenPanel({
       )}
 
       {allTokens.length > 0 && (
-        <div className={`pt-4 border-t border-fantasy-border ${isGM ? 'mt-4' : ''}`}>
+        <div
+          className={`pt-4 border-t border-fantasy-border ${isGM ? 'mt-4' : ''}`}
+        >
           <h3 className="text-sm font-medium mb-2">
             {isGM ? 'Jetons sur la carte' : 'Mes jetons'}
           </h3>
@@ -358,15 +366,17 @@ export function TokenPanel({
                   onTokenSelect(selectedToken?.id === t.id ? null : t)
                 }
               >
-                <span className="truncate flex-1 text-fantasy-text-soft" title={t.name}>
+                <span
+                  className="truncate flex-1 text-fantasy-text-soft"
+                  title={t.name}
+                >
                   {t.name}
                 </span>
                 {selectedToken?.id === t.id && !canEditToken(t) ? (
                   <span className="flex items-center gap-1">
                     {(t.maxHp != null || t.maxMana != null) && (
                       <span className="text-fantasy-muted-soft text-xs">
-                        {t.maxHp != null &&
-                          `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
+                        {t.maxHp != null && `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
                         {t.maxHp != null && t.maxMana != null && ' '}
                         {t.maxMana != null &&
                           `Mana ${t.mana ?? t.maxMana}/${t.maxMana}`}
@@ -388,7 +398,10 @@ export function TokenPanel({
                     )}
                   </span>
                 ) : selectedToken?.id === t.id && canEditToken(t) ? (
-                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <div
+                    className="flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {isGM && (
                       <button
                         type="button"
@@ -407,8 +420,7 @@ export function TokenPanel({
                   <span className="flex items-center gap-1">
                     {(t.maxHp != null || t.maxMana != null) && (
                       <span className="text-fantasy-muted-soft text-xs">
-                        {t.maxHp != null &&
-                          `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
+                        {t.maxHp != null && `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
                         {t.maxHp != null && t.maxMana != null && ' '}
                         {t.maxMana != null &&
                           `Mana ${t.mana ?? t.maxMana}/${t.maxMana}`}
@@ -441,7 +453,9 @@ export function TokenPanel({
               {selectedToken.iconUrl && (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs text-fantasy-muted-soft mb-0.5">Taille (W × H)</label>
+                    <label className="block text-xs text-fantasy-muted-soft mb-0.5">
+                      Taille (W × H)
+                    </label>
                     <div className="flex items-center gap-1">
                       <input
                         type="number"
@@ -449,9 +463,15 @@ export function TokenPanel({
                         className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
                         value={editWidth}
                         onChange={(e) => {
-                          const v = Math.max(20, parseInt(e.target.value, 10) || 56);
+                          const v = Math.max(
+                            20,
+                            parseInt(e.target.value, 10) || 56
+                          );
                           setEditWidth(v);
-                          scheduleTokenUpdate(selectedToken, { width: v, height: editHeight });
+                          scheduleTokenUpdate(selectedToken, {
+                            width: v,
+                            height: editHeight,
+                          });
                         }}
                       />
                       <span className="text-fantasy-muted-soft text-sm">×</span>
@@ -461,9 +481,15 @@ export function TokenPanel({
                         className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
                         value={editHeight}
                         onChange={(e) => {
-                          const v = Math.max(20, parseInt(e.target.value, 10) || 56);
+                          const v = Math.max(
+                            20,
+                            parseInt(e.target.value, 10) || 56
+                          );
                           setEditHeight(v);
-                          scheduleTokenUpdate(selectedToken, { width: editWidth, height: v });
+                          scheduleTokenUpdate(selectedToken, {
+                            width: editWidth,
+                            height: v,
+                          });
                         }}
                       />
                     </div>
@@ -472,7 +498,9 @@ export function TokenPanel({
               )}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs text-fantasy-muted-soft mb-0.5">PV</label>
+                  <label className="block text-xs text-fantasy-muted-soft mb-0.5">
+                    PV
+                  </label>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
@@ -480,7 +508,10 @@ export function TokenPanel({
                       className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
                       value={editHp}
                       onChange={(e) => {
-                        const v = Math.max(0, parseInt(e.target.value, 10) || 0);
+                        const v = Math.max(
+                          0,
+                          parseInt(e.target.value, 10) || 0
+                        );
                         setEditHp(v);
                         scheduleTokenUpdate(selectedToken, { hp: v });
                       }}
@@ -492,7 +523,10 @@ export function TokenPanel({
                       className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
                       value={editMaxHp}
                       onChange={(e) => {
-                        const v = Math.max(0, parseInt(e.target.value, 10) || 0);
+                        const v = Math.max(
+                          0,
+                          parseInt(e.target.value, 10) || 0
+                        );
                         setEditMaxHp(v);
                         if (editHp > v) setEditHp(v);
                         scheduleTokenUpdate(selectedToken, { maxHp: v });
@@ -501,7 +535,9 @@ export function TokenPanel({
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-fantasy-muted-soft mb-0.5">Mana</label>
+                  <label className="block text-xs text-fantasy-muted-soft mb-0.5">
+                    Mana
+                  </label>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
@@ -509,7 +545,10 @@ export function TokenPanel({
                       className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
                       value={editMana}
                       onChange={(e) => {
-                        const v = Math.max(0, parseInt(e.target.value, 10) || 0);
+                        const v = Math.max(
+                          0,
+                          parseInt(e.target.value, 10) || 0
+                        );
                         setEditMana(v);
                         scheduleTokenUpdate(selectedToken, { mana: v });
                       }}
@@ -521,7 +560,10 @@ export function TokenPanel({
                       className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
                       value={editMaxMana}
                       onChange={(e) => {
-                        const v = Math.max(0, parseInt(e.target.value, 10) || 0);
+                        const v = Math.max(
+                          0,
+                          parseInt(e.target.value, 10) || 0
+                        );
                         setEditMaxMana(v);
                         if (editMana > v) setEditMana(v);
                         scheduleTokenUpdate(selectedToken, { maxMana: v });

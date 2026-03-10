@@ -260,9 +260,7 @@ export function TabletopPage() {
     'map_element.updated': (p) => {
       const el = p as MapElement;
       if (el.mapId === currentMap?.id)
-        setMapElements((prev) =>
-          prev.map((x) => (x.id === el.id ? el : x))
-        );
+        setMapElements((prev) => prev.map((x) => (x.id === el.id ? el : x)));
     },
     'map_element.deleted': (p) => {
       const { id } = p as { id: number };
@@ -441,9 +439,7 @@ export function TabletopPage() {
   );
 
   const handleTokenMove = useCallback((id: number, x: number, y: number) => {
-    setTokens((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, x, y } : t))
-    );
+    setTokens((prev) => prev.map((t) => (t.id === id ? { ...t, x, y } : t)));
   }, []);
 
   const handleTokenDragStart = useCallback((id: number) => {
@@ -656,7 +652,8 @@ export function TabletopPage() {
             onCancelPlacement={() => setPlacementData(null)}
             selectedToken={
               selectedToken
-                ? tokens.find((t) => t.id === selectedToken.id) ?? selectedToken
+                ? (tokens.find((t) => t.id === selectedToken.id) ??
+                  selectedToken)
                 : null
             }
             onTokenSelect={setSelectedToken}

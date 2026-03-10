@@ -26,7 +26,9 @@ export function DicePanel({
 
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
-      <h3 className="font-semibold font-heading mb-2 text-fantasy-text-soft">Lancer de dés</h3>
+      <h3 className="font-semibold font-heading mb-2 text-fantasy-text-soft">
+        Lancer de dés
+      </h3>
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
           type="text"
