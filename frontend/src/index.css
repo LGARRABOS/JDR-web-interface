@@ -2,13 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-fantasy-bg: #1a1612;
+  --color-fantasy-surface: #2d2620;
+  --color-fantasy-surface-hover: #3d3528;
+  --color-fantasy-input: #3d3528;
+  --color-fantasy-input-hover: #4a4036;
+  --color-fantasy-border: #4a4036;
+  --color-fantasy-text: #e8e0d4;
+  --color-fantasy-muted: #a8987a;
+  --color-fantasy-accent: #c9a227;
+  --color-fantasy-accent-hover: #d4a84b;
+  --color-fantasy-error: #c75c5c;
+  --color-fantasy-danger: #a63d3d;
+  --color-fantasy-text-soft: #c9bda8;
+  --color-fantasy-muted-soft: #8f7f68;
+  --color-fantasy-input-soft: #352d24;
+  --color-fantasy-input-hover-soft: #3d3528;
+  --color-fantasy-border-soft: #3d3528;
+}
+
 body {
   margin: 0;
-  font-family:
-    system-ui,
-    -apple-system,
-    sans-serif;
-  background: #1a1a2e;
-  color: #eaeaea;
+  font-family: 'Crimson Text', Georgia, serif;
+  background: var(--color-fantasy-bg);
+  color: var(--color-fantasy-text);
   min-height: 100vh;
+}
+
+/* Masquer les flèches par défaut des inputs number */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }

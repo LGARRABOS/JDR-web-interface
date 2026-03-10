@@ -67,10 +67,19 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 							var iconURL sql.NullString
 							var visible int
 							var hp, maxHp, mana, maxMana sql.NullInt64
+							var width, height sql.NullInt64
 							_ = s.db.QueryRow(`
-								SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana
+								SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height
 								FROM tokens WHERE id = ?
-							`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana)
+							`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height)
+							if width.Valid {
+								w := int(width.Int64)
+								t.Width = &w
+							}
+							if height.Valid {
+								h := int(height.Int64)
+								t.Height = &h
+							}
 							if hp.Valid {
 								h := int(hp.Int64)
 								t.Hp = &h
@@ -101,7 +110,7 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height
 		FROM tokens WHERE map_id = ?
 	`, mapID)
 	if err != nil {
@@ -116,8 +125,8 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 		var ownerID sql.NullInt64
 		var iconURL sql.NullString
 		var visible int
-		var hp, maxHp, mana, maxMana sql.NullInt64
-		if err := rows.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana); err != nil {
+		var hp, maxHp, mana, maxMana, width, height sql.NullInt64
+		if err := rows.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height); err != nil {
 			continue
 		}
 		if ownerID.Valid {
@@ -143,6 +152,14 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 			m := int(maxMana.Int64)
 			t.MaxMana = &m
 		}
+		if width.Valid {
+			w := int(width.Int64)
+			t.Width = &w
+		}
+		if height.Valid {
+			h := int(height.Int64)
+			t.Height = &h
+		}
 		tokens = append(tokens, &t)
 	}
 
@@ -156,6 +173,8 @@ type createTokenReq struct {
 	IconURL          string  `json:"iconUrl"`
 	X                float64 `json:"x"`
 	Y                float64 `json:"y"`
+	Width            *int    `json:"width"`
+	Height           *int    `json:"height"`
 	OwnerUserID      *int64  `json:"ownerUserId"`
 	VisibleToPlayers bool    `json:"visibleToPlayers"`
 	Hp               *int    `json:"hp"`
@@ -200,9 +219,9 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := s.db.Exec(`
-		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp), nullInt(req.Mana), nullInt(req.MaxMana))
+		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp), nullInt(req.Mana), nullInt(req.MaxMana), nullInt(req.Width), nullInt(req.Height))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
@@ -220,6 +239,8 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		IconURL:           req.IconURL,
 		X:                 req.X,
 		Y:                 req.Y,
+		Width:             req.Width,
+		Height:            req.Height,
 		VisibleToPlayers:  req.VisibleToPlayers,
 		Hp:                req.Hp,
 		MaxHp:             req.MaxHp,
@@ -235,6 +256,9 @@ type updateTokenReq struct {
 	Y                *float64 `json:"y"`
 	Name             *string  `json:"name"`
 	Color            *string  `json:"color"`
+	IconURL          *string  `json:"iconUrl"`
+	Width            *int     `json:"width"`
+	Height           *int     `json:"height"`
 	VisibleToPlayers *bool    `json:"visibleToPlayers"`
 	Hp               *int     `json:"hp"`
 	MaxHp            *int     `json:"maxHp"`
@@ -306,6 +330,18 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		updates = append(updates, "max_mana = ?")
 		args = append(args, *req.MaxMana)
 	}
+	if req.IconURL != nil {
+		updates = append(updates, "icon_url = ?")
+		args = append(args, *req.IconURL)
+	}
+	if req.Width != nil {
+		updates = append(updates, "width = ?")
+		args = append(args, *req.Width)
+	}
+	if req.Height != nil {
+		updates = append(updates, "height = ?")
+		args = append(args, *req.Height)
+	}
 	if len(updates) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucune modification"})
 		return
@@ -322,11 +358,11 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 	var ownerID sql.NullInt64
 	var iconURL sql.NullString
 	var visible int
-	var hp, maxHp, mana, maxMana sql.NullInt64
+	var hp, maxHp, mana, maxMana, width, height sql.NullInt64
 	_ = s.db.QueryRow(`
-		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height
 		FROM tokens WHERE id = ?
-	`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana)
+	`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height)
 	if ownerID.Valid {
 		t.OwnerUserID = &ownerID.Int64
 	}
@@ -349,6 +385,14 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 	if maxMana.Valid {
 		m := int(maxMana.Int64)
 		t.MaxMana = &m
+	}
+	if width.Valid {
+		w := int(width.Int64)
+		t.Width = &w
+	}
+	if height.Valid {
+		h := int(height.Int64)
+		t.Height = &h
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"token": t})
 	s.hub.Broadcast(gameID, "token.updated", t)

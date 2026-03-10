@@ -199,6 +199,59 @@ func AutoMigrate(db *sql.DB) error {
 			return fmt.Errorf("migrate idx_tokens_pj_unique: %w", err)
 		}
 	}
+	// Migration : ajouter width et height aux tokens
+	if _, err := db.Exec("ALTER TABLE tokens ADD COLUMN width INTEGER"); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate tokens width: %w", err)
+		}
+	}
+	if _, err := db.Exec("ALTER TABLE tokens ADD COLUMN height INTEGER"); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate tokens height: %w", err)
+		}
+	}
+	// Table game_elements : bibliothèque d'éléments (monstres, décor)
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS game_elements (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			game_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			image_url TEXT NOT NULL,
+			category TEXT NOT NULL CHECK(category IN ('monster','decor')),
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(game_id) REFERENCES games(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		return fmt.Errorf("migrate game_elements: %w", err)
+	}
+	// Migration : ajouter tags à game_elements
+	if _, err := db.Exec("ALTER TABLE game_elements ADD COLUMN tags TEXT"); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate game_elements tags: %w", err)
+		}
+	}
+	// Migration : ajouter tags à maps
+	if _, err := db.Exec("ALTER TABLE maps ADD COLUMN tags TEXT"); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate maps tags: %w", err)
+		}
+	}
+	// Table map_elements : éléments de décor fixes sur une carte
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS map_elements (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			map_id INTEGER NOT NULL,
+			image_url TEXT NOT NULL,
+			x REAL NOT NULL DEFAULT 0,
+			y REAL NOT NULL DEFAULT 0,
+			width INTEGER NOT NULL DEFAULT 50,
+			height INTEGER NOT NULL DEFAULT 50,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(map_id) REFERENCES maps(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		return fmt.Errorf("migrate map_elements: %w", err)
+	}
 	return nil
 }
 

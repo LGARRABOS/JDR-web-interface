@@ -6,6 +6,13 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+api.interceptors.request.use((config) => {
+  if (config.data instanceof FormData && config.headers) {
+    delete (config.headers as Record<string, unknown>)['Content-Type'];
+  }
+  return config;
+});
+
 export const AuthAPI = {
   register: (data: { email: string; password: string; displayName: string }) =>
     api.post('/auth/register', data),
@@ -38,9 +45,7 @@ export const CharacterSheetsAPI = {
   upload: (gameId: number, file: File) => {
     const form = new FormData();
     form.append('file', file);
-    return api.post(`/games/${gameId}/character-sheet`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    return api.post(`/games/${gameId}/character-sheet`, form);
   },
 };
 
@@ -56,15 +61,16 @@ export const MapsAPI = {
       gridSize?: number;
     }
   ) => api.post(`/games/${gameId}/maps`, data),
-  upload: (gameId: number, file: File, name?: string) => {
+  upload: (gameId: number, file: File, name?: string, tags?: string[]) => {
     const form = new FormData();
     form.append('file', file);
     if (name) form.append('name', name);
-    return api.post(`/games/${gameId}/maps/upload`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    if (tags && tags.length > 0) form.append('tags', JSON.stringify(tags));
+    return api.post(`/games/${gameId}/maps/upload`, form);
   },
   get: (mapId: number) => api.get(`/maps/${mapId}`),
+  update: (mapId: number, data: { name?: string; tags?: string[] }) =>
+    api.post(`/maps/${mapId}/update`, data),
   delete: (mapId: number) => api.delete(`/maps/${mapId}`),
 };
 
@@ -76,8 +82,11 @@ export const TokensAPI = {
       kind?: string;
       name?: string;
       color?: string;
+      iconUrl?: string;
       x?: number;
       y?: number;
+      width?: number;
+      height?: number;
       ownerUserId?: number;
       hp?: number;
       maxHp?: number;
@@ -93,6 +102,9 @@ export const TokensAPI = {
       y?: number;
       name?: string;
       color?: string;
+      iconUrl?: string;
+      width?: number;
+      height?: number;
       hp?: number;
       maxHp?: number;
       mana?: number;
@@ -100,6 +112,56 @@ export const TokensAPI = {
     }
   ) => api.patch(`/tokens/${id}`, data),
   delete: (id: number) => api.delete(`/tokens/${id}`),
+};
+
+export const ElementsAPI = {
+  list: (gameId: number) => api.get(`/games/${gameId}/elements`),
+  upload: async (
+    gameId: number,
+    file: File,
+    name?: string,
+    category?: string,
+    tags?: string[]
+  ) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (name) form.append('name', name);
+    if (category) form.append('category', category);
+    if (tags && tags.length > 0) form.append('tags', JSON.stringify(tags));
+    const res = await fetch(`/api/games/${gameId}/elements/upload`, {
+      method: 'POST',
+      body: form,
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw Object.assign(new Error((err as { message?: string }).message ?? res.statusText), {
+        response: { status: res.status, data: err },
+      });
+    }
+    return { data: await res.json() };
+  },
+  delete: (gameId: number, id: number) =>
+    api.delete(`/games/${gameId}/elements/${id}`),
+};
+
+export const MapElementsAPI = {
+  list: (mapId: number) => api.get(`/maps/${mapId}/elements`),
+  create: (
+    mapId: number,
+    data: {
+      imageUrl: string;
+      x: number;
+      y: number;
+      width?: number;
+      height?: number;
+    }
+  ) => api.post(`/maps/${mapId}/elements`, data),
+  update: (
+    id: number,
+    data: { x?: number; y?: number; width?: number; height?: number }
+  ) => api.patch(`/map-elements/${id}`, data),
+  delete: (id: number) => api.delete(`/map-elements/${id}`),
 };
 
 export const MessagesAPI = {
@@ -119,9 +181,7 @@ export const MusicAPI = {
   upload: (gameId: number, file: File) => {
     const form = new FormData();
     form.append('file', file);
-    return api.post(`/games/${gameId}/music/upload`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    return api.post(`/games/${gameId}/music/upload`, form);
   },
   delete: (gameId: number, trackId: number) =>
     api.delete(`/games/${gameId}/music/${trackId}`),

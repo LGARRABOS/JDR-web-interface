@@ -25,13 +25,14 @@ type GamePlayer struct {
 
 // Map représente une carte de jeu.
 type Map struct {
-	ID        int64  `json:"id"`
-	GameID    int64  `json:"gameId"`
-	Name      string `json:"name"`
-	ImageURL  string `json:"imageUrl"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
-	GridSize  int    `json:"gridSize"`
+	ID        int64    `json:"id"`
+	GameID    int64    `json:"gameId"`
+	Name      string   `json:"name"`
+	ImageURL  string   `json:"imageUrl"`
+	Width     int      `json:"width"`
+	Height    int      `json:"height"`
+	GridSize  int      `json:"gridSize"`
+	Tags      []string `json:"tags,omitempty"`
 }
 
 // Token représente un pion sur la carte.
@@ -46,11 +47,36 @@ type Token struct {
 	IconURL          string  `json:"iconUrl,omitempty"`
 	X                float64 `json:"x"`
 	Y                float64 `json:"y"`
+	Width            *int    `json:"width,omitempty"`
+	Height           *int    `json:"height,omitempty"`
 	VisibleToPlayers bool    `json:"visibleToPlayers"`
 	Hp               *int    `json:"hp,omitempty"`       // PV actuels
 	MaxHp            *int    `json:"maxHp,omitempty"`   // PV max
 	Mana             *int    `json:"mana,omitempty"`    // Mana actuel
 	MaxMana          *int    `json:"maxMana,omitempty"` // Mana max
+}
+
+// GameElement représente un élément de la bibliothèque (monstre ou décor).
+type GameElement struct {
+	ID        int64    `json:"id"`
+	GameID    int64    `json:"gameId"`
+	Name      string   `json:"name"`
+	ImageURL  string   `json:"imageUrl"`
+	Category  string   `json:"category"` // monster, decor
+	Tags      []string `json:"tags,omitempty"`
+	CreatedAt string   `json:"createdAt"`
+}
+
+// MapElement représente un élément de décor fixe sur une carte.
+type MapElement struct {
+	ID        int64   `json:"id"`
+	MapID     int64   `json:"mapId"`
+	ImageURL  string  `json:"imageUrl"`
+	X         float64 `json:"x"`
+	Y         float64 `json:"y"`
+	Width     int     `json:"width"`
+	Height    int     `json:"height"`
+	CreatedAt string  `json:"createdAt"`
 }
 
 // FogPatch représente une zone de brouillard de guerre.

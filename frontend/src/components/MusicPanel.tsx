@@ -87,8 +87,8 @@ export function MusicPanel({
   }, [send, playingTrackId]);
 
   return (
-    <div className="rounded-lg bg-slate-800/80 p-4">
-      <h3 className="text-sm font-semibold mb-3">Musique d&apos;ambiance</h3>
+    <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
+      <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">Musique d&apos;ambiance</h3>
       <div className="space-y-2">
         {showUpload && (
           <input
@@ -96,27 +96,27 @@ export function MusicPanel({
             accept=".mp3,.ogg,.wav,.m4a"
             onChange={handleFileSelect}
             disabled={uploading}
-            className="block w-full text-sm text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-slate-600 file:text-slate-200"
+            className="block w-full text-sm text-fantasy-muted-soft file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-fantasy-input-soft file:text-fantasy-text-soft"
           />
         )}
         {loading ? (
-          <p className="text-sm text-slate-400">Chargement...</p>
+          <p className="text-sm text-fantasy-muted-soft">Chargement...</p>
         ) : (
           <ul className="space-y-1">
             {tracks.map((t) => (
               <li key={t.id} className="flex items-center gap-2 text-sm">
-                <span className="flex-1 truncate">{t.filename}</span>
+                <span className="flex-1 truncate text-fantasy-text-soft">{t.filename}</span>
                 {playingTrackId === t.id ? (
                   <button
                     onClick={handlePause}
-                    className="px-2 py-0.5 rounded bg-amber-600/80 hover:bg-amber-500 text-xs"
+                    className="px-2 py-0.5 rounded bg-fantasy-accent/80 hover:bg-fantasy-accent-hover text-fantasy-bg text-xs"
                   >
                     Pause
                   </button>
                 ) : (
                   <button
                     onClick={() => handlePlay(t.id)}
-                    className="px-2 py-0.5 rounded bg-slate-600 hover:bg-slate-500 text-xs"
+                    className="px-2 py-0.5 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-xs text-fantasy-text-soft"
                   >
                     Play
                   </button>

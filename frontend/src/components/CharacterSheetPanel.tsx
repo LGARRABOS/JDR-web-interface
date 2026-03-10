@@ -88,11 +88,11 @@ export function CharacterSheetPanel({
   );
 
   return (
-    <div className="rounded-lg bg-slate-800/80 p-4">
-      <h3 className="text-sm font-semibold mb-3">Fiche personnage</h3>
+    <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
+      <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">Fiche personnage</h3>
       {isGM ? (
         <div className="space-y-2">
-          <label className="block text-xs text-slate-400">
+          <label className="block text-xs text-fantasy-muted-soft">
             Consulter la fiche de
           </label>
           <select
@@ -102,7 +102,7 @@ export function CharacterSheetPanel({
                 e.target.value ? parseInt(e.target.value, 10) : null
               )
             }
-            className="w-full rounded bg-slate-700 px-3 py-2 text-sm"
+            className="w-full rounded bg-fantasy-input px-3 py-2 text-sm border border-fantasy-border"
           >
             <option value="">— Sélectionner un joueur —</option>
             {players.map((u) => (
@@ -114,18 +114,18 @@ export function CharacterSheetPanel({
           {selectedUserId && (
             <>
               {loading ? (
-                <p className="text-sm text-slate-400">Chargement...</p>
+                <p className="text-sm text-fantasy-muted-soft">Chargement...</p>
               ) : sheet ? (
                 <a
                   href={sheet.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block text-sm text-amber-400 hover:underline"
+                  className="block text-sm text-fantasy-accent-hover hover:underline"
                 >
                   Voir : {sheet.filename}
                 </a>
               ) : (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-fantasy-muted-soft">
                   Aucune fiche pour ce joueur
                 </p>
               )}
@@ -135,7 +135,7 @@ export function CharacterSheetPanel({
       ) : (
         <>
           <div className="space-y-2">
-            <label className="block text-xs text-slate-400">
+            <label className="block text-xs text-fantasy-muted-soft">
               PDF ou .docx (max 10 Mo)
             </label>
             <input
@@ -143,22 +143,22 @@ export function CharacterSheetPanel({
               accept=".pdf,.doc,.docx"
               onChange={handleFileSelect}
               disabled={uploading}
-              className="block w-full text-sm text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-slate-600 file:text-slate-200"
+              className="block w-full text-sm text-fantasy-muted-soft file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-fantasy-input-soft file:text-fantasy-text-soft"
             />
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && <p className="text-sm text-fantasy-error">{error}</p>}
             {uploading && (
-              <p className="text-sm text-slate-400">Envoi en cours...</p>
+              <p className="text-sm text-fantasy-muted-soft">Envoi en cours...</p>
             )}
           </div>
           {loading ? (
-            <p className="mt-2 text-sm text-slate-400">Chargement...</p>
+            <p className="mt-2 text-sm text-fantasy-muted-soft">Chargement...</p>
           ) : sheet ? (
             <div className="mt-3">
               <a
                 href={sheet.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-amber-400 hover:underline"
+                className="text-sm text-fantasy-accent-hover hover:underline"
               >
                 Voir ma fiche : {sheet.filename}
               </a>
@@ -166,12 +166,12 @@ export function CharacterSheetPanel({
                 <iframe
                   src={sheet.url}
                   title={sheet.filename}
-                  className="mt-2 w-full h-64 rounded border border-slate-600 bg-white"
+                  className="mt-2 w-full h-64 rounded border border-fantasy-border bg-white"
                 />
               )}
             </div>
           ) : (
-            <p className="mt-2 text-sm text-slate-500">Aucune fiche uploadée</p>
+            <p className="mt-2 text-sm text-fantasy-muted-soft">Aucune fiche uploadée</p>
           )}
         </>
       )}

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
-	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/disintegration/imageorient"
 	"github.com/go-chi/chi/v5"
 
 	"jdr-backend/internal/domain"
@@ -39,6 +39,8 @@ func (s *Server) registerMapRoutes() {
 	s.mux.Route("/api/maps/{mapId}", func(r chi.Router) {
 		r.Use(s.requireAuth)
 		r.Get("/", s.handleGetMap)
+		r.Patch("/", s.handleUpdateMap)
+		r.Post("/update", s.handleUpdateMap)
 		r.Delete("/", s.handleDeleteMap)
 	})
 	s.mux.Route("/api/maps/{mapId}/fog", func(r chi.Router) {
@@ -57,7 +59,7 @@ func (s *Server) handleListMaps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(
-		"SELECT id, game_id, name, image_url, width, height, grid_size FROM maps WHERE game_id = ? ORDER BY id",
+		"SELECT id, game_id, name, image_url, width, height, grid_size, COALESCE(tags, '[]') FROM maps WHERE game_id = ? ORDER BY id",
 		gameID,
 	)
 	if err != nil {
@@ -69,9 +71,11 @@ func (s *Server) handleListMaps(w http.ResponseWriter, r *http.Request) {
 	var maps []*domain.Map
 	for rows.Next() {
 		var m domain.Map
-		if err := rows.Scan(&m.ID, &m.GameID, &m.Name, &m.ImageURL, &m.Width, &m.Height, &m.GridSize); err != nil {
+		var tagsJSON string
+		if err := rows.Scan(&m.ID, &m.GameID, &m.Name, &m.ImageURL, &m.Width, &m.Height, &m.GridSize, &tagsJSON); err != nil {
 			continue
 		}
+		_ = json.Unmarshal([]byte(tagsJSON), &m.Tags)
 		maps = append(maps, &m)
 	}
 
@@ -170,6 +174,20 @@ func (s *Server) handleUploadMap(w http.ResponseWriter, r *http.Request) {
 		name = "Carte"
 	}
 
+	tagsRaw := strings.TrimSpace(r.FormValue("tags"))
+	var tags []string
+	if tagsRaw != "" {
+		if err := json.Unmarshal([]byte(tagsRaw), &tags); err != nil {
+			parts := strings.Split(tagsRaw, ",")
+			for _, p := range parts {
+				t := strings.TrimSpace(p)
+				if t != "" {
+					tags = append(tags, strings.ToLower(t))
+				}
+			}
+		}
+	}
+
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	if !allowedMapExtensions[ext] {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Format non autorisé (png, jpg, gif)"})
@@ -198,22 +216,27 @@ func (s *Server) handleUploadMap(w http.ResponseWriter, r *http.Request) {
 	}
 	dst.Close()
 
-	// Récupérer les dimensions de l'image
+	// Récupérer les dimensions de l'image (imageorient gère l'orientation EXIF)
 	width, height := 800, 600
 	if f, err := os.Open(storagePath); err == nil {
-		if img, _, err := image.Decode(f); err == nil {
-			bounds := img.Bounds()
-			width = bounds.Dx()
-			height = bounds.Dy()
+		if cfg, _, err := imageorient.DecodeConfig(f); err == nil {
+			width = cfg.Width
+			height = cfg.Height
 		}
 		f.Close()
 	}
 
 	imageURL := "/api/games/" + strconv.FormatInt(gameID, 10) + "/maps/file/" + filepath.Base(storagePath)
 
+	tagsJSON := "[]"
+	if len(tags) > 0 {
+		b, _ := json.Marshal(tags)
+		tagsJSON = string(b)
+	}
+
 	res, err := s.db.Exec(
-		"INSERT INTO maps (game_id, name, image_url, width, height, grid_size) VALUES (?, ?, ?, ?, ?, 50)",
-		gameID, name, imageURL, width, height,
+		"INSERT INTO maps (game_id, name, image_url, width, height, grid_size, tags) VALUES (?, ?, ?, ?, ?, 50, ?)",
+		gameID, name, imageURL, width, height, tagsJSON,
 	)
 	if err != nil {
 		os.Remove(storagePath)
@@ -224,7 +247,7 @@ func (s *Server) handleUploadMap(w http.ResponseWriter, r *http.Request) {
 
 	m := &domain.Map{
 		ID: mapID, GameID: gameID, Name: name, ImageURL: imageURL,
-		Width: width, Height: height, GridSize: 50,
+		Width: width, Height: height, GridSize: 50, Tags: tags,
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"map": m})
 	s.hub.Broadcast(gameID, "map.created", m)
@@ -275,17 +298,100 @@ func (s *Server) handleGetMap(w http.ResponseWriter, r *http.Request) {
 
 	var m domain.Map
 	var gameID int64
+	var tagsJSON string
 	err = s.db.QueryRow(
-		"SELECT id, game_id, name, image_url, width, height, grid_size FROM maps WHERE id = ?",
+		"SELECT id, game_id, name, image_url, width, height, grid_size, COALESCE(tags, '[]') FROM maps WHERE id = ?",
 		mapID,
-	).Scan(&m.ID, &gameID, &m.Name, &m.ImageURL, &m.Width, &m.Height, &m.GridSize)
+	).Scan(&m.ID, &gameID, &m.Name, &m.ImageURL, &m.Width, &m.Height, &m.GridSize, &tagsJSON)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Carte introuvable"})
 		return
 	}
 	m.GameID = gameID
+	_ = json.Unmarshal([]byte(tagsJSON), &m.Tags)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"map": m})
+}
+
+type updateMapReq struct {
+	Name *string  `json:"name"`
+	Tags []string `json:"tags"`
+}
+
+func (s *Server) handleUpdateMap(w http.ResponseWriter, r *http.Request) {
+	u := s.getSessionUser(r)
+	if u == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Non authentifié"})
+		return
+	}
+
+	mapIDStr := chi.URLParam(r, "mapId")
+	mapID, err := strconv.ParseInt(mapIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
+		return
+	}
+
+	var gameID int64
+	err = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Carte introuvable"})
+		return
+	}
+
+	var role string
+	_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role)
+	if role != "MJ" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Réservé au MJ"})
+		return
+	}
+
+	var req updateMapReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Requête invalide"})
+		return
+	}
+
+	updates := []string{}
+	args := []interface{}{}
+	if req.Name != nil && strings.TrimSpace(*req.Name) != "" {
+		updates = append(updates, "name = ?")
+		args = append(args, strings.TrimSpace(*req.Name))
+	}
+	if req.Tags != nil {
+		tagsJSON := "[]"
+		if len(req.Tags) > 0 {
+			b, _ := json.Marshal(req.Tags)
+			tagsJSON = string(b)
+		}
+		updates = append(updates, "tags = ?")
+		args = append(args, tagsJSON)
+	}
+	if len(updates) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucune modification"})
+		return
+	}
+	args = append(args, mapID)
+
+	_, err = s.db.Exec("UPDATE maps SET "+strings.Join(updates, ", ")+" WHERE id = ?", args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+		return
+	}
+
+	var m domain.Map
+	var tagsJSON string
+	err = s.db.QueryRow(
+		"SELECT id, game_id, name, image_url, width, height, grid_size, COALESCE(tags, '[]') FROM maps WHERE id = ?",
+		mapID,
+	).Scan(&m.ID, &m.GameID, &m.Name, &m.ImageURL, &m.Width, &m.Height, &m.GridSize, &tagsJSON)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+		return
+	}
+	_ = json.Unmarshal([]byte(tagsJSON), &m.Tags)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"map": m})
+	s.hub.Broadcast(gameID, "map.updated", m)
 }
 
 func (s *Server) handleDeleteMap(w http.ResponseWriter, r *http.Request) {

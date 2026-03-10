@@ -4,7 +4,11 @@ import { RegisterPage } from './pages/RegisterPage';
 import { GameLobbyPage } from './pages/GameLobbyPage';
 import { TabletopPage } from './pages/TabletopPage';
 import { ResourcesPage } from './pages/ResourcesPage';
-import { AuthProvider, useAuth } from './auth/AuthContext';
+import { NotFoundPage } from './pages/NotFoundPage';
+import { ForbiddenPage } from './pages/ForbiddenPage';
+import { ServerErrorPage } from './pages/ServerErrorPage';
+import { AuthProvider } from './auth/AuthContext';
+import { useAuth } from './auth/useAuth';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { user, loading } = useAuth();
@@ -78,7 +82,10 @@ export const App = () => {
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/games" replace />} />
+        <Route path="/404" element={<NotFoundPage />} />
+        <Route path="/403" element={<ForbiddenPage />} />
+        <Route path="/500" element={<ServerErrorPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AuthProvider>
   );

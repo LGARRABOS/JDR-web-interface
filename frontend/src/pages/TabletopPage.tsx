@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import {
   GamesAPI,
   MapsAPI,
   TokensAPI,
+  MapElementsAPI,
+  ElementsAPI,
   MessagesAPI,
   RollsAPI,
 } from '../api/client';
-import { MapCanvas, type Token, type MapData, type MapView } from '../components/MapCanvas';
+import {
+  MapCanvas,
+  type Token,
+  type MapData,
+  type MapView,
+  type MapElement,
+} from '../components/MapCanvas';
 import { TokenPanel, type TokenFormData } from '../components/TokenPanel';
 import { DicePanel } from '../components/DicePanel';
 import { ChatPanel } from '../components/ChatPanel';
@@ -51,6 +59,10 @@ export function TabletopPage() {
   const [maps, setMaps] = useState<MapData[]>([]);
   const [currentMap, setCurrentMap] = useState<MapData | null>(null);
   const [tokens, setTokens] = useState<Token[]>([]);
+  const [mapElements, setMapElements] = useState<MapElement[]>([]);
+  const [elements, setElements] = useState<
+    Array<{ id: number; name: string; imageUrl: string; category: string }>
+  >([]);
   const [messages, setMessages] = useState<
     Array<{
       id: number;
@@ -136,6 +148,26 @@ export function TabletopPage() {
     }
   }, [currentMap]);
 
+  const loadMapElements = useCallback(async () => {
+    if (!currentMap) return;
+    try {
+      const { data } = await MapElementsAPI.list(currentMap.id);
+      setMapElements(data.elements ?? []);
+    } catch {
+      setMapElements([]);
+    }
+  }, [currentMap]);
+
+  const loadElements = useCallback(async () => {
+    if (!gameId || !isGM) return;
+    try {
+      const { data } = await ElementsAPI.list(gameId);
+      setElements(data.elements ?? []);
+    } catch {
+      setElements([]);
+    }
+  }, [gameId, isGM]);
+
   const loadGamePlayers = useCallback(async () => {
     if (!gameId || !isGM) return;
     try {
@@ -184,6 +216,14 @@ export function TabletopPage() {
   }, [loadTokens]);
 
   useEffect(() => {
+    loadMapElements();
+  }, [loadMapElements]);
+
+  useEffect(() => {
+    loadElements();
+  }, [loadElements]);
+
+  useEffect(() => {
     loadMessages();
   }, [loadMessages]);
 
@@ -209,6 +249,24 @@ export function TabletopPage() {
     'token.deleted': (p) => {
       const { id } = p as { id: number };
       setTokens((prev) => prev.filter((x) => x.id !== id));
+    },
+    'map_element.created': (p) => {
+      const el = p as MapElement;
+      if (el.mapId === currentMap?.id)
+        setMapElements((prev) =>
+          prev.some((x) => x.id === el.id) ? prev : [...prev, el]
+        );
+    },
+    'map_element.updated': (p) => {
+      const el = p as MapElement;
+      if (el.mapId === currentMap?.id)
+        setMapElements((prev) =>
+          prev.map((x) => (x.id === el.id ? el : x))
+        );
+    },
+    'map_element.deleted': (p) => {
+      const { id } = p as { id: number };
+      setMapElements((prev) => prev.filter((x) => x.id !== id));
     },
     'chat.message': (p) => {
       const m = p as {
@@ -326,7 +384,18 @@ export function TabletopPage() {
   });
 
   const handleTokenUpdate = useCallback(
-    async (id: number, data: { hp?: number; maxHp?: number; mana?: number; maxMana?: number }) => {
+    async (
+      id: number,
+      data: {
+        hp?: number;
+        maxHp?: number;
+        mana?: number;
+        maxMana?: number;
+        iconUrl?: string;
+        width?: number;
+        height?: number;
+      }
+    ) => {
       try {
         await TokensAPI.update(id, data);
         setTokens((prev) =>
@@ -396,7 +465,8 @@ export function TabletopPage() {
   const handleTokenCreate = useCallback(
     async (x: number, y: number) => {
       if (!currentMap || !placementData) return;
-      const { name, hp, maxHp, mana, maxMana } = placementData;
+      const { name, hp, maxHp, mana, maxMana, iconUrl, width, height } =
+        placementData;
       try {
         const { data } = await TokensAPI.create(currentMap.id, {
           x,
@@ -407,6 +477,9 @@ export function TabletopPage() {
           maxHp,
           mana,
           maxMana,
+          iconUrl,
+          width,
+          height,
           visibleToPlayers: true,
         });
         setTokens((prev) => [...prev, data.token]);
@@ -460,28 +533,28 @@ export function TabletopPage() {
   if (!game) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-slate-400">Chargement...</p>
+        <p className="text-fantasy-muted-soft">Chargement...</p>
       </div>
     );
   }
 
   return (
     <div className="h-screen flex flex-col">
-      <header className="flex justify-between items-center px-4 py-2 bg-slate-800 border-b border-slate-700">
+      <header className="flex justify-between items-center px-4 py-2 bg-fantasy-surface border-b border-fantasy-border">
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/games')}
-            className="text-slate-400 hover:text-white"
+            className="text-fantasy-muted-soft hover:text-fantasy-text-soft"
           >
             ← Retour
           </button>
-          <h1 className="font-bold">{game.name}</h1>
+          <h1 className="font-bold font-heading">{game.name}</h1>
           {isGM ? (
-            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-600/90 text-amber-100">
+            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-fantasy-accent/90 text-fantasy-bg">
               Maître du Jeu
             </span>
           ) : (
-            <span className="px-2 py-0.5 rounded text-xs text-slate-400 bg-slate-700">
+            <span className="px-2 py-0.5 rounded text-xs text-fantasy-muted-soft bg-fantasy-input-soft">
               Joueur
             </span>
           )}
@@ -505,7 +578,7 @@ export function TabletopPage() {
               }
             }}
             disabled={!isGM}
-            className="rounded bg-slate-700 px-3 py-1 text-sm disabled:opacity-70"
+            className="rounded bg-fantasy-input-soft px-3 py-1 text-sm text-fantasy-text-soft disabled:opacity-70"
           >
             {maps.length === 0 ? (
               <option value="">Aucune carte</option>
@@ -520,7 +593,7 @@ export function TabletopPage() {
           {isGM && (
             <button
               onClick={() => navigate(`/table/${gameId}/resources`)}
-              className="px-3 py-1 rounded bg-slate-600 hover:bg-slate-500 text-sm font-medium"
+              className="px-3 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm font-medium text-fantasy-text-soft"
             >
               Ressources
             </button>
@@ -529,14 +602,14 @@ export function TabletopPage() {
       </header>
 
       {isGM && (
-        <div className="px-4 py-2 bg-amber-900/20 border-b border-amber-800/30 flex flex-wrap items-center gap-4 text-sm text-amber-200/90">
+        <div className="px-4 py-2 bg-fantasy-accent/10 border-b border-fantasy-accent/20 flex flex-wrap items-center gap-4 text-sm text-fantasy-muted">
           <span className="flex items-center gap-2 flex-1 min-w-0">
-            <strong>Mode MJ :</strong>
+            <strong className="text-fantasy-text-soft">Mode MJ :</strong>
             <span>{gmTip}</span>
             <button
               type="button"
               onClick={() => setGmTip((prev) => pickRandomTip(prev))}
-              className="shrink-0 p-1 rounded hover:bg-amber-800/40 text-amber-300/80 hover:text-amber-200"
+              className="shrink-0 p-1 rounded hover:bg-fantasy-accent/20 text-fantasy-accent-hover"
               title="Autre astuce"
             >
               ↻
@@ -545,7 +618,7 @@ export function TabletopPage() {
           {game.inviteCode && (
             <span className="flex items-center gap-2">
               Code d&apos;invitation :{' '}
-              <code className="px-2 py-0.5 rounded bg-slate-800 font-mono font-bold text-amber-300">
+              <code className="px-2 py-0.5 rounded bg-fantasy-surface font-mono font-bold text-fantasy-accent-hover">
                 {game.inviteCode}
               </code>
             </span>
@@ -558,6 +631,7 @@ export function TabletopPage() {
           <MapCanvas
             map={currentMap}
             tokens={tokens}
+            mapElements={mapElements}
             isGM={isGM}
             currentUserId={user?.id ?? 0}
             mapView={mapView}
@@ -571,23 +645,28 @@ export function TabletopPage() {
             onTokenSelect={setSelectedToken}
           />
         </div>
-        <aside className="w-80 flex flex-col gap-4 p-4 bg-slate-800/50 overflow-y-auto">
+        <aside className="w-80 flex flex-col gap-4 p-4 bg-fantasy-surface/50 overflow-y-auto text-fantasy-text-soft">
           <PresenceBar users={connectedUsers} />
           <TokenPanel
             isGM={isGM}
             currentUserId={user?.id ?? 0}
+            elements={elements}
             onStartPlacement={setPlacementData}
             placementActive={placementData != null}
             onCancelPlacement={() => setPlacementData(null)}
-            selectedToken={selectedToken}
+            selectedToken={
+              selectedToken
+                ? tokens.find((t) => t.id === selectedToken.id) ?? selectedToken
+                : null
+            }
             onTokenSelect={setSelectedToken}
             onTokenUpdate={handleTokenUpdate}
             onTokenDelete={handleTokenDelete}
             tokens={tokens}
           />
           {!isGM && (
-            <div className="rounded-lg bg-slate-800/80 p-4">
-              <label className="block text-sm font-medium mb-2">
+            <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
+              <label className="block text-sm font-medium mb-2 text-fantasy-text-soft">
                 Nom de personnage
               </label>
               <input
@@ -596,7 +675,7 @@ export function TabletopPage() {
                 onChange={(e) => setCharacterNameInput(e.target.value)}
                 onBlur={handleCharacterNameBlur}
                 placeholder={user?.displayName ?? 'Mon personnage'}
-                className="w-full rounded bg-slate-700 px-3 py-2 text-sm"
+                className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft"
               />
             </div>
           )}

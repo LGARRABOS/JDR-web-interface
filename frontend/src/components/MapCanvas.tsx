@@ -6,8 +6,11 @@ export interface Token {
   kind: string;
   name: string;
   color: string;
+  iconUrl?: string;
   x: number;
   y: number;
+  width?: number;
+  height?: number;
   visibleToPlayers: boolean;
   ownerUserId?: number;
   hp?: number;
@@ -24,6 +27,7 @@ export interface MapData {
   width: number;
   height: number;
   gridSize: number;
+  tags?: string[];
 }
 
 export interface MapView {
@@ -31,9 +35,21 @@ export interface MapView {
   offset: { x: number; y: number };
 }
 
+export interface MapElement {
+  id: number;
+  mapId: number;
+  imageUrl: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  createdAt?: string;
+}
+
 interface MapCanvasProps {
   map: MapData | null;
   tokens: Token[];
+  mapElements?: MapElement[];
   isGM: boolean;
   currentUserId: number;
   mapView: MapView;
@@ -48,6 +64,7 @@ interface MapCanvasProps {
 export function MapCanvas({
   map,
   tokens,
+  mapElements = [],
   isGM,
   currentUserId,
   mapView,
@@ -87,6 +104,25 @@ export function MapCanvas({
   );
 
   const visibleTokens = tokens.filter((t) => isGM || t.visibleToPlayers);
+
+  const fitScaleToViewport = useCallback(() => {
+    if (!map || !onMapViewChange || !canvasRef.current) return;
+    const vw = canvasRef.current.clientWidth;
+    const vh = canvasRef.current.clientHeight;
+    if (vw > 0 && vh > 0 && map.width > 0 && map.height > 0) {
+      const fitScale = Math.min(vw / map.width, vh / map.height) * 0.95;
+      onMapViewChange({
+        scale: Math.max(0.25, Math.min(3, fitScale)),
+        offset: { x: 0, y: 0 },
+      });
+    }
+  }, [map, onMapViewChange]);
+
+  useEffect(() => {
+    if (!map) return;
+    const t = setTimeout(() => fitScaleToViewport(), 50);
+    return () => clearTimeout(t);
+  }, [map?.id, fitScaleToViewport]);
 
   const updateView = useCallback(
     (updates: Partial<MapView>) => {
@@ -236,7 +272,7 @@ export function MapCanvas({
 
   if (!map) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-slate-900 text-slate-500 text-center px-4">
+      <div className="flex-1 flex items-center justify-center bg-fantasy-bg text-fantasy-muted-soft text-center px-4">
         {onTokenCreate
           ? 'Ajoutez une carte avec le bouton "+ Carte" pour commencer.'
           : 'Aucune carte pour le moment. Le MJ en ajoutera une.'}
@@ -247,7 +283,7 @@ export function MapCanvas({
   return (
     <div
       ref={canvasRef}
-      className="flex-1 overflow-hidden relative bg-slate-900 select-none"
+      className="flex-1 overflow-hidden relative bg-fantasy-bg select-none"
       onWheel={handleWheel}
       style={{
         cursor: dragRef.current
@@ -260,11 +296,11 @@ export function MapCanvas({
       }}
     >
       {isGM && (
-        <div className="absolute bottom-4 right-4 z-10 flex flex-col gap-1 rounded-lg bg-slate-800/90 p-1">
+        <div className="absolute bottom-4 right-4 z-10 flex flex-col gap-1 rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-1">
           <button
             type="button"
             onClick={() => updateView({ scale: Math.min(3, scale * 1.2) })}
-            className="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-sm font-bold"
+            className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm font-bold text-fantasy-text-soft"
             title="Zoom avant"
           >
             +
@@ -272,16 +308,24 @@ export function MapCanvas({
           <button
             type="button"
             onClick={() => updateView({ scale: Math.max(0.25, scale / 1.2) })}
-            className="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-sm font-bold"
+            className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm font-bold text-fantasy-text-soft"
             title="Zoom arrière"
           >
             −
           </button>
           <button
             type="button"
+            onClick={() => fitScaleToViewport()}
+            className="px-2 py-0.5 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-xs text-fantasy-text-soft"
+            title="Ajuster à la fenêtre"
+          >
+            ⊡
+          </button>
+          <button
+            type="button"
             onClick={() => updateView({ scale: 1, offset: { x: 0, y: 0 } })}
-            className="px-2 py-0.5 rounded bg-slate-600 hover:bg-slate-500 text-xs"
-            title="Réinitialiser"
+            className="px-2 py-0.5 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-xs text-fantasy-text-soft"
+            title="Zoom 1:1"
           >
             1:1
           </button>
@@ -306,9 +350,29 @@ export function MapCanvas({
           <img
             src={map.imageUrl}
             alt={map.name}
-            className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
+            className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             draggable={false}
           />
+          {mapElements.map((el) => (
+            <div
+              key={el.id}
+              className="absolute pointer-events-none"
+              style={{
+                left: el.x,
+                top: el.y,
+                width: el.width,
+                height: el.height,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              <img
+                src={el.imageUrl}
+                alt=""
+                className="w-full h-full object-contain select-none"
+                draggable={false}
+              />
+            </div>
+          ))}
           {visibleTokens.map((t) => (
             <div
               key={t.id}
@@ -341,17 +405,34 @@ export function MapCanvas({
                   )}
                 </div>
               )}
-              <div
-                className="w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center overflow-hidden px-1.5 text-[10px] font-bold text-white"
-                style={{
-                  backgroundColor: t.color,
-                  borderColor: canMove(t) ? '#f59e0b' : 'transparent',
-                }}
-              >
-                <span className="truncate w-full text-center leading-tight">
-                  {t.name.length > 20 ? `${t.name.slice(0, 20)}…` : t.name}
-                </span>
-              </div>
+              {t.iconUrl ? (
+                <div
+                  className="rounded-full overflow-hidden flex-shrink-0"
+                  style={{
+                    width: t.width ?? 56,
+                    height: t.height ?? 56,
+                    border: `2px solid ${canMove(t) ? '#f59e0b' : 'transparent'}`,
+                  }}
+                >
+                  <img
+                    src={t.iconUrl}
+                    alt={t.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center overflow-hidden px-1.5 text-[10px] font-bold text-white"
+                  style={{
+                    backgroundColor: t.color,
+                    borderColor: canMove(t) ? '#f59e0b' : 'transparent',
+                  }}
+                >
+                  <span className="truncate w-full text-center leading-tight">
+                    {t.name.length > 20 ? `${t.name.slice(0, 20)}…` : t.name}
+                  </span>
+                </div>
+              )}
             </div>
           ))}
         </div>

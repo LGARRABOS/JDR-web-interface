@@ -11,6 +11,8 @@ require (
 )
 
 require (
+	github.com/disintegration/gift v1.1.2 // indirect
+	github.com/disintegration/imageorient v0.0.0-20180920195336-8147d86e83ec // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	golang.org/x/net v0.21.0 // indirect
 )

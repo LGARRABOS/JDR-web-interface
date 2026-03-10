@@ -76,6 +76,8 @@ func NewServer(db *sql.DB, staticDir string) (http.Handler, error) {
 	s.registerMusicRoutes()
 	s.registerMapRoutes()
 	s.registerTokenRoutes()
+	s.registerElementRoutes()
+	s.registerMapElementRoutes()
 	s.registerMessageRoutes()
 	s.registerRollRoutes()
 	s.mux.Handle("/api/ws", s.wsHandler())
