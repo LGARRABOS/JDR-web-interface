@@ -40,6 +40,8 @@ cd "${INSTALL_DIR}" || exit 1
 echo "==> Build de l'application..."
 npm ci
 (cd frontend && npm ci) || exit 1
+# Limiter l'usage mémoire de Node pendant le build (évite OOM sur CT avec 1 Go RAM)
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=768}"
 npm run build
 
 echo "==> Création des dossiers data et uploads..."

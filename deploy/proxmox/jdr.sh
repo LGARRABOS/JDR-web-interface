@@ -7,11 +7,9 @@
 set -e
 
 INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/LGARRABOS/JDR-web-interface/main/deploy/proxmox/jdr-install.sh"
-DEFAULT_CTID="100"
 DEFAULT_HOSTNAME="jdr"
-DEFAULT_MEMORY="512"
-DEFAULT_DISK="2"
-DEFAULT_STORAGE="local"
+DEFAULT_MEMORY="1024"
+DEFAULT_DISK="8"
 DEFAULT_BRIDGE="vmbr0"
 
 echo "=========================================="
@@ -29,6 +27,27 @@ fi
 echo "Proxmox VE détecté: $(pveversion)"
 echo ""
 
+# Détection du prochain CTID disponible (100-999 pour LXC)
+DEFAULT_CTID="100"
+for id in $(seq 100 999); do
+    if ! pct status "${id}" &>/dev/null; then
+        DEFAULT_CTID="${id}"
+        break
+    fi
+done
+
+# Stockage rootfs : local-lvm par défaut (local ne supporte pas les disques de conteneurs)
+DEFAULT_ROOTFS="local-lvm"
+if ! pvesm status "${DEFAULT_ROOTFS}" &>/dev/null; then
+    DEFAULT_ROOTFS="local"
+fi
+
+# Stockage templates : local (où sont stockés les vztmpl)
+DEFAULT_TEMPLATE="local"
+if ! pvesm status "${DEFAULT_TEMPLATE}" &>/dev/null; then
+    DEFAULT_TEMPLATE="local-lvm"
+fi
+
 # Paramètres (valeurs par défaut ou saisie)
 read -r -p "ID du conteneur [${DEFAULT_CTID}]: " CTID
 CTID=${CTID:-$DEFAULT_CTID}
@@ -42,8 +61,11 @@ MEMORY=${MEMORY:-$DEFAULT_MEMORY}
 read -r -p "Disque (Go) [${DEFAULT_DISK}]: " DISK
 DISK=${DISK:-$DEFAULT_DISK}
 
-read -r -p "Stockage [${DEFAULT_STORAGE}]: " STORAGE
-STORAGE=${STORAGE:-$DEFAULT_STORAGE}
+read -r -p "Stockage rootfs (disque du CT) [${DEFAULT_ROOTFS}]: " ROOTFS_STORAGE
+ROOTFS_STORAGE=${ROOTFS_STORAGE:-$DEFAULT_ROOTFS}
+
+read -r -p "Stockage templates [${DEFAULT_TEMPLATE}]: " TEMPLATE_STORAGE
+TEMPLATE_STORAGE=${TEMPLATE_STORAGE:-$DEFAULT_TEMPLATE}
 
 read -r -p "Bridge réseau [${DEFAULT_BRIDGE}]: " BRIDGE
 BRIDGE=${BRIDGE:-$DEFAULT_BRIDGE}
@@ -60,7 +82,7 @@ fi
 
 # Télécharger le template Debian 12 si nécessaire
 echo "==> Vérification du template Debian 12..."
-TEMPLATE_PATH=$(pveam list "${STORAGE}" 2>/dev/null | grep debian-12-standard | head -1 | awk '{print $1}')
+TEMPLATE_PATH=$(pveam list "${TEMPLATE_STORAGE}" 2>/dev/null | grep debian-12-standard | head -1 | awk '{print $1}')
 if [ -z "${TEMPLATE_PATH}" ]; then
     echo "    Téléchargement du template..."
     pveam update
@@ -69,8 +91,8 @@ if [ -z "${TEMPLATE_PATH}" ]; then
         echo "Erreur: Impossible de trouver le template Debian 12."
         exit 1
     fi
-    pveam download "${STORAGE}" "${TEMPLATE}"
-    TEMPLATE_PATH="${STORAGE}:vztmpl/${TEMPLATE}"
+    pveam download "${TEMPLATE_STORAGE}" "${TEMPLATE}"
+    TEMPLATE_PATH="${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}"
 fi
 
 # Création du CT
@@ -87,7 +109,7 @@ pct create "${CTID}" "${TEMPLATE_PATH}" \
     --hostname "${HOSTNAME}" \
     --memory "${MEMORY}" \
     --cores 1 \
-    --rootfs "${STORAGE}:${DISK}" \
+    --rootfs "${ROOTFS_STORAGE}:${DISK}" \
     --net0 "${NET_CFG}" \
     --features nesting=1 \
     --unprivileged 1

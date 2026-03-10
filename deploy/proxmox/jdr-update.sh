@@ -29,6 +29,7 @@ git pull origin main
 echo "==> Rebuild de l'application..."
 npm ci
 (cd frontend && npm ci) || exit 1
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=768}"
 npm run build
 
 echo "==> Redémarrage du service..."
