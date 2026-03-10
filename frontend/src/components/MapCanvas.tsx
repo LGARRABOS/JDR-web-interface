@@ -257,21 +257,29 @@ export function MapCanvas({
     };
   }, [handleMapMouseMove]);
 
+  const placementClickRef = useRef(false);
   const handleCanvasClick = (e: React.MouseEvent) => {
     if (!isGM || !onTokenCreate || !map) return;
-    // Ne pas créer si on a cliqué sur un token ou si on vient de déplacer la carte
     if ((e.target as HTMLElement).closest('[data-token]')) return;
     if (didPanRef.current) {
       didPanRef.current = false;
       return;
     }
+    if (placementClickRef.current) return;
+    placementClickRef.current = true;
     const mapRect = mapContainerRef.current?.getBoundingClientRect();
-    if (!mapRect) return;
+    if (!mapRect) {
+      placementClickRef.current = false;
+      return;
+    }
     const x = ((e.clientX - mapRect.left) * map.width) / mapRect.width;
     const y = ((e.clientY - mapRect.top) * map.height) / mapRect.height;
     if (x >= 0 && y >= 0 && x <= map.width && y <= map.height) {
       onTokenCreate(x, y);
     }
+    setTimeout(() => {
+      placementClickRef.current = false;
+    }, 300);
   };
 
   if (!map) {
@@ -381,22 +389,28 @@ export function MapCanvas({
             <div
               key={t.id}
               data-token
-              className="absolute cursor-pointer flex flex-col items-center select-none"
+              className="absolute cursor-grab flex flex-col items-center select-none"
               style={{
                 left: t.x,
                 top: t.y,
                 transform: 'translate(-50%, -50%)',
+                minWidth: t.width ?? 56,
+                minHeight: t.height ?? 56,
               }}
-              onMouseDown={(e) => handleTokenMouseDown(e, t)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleTokenMouseDown(e, t);
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 if (onTokenSelect && !didDragRef.current) onTokenSelect(t);
               }}
               title={t.name}
             >
-              {/* Infos PV/Mana au-dessus du jeton */}
+              {/* Infos PV/Mana au-dessus du jeton - pointer-events-none pour que le jeton reçoive les clics */}
               {(t.maxHp != null || t.maxMana != null) && (
-                <div className="flex gap-1.5 mb-0.5 text-[9px] font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] whitespace-nowrap">
+                <div className="flex gap-1.5 mb-0.5 text-[9px] font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] whitespace-nowrap pointer-events-none">
                   {t.maxHp != null && (
                     <span>
                       PV {t.hp ?? t.maxHp}/{t.maxHp}
@@ -411,7 +425,7 @@ export function MapCanvas({
               )}
               {t.iconUrl ? (
                 <div
-                  className="rounded-full overflow-hidden flex-shrink-0"
+                  className="rounded-full overflow-hidden flex-shrink-0 pointer-events-none"
                   style={{
                     width: t.width ?? 56,
                     height: t.height ?? 56,
@@ -422,11 +436,12 @@ export function MapCanvas({
                     src={t.iconUrl}
                     alt={t.name}
                     className="w-full h-full object-cover"
+                    draggable={false}
                   />
                 </div>
               ) : (
                 <div
-                  className="w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center overflow-hidden px-1.5 text-[10px] font-bold text-white"
+                  className="w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center overflow-hidden px-1.5 text-[10px] font-bold text-white pointer-events-none"
                   style={{
                     backgroundColor: t.color,
                     borderColor: canMove(t) ? '#f59e0b' : 'transparent',

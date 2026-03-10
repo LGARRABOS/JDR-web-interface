@@ -48,10 +48,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.db.Exec(
-		"INSERT INTO users (email, password_hash, display_name) VALUES (?, ?, ?)",
+	var id int64
+	err = s.db.QueryRow(
+		"INSERT INTO users (email, password_hash, display_name) VALUES (?, ?, ?) RETURNING id",
 		req.Email, string(hash), req.DisplayName,
-	)
+	).Scan(&id)
 	if err != nil {
 		if isUniqueViolation(err) {
 			writeJSON(w, http.StatusConflict, map[string]string{"message": "Utilisateur déjà existant"})
@@ -60,7 +61,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	id, _ := res.LastInsertId()
 
 	user := domain.User{ID: id, Email: req.Email, DisplayName: req.DisplayName}
 	s.setSessionUser(r, w, &user)

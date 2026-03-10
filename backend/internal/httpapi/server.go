@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"os"
 	"path"
@@ -13,11 +12,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/gorilla/sessions"
 	"jdr-backend/internal/realtime"
+	"jdr-backend/internal/storage"
 )
 
 // Server encapsule le routeur HTTP et les dépendances.
 type Server struct {
-	db    *sql.DB
+	db    storage.DB
 	mux   chi.Router
 	store *sessions.CookieStore
 	hub   *realtime.Hub
@@ -25,7 +25,7 @@ type Server struct {
 
 // NewServer construit le routeur HTTP principal de l'API.
 // Si staticDir est non vide et existe, sert les fichiers statiques (frontend SPA) sur /.
-func NewServer(db *sql.DB, staticDir string) (http.Handler, error) {
+func NewServer(db storage.DB, staticDir string) (http.Handler, error) {
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i)

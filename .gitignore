@@ -8,10 +8,7 @@ frontend/dist/
 *.so
 *.dylib
 
-# Base de données SQLite (données sensibles : users, parties, etc.)
-*.db
-*.sqlite
-*.sqlite3
+# Données sensibles (users, parties, uploads, etc.)
 backend/data/
 backend/uploads/
 
@@ -19,6 +16,7 @@ backend/uploads/
 .env
 .env.local
 .env.*.local
+.dbpass
 
 # IDE
 .idea/

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"wait-on http://localhost:4000/healthz -t 60000 && npm run dev:frontend\"",
+    "dev": "cross-env DATABASE_URL=postgres://jdr:jdr@localhost:5432/jdr?sslmode=disable concurrently \"npm run dev:backend\" \"wait-on http://localhost:4000/healthz -t 60000 && npm run dev:frontend\"",
     "dev:backend": "cd backend && go run ./cmd/server",
     "dev:frontend": "cd frontend && npm run dev",
     "setup": "cd frontend && npm install",
@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.0.0",
+    "cross-env": "^7.0.3",
     "wait-on": "^7.2.0"
   }
 }

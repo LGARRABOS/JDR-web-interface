@@ -32,6 +32,19 @@ if ! command -v node &>/dev/null || ! node -v | grep -qE 'v(2[0-9]|[3-9][0-9])';
     apt-get install -y nodejs
 fi
 
+echo "==> Installation de PostgreSQL..."
+apt-get install -y postgresql postgresql-contrib
+systemctl enable postgresql
+systemctl start postgresql
+
+# Créer l'utilisateur et la base pour l'app
+JDR_DB_USER="jdr"
+JDR_DB_NAME="jdr"
+JDR_DB_PASS="${JDR_DB_PASS:-$(openssl rand -hex 16)}"
+sudo -u postgres psql -c "CREATE USER ${JDR_DB_USER} WITH PASSWORD '${JDR_DB_PASS}';" 2>/dev/null || true
+sudo -u postgres psql -c "CREATE DATABASE ${JDR_DB_NAME} OWNER ${JDR_DB_USER};" 2>/dev/null || true
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${JDR_DB_NAME} TO ${JDR_DB_USER};" 2>/dev/null || true
+
 echo "==> Clonage du dépôt..."
 rm -rf "${INSTALL_DIR}"
 git clone "${REPO_URL}" "${INSTALL_DIR}"
@@ -47,11 +60,18 @@ npm run build
 echo "==> Création des dossiers data et uploads..."
 mkdir -p "${INSTALL_DIR}/backend/data" "${INSTALL_DIR}/backend/uploads"
 
+# Sauvegarder le mot de passe DB pour référence (ne pas committer)
+echo "${JDR_DB_PASS}" > "${INSTALL_DIR}/.dbpass"
+chmod 600 "${INSTALL_DIR}/.dbpass"
+
+# URL PostgreSQL pour l'app
+DATABASE_URL="postgres://${JDR_DB_USER}:${JDR_DB_PASS}@localhost:5432/${JDR_DB_NAME}?sslmode=disable"
+
 echo "==> Création du service systemd..."
-cat > /etc/systemd/system/jdr.service << 'SVC'
+cat > /etc/systemd/system/jdr.service << SVC
 [Unit]
 Description=Table JDR - Backend Go
-After=network.target
+After=network.target postgresql.service
 
 [Service]
 Type=simple
@@ -59,6 +79,7 @@ User=root
 WorkingDir=/opt/jdr/backend
 ExecStart=/opt/jdr/backend/server
 Environment=STATIC_DIR=/opt/jdr/frontend/dist
+Environment=DATABASE_URL=${DATABASE_URL}
 Restart=on-failure
 RestartSec=5
 

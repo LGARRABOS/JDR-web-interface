@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { ModalConfirm } from './Modal';
 
 export interface TokenFormData {
@@ -71,14 +72,20 @@ export function TokenPanel({
   onTokenDelete,
   tokens,
 }: TokenPanelProps) {
-  const [name, setName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedElement, setSelectedElement] = useState<GameElement | null>(null);
   const [hp, setHp] = useState<number>(10);
   const [maxHp, setMaxHp] = useState<number>(10);
   const [mana, setMana] = useState<number>(0);
   const [maxMana, setMaxMana] = useState<number>(0);
-  const [iconUrl, setIconUrl] = useState<string>('');
   const [width, setWidth] = useState<number>(56);
   const [height, setHeight] = useState<number>(56);
+
+  const monsters = elements.filter((el) => el.category === 'monster');
+  const searchLower = searchQuery.trim().toLowerCase();
+  const filteredMonsters = searchLower
+    ? monsters.filter((el) => el.name.toLowerCase().includes(searchLower))
+    : monsters;
   const [editHp, setEditHp] = useState<number>(10);
   const [editMaxHp, setEditMaxHp] = useState<number>(10);
   const [editMana, setEditMana] = useState<number>(0);
@@ -124,22 +131,32 @@ export function TokenPanel({
     }
   }, [selectedToken]);
 
+  const handleSelectElement = (el: GameElement) => {
+    setSelectedElement(el);
+    setHp(10);
+    setMaxHp(10);
+    setMana(0);
+    setMaxMana(0);
+    setWidth(56);
+    setHeight(56);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const n = name.trim() || 'Ennemi';
+    if (!selectedElement) return;
     const h = Math.max(0, hp);
     const m = Math.max(0, maxHp);
     const ma = Math.max(0, mana);
     const maxMa = Math.max(0, maxMana);
     onStartPlacement({
-      name: n,
+      name: selectedElement.name,
       hp: h,
       maxHp: m,
       mana: ma,
       maxMana: maxMa,
-      iconUrl: iconUrl || undefined,
-      width: iconUrl ? width : undefined,
-      height: iconUrl ? height : undefined,
+      iconUrl: selectedElement.imageUrl,
+      width: width,
+      height: height,
     });
   };
 
@@ -191,48 +208,35 @@ export function TokenPanel({
           <h3 className="text-sm font-medium mb-3 text-fantasy-text-soft">
             Ajouter un ennemi
           </h3>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <div>
-              <label className="block text-xs text-fantasy-muted-soft mb-1">
-                Nom
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Gobelin, Orc..."
-                className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft"
-              />
-            </div>
-            {elements.length > 0 && (
-              <div>
-                <label className="block text-xs text-fantasy-muted-soft mb-1">
-                  Image (optionnel)
-                </label>
-                <select
-                  value={iconUrl}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setIconUrl(val);
-                    if (val) {
-                      const el = elements.find((x) => x.imageUrl === val);
-                      if (el) setName(el.name);
-                    }
-                  }}
-                  className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft"
-                >
-                  <option value="">Aucune (cercle coloré)</option>
-                  {elements
-                    .filter((el) => el.category === 'monster')
-                    .map((el) => (
-                      <option key={el.id} value={el.imageUrl}>
-                        {el.name}
-                      </option>
-                    ))}
-                </select>
+          {monsters.length === 0 ? (
+            <p className="text-sm text-fantasy-muted-soft">
+              Aucun ennemi dans les ressources. Ajoutez-en depuis la page{' '}
+              <Link to="resources" className="text-fantasy-accent hover:underline">
+                Ressources
+              </Link>
+              .
+            </p>
+          ) : selectedElement ? (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 p-2 rounded bg-fantasy-input-soft/50 border border-fantasy-border-soft">
+                <img
+                  src={selectedElement.imageUrl}
+                  alt=""
+                  className="w-10 h-10 rounded object-cover flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-fantasy-text-soft truncate block">
+                    {selectedElement.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedElement(null)}
+                    className="text-xs text-fantasy-muted-soft hover:text-fantasy-accent"
+                  >
+                    Changer
+                  </button>
+                </div>
               </div>
-            )}
-            {iconUrl && (
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className="block text-xs text-fantasy-muted-soft mb-1">
@@ -267,82 +271,116 @@ export function TokenPanel({
                   />
                 </div>
               </div>
-            )}
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="block text-xs text-fantasy-muted-soft mb-1">
-                  PV actuels
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={hp}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10) || 0;
-                    setHp(v);
-                    if (v > maxHp) setMaxHp(v);
-                  }}
-                  className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft"
-                />
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs text-fantasy-muted-soft mb-1">
+                    PV actuels
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={hp}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10) || 0;
+                      setHp(v);
+                      if (v > maxHp) setMaxHp(v);
+                    }}
+                    className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-fantasy-muted-soft mb-1">
+                    PV max
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={maxHp}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10) || 0;
+                      setMaxHp(v);
+                      if (hp > v) setHp(v);
+                    }}
+                    className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft"
+                  />
+                </div>
               </div>
-              <div className="flex-1">
-                <label className="block text-xs text-fantasy-muted-soft mb-1">
-                  PV max
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={maxHp}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10) || 0;
-                    setMaxHp(v);
-                    if (hp > v) setHp(v);
-                  }}
-                  className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft"
-                />
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs text-fantasy-muted-soft mb-1">
+                    Mana actuel
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={mana}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10) || 0;
+                      setMana(v);
+                      if (v > maxMana) setMaxMana(v);
+                    }}
+                    className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-fantasy-muted-soft mb-1">
+                    Mana max
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={maxMana}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10) || 0;
+                      setMaxMana(v);
+                      if (mana > v) setMana(v);
+                    }}
+                    className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="px-3 py-2 rounded bg-fantasy-accent hover:bg-fantasy-accent-hover text-sm font-medium"
+              >
+                Placer sur la carte
+              </button>
+            </form>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Rechercher par nom (ex: Gobelin, Orc...)"
+                className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft"
+              />
+              <div className="max-h-32 overflow-y-auto flex flex-col gap-1">
+                {filteredMonsters.map((el) => (
+                  <button
+                    key={el.id}
+                    type="button"
+                    onClick={() => handleSelectElement(el)}
+                    className="flex items-center gap-2 p-2 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-left w-full"
+                  >
+                    <img
+                      src={el.imageUrl}
+                      alt=""
+                      className="w-8 h-8 rounded object-cover flex-shrink-0"
+                    />
+                    <span className="text-sm text-fantasy-text-soft truncate">
+                      {el.name}
+                    </span>
+                  </button>
+                ))}
+                {filteredMonsters.length === 0 && searchQuery.trim() && (
+                  <p className="text-sm text-fantasy-muted-soft py-2">
+                    Aucun ennemi trouvé pour « {searchQuery} »
+                  </p>
+                )}
               </div>
             </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="block text-xs text-fantasy-muted-soft mb-1">
-                  Mana actuel
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={mana}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10) || 0;
-                    setMana(v);
-                    if (v > maxMana) setMaxMana(v);
-                  }}
-                  className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs text-fantasy-muted-soft mb-1">
-                  Mana max
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={maxMana}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10) || 0;
-                    setMaxMana(v);
-                    if (mana > v) setMana(v);
-                  }}
-                  className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft"
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              className="px-3 py-2 rounded bg-fantasy-accent hover:bg-fantasy-accent-hover text-sm font-medium"
-            >
-              Placer sur la carte
-            </button>
-          </form>
+          )}
         </>
       )}
 

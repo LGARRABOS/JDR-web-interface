@@ -6,22 +6,27 @@ import (
 	"os"
 
 	"jdr-backend/internal/httpapi"
-	"jdr-backend/internal/storage/sqlite"
+	"jdr-backend/internal/storage"
 )
 
 func main() {
-	db, err := sqlite.Open("data/game.db")
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatalf("DATABASE_URL requis. Ex: postgres://jdr:jdr@localhost:5432/jdr?sslmode=disable")
+	}
+
+	appDB, rawDB, err := storage.Open(dbURL)
 	if err != nil {
 		log.Fatalf("unable to open database: %v", err)
 	}
-	defer db.Close()
+	defer rawDB.Close()
 
-	if err := sqlite.AutoMigrate(db); err != nil {
+	if err := storage.AutoMigrate(rawDB, dbURL); err != nil {
 		log.Fatalf("unable to migrate database: %v", err)
 	}
 
 	staticDir := os.Getenv("STATIC_DIR")
-	handler, err := httpapi.NewServer(db, staticDir)
+	handler, err := httpapi.NewServer(appDB, staticDir)
 	if err != nil {
 		log.Fatalf("unable to create HTTP server: %v", err)
 	}

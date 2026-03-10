@@ -4,16 +4,19 @@ Interface web de jeu de rôle avec espace Maître du Jeu et joueurs : cartes int
 
 ## Stack
 
-- **Backend** : Go, Chi, SQLite, WebSocket (Gorilla)
+- **Backend** : Go, Chi, PostgreSQL, WebSocket (Gorilla)
 - **Frontend** : React, Vite, TypeScript, Tailwind
 
 ## Démarrage
 
 ```bash
+# Prérequis : PostgreSQL avec base jdr (et jdr_test pour les tests)
+# createdb jdr && createdb jdr_test
+
 # Installation (frontend)
 npm run setup
 
-# Lancer backend et frontend
+# Lancer backend et frontend (utilise postgres://jdr:jdr@localhost:5432/jdr par défaut)
 npm run dev
 ```
 

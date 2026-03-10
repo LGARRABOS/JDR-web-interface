@@ -107,15 +107,15 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 	if req.IsGemma {
 		isGemma = 1
 	}
-	res, err := s.db.Exec(
-		"INSERT INTO games (name, invite_code, owner_id, is_gemma) VALUES (?, ?, ?, ?)",
+	var id int64
+	err := s.db.QueryRow(
+		"INSERT INTO games (name, invite_code, owner_id, is_gemma) VALUES (?, ?, ?, ?) RETURNING id",
 		req.Name, code, u.ID, isGemma,
-	)
+	).Scan(&id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	id, _ := res.LastInsertId()
 
 	_, _ = s.db.Exec("INSERT INTO game_players (game_id, user_id, role) VALUES (?, ?, 'MJ')", id, u.ID)
 

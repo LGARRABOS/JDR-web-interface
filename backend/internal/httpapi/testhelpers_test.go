@@ -8,19 +8,12 @@ import (
 	"strconv"
 	"testing"
 
-	"jdr-backend/internal/storage/sqlite"
+	"jdr-backend/internal/storage"
 )
 
 func setupTestServer(t *testing.T) http.Handler {
 	t.Helper()
-	db, err := sqlite.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if err := sqlite.AutoMigrate(db); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := storage.OpenTestDB(t)
 	handler, err := NewServer(db, "")
 	if err != nil {
 		t.Fatalf("new server: %v", err)

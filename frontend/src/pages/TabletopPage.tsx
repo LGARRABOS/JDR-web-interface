@@ -27,7 +27,7 @@ import { MusicPlayer } from '../components/MusicPlayer';
 import { useGameSocket } from '../hooks/useGameSocket';
 
 const GM_TIPS = [
-  'Utilisez le panneau "Ajouter un ennemi" pour créer des tokens (nom + PV), puis placez-les sur la carte.',
+  'Utilisez le panneau "Ajouter un ennemi" : recherchez un ennemi dans vos ressources, définissez ses PV/mana, puis placez-le sur la carte.',
   'Cliquez sur un jeton sur la carte ou dans la liste pour le sélectionner et modifier ses PV.',
   'Utilisez la molette ou les boutons +/− pour zoomer sur la carte. Glissez pour la déplacer.',
   'Gérez les cartes et la musique depuis la page Ressources.',
@@ -461,10 +461,11 @@ export function TabletopPage() {
   const handleTokenCreate = useCallback(
     async (x: number, y: number) => {
       if (!currentMap || !placementData) return;
-      const { name, hp, maxHp, mana, maxMana, iconUrl, width, height } =
-        placementData;
+      const data = placementData;
+      setPlacementData(null);
+      const { name, hp, maxHp, mana, maxMana, iconUrl, width, height } = data;
       try {
-        const { data } = await TokensAPI.create(currentMap.id, {
+        const { data: res } = await TokensAPI.create(currentMap.id, {
           x,
           y,
           kind: 'PNJ',
@@ -478,11 +479,12 @@ export function TabletopPage() {
           height,
           visibleToPlayers: true,
         });
-        setTokens((prev) => [...prev, data.token]);
-        setPlacementData(null);
+        setTokens((prev) =>
+          prev.some((t) => t.id === res.token.id) ? prev : [...prev, res.token]
+        );
       } catch {
         loadTokens();
-        setPlacementData(null);
+        setPlacementData(data);
       }
     },
     [currentMap, loadTokens, placementData]

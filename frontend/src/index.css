@@ -30,6 +30,36 @@ body {
   min-height: 100vh;
 }
 
+/* Scrollbar personnalisée (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-fantasy-input-soft);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-fantasy-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fantasy-muted-soft);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--color-fantasy-accent);
+}
+
+/* Scrollbar personnalisée (Firefox) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-fantasy-border) var(--color-fantasy-input-soft);
+}
+
 /* Masquer les flèches par défaut des inputs number */
 input[type='number']::-webkit-outer-spin-button,
 input[type='number']::-webkit-inner-spin-button {
