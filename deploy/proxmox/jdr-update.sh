@@ -5,6 +5,9 @@
 set -e
 
 INSTALL_DIR="/opt/jdr"
+# Go et Node peuvent être hors PATH en session non-interactive (pct exec)
+[ -f /etc/profile.d/go.sh ] && . /etc/profile.d/go.sh
+export PATH="/usr/local/go/bin:${PATH}"
 
 if [ ! -d "${INSTALL_DIR}" ]; then
     echo "Erreur: ${INSTALL_DIR} introuvable. L'application n'est pas installée."
