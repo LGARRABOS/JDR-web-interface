@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 export interface Token {
   id: number;
@@ -50,30 +51,45 @@ interface MapCanvasProps {
   map: MapData | null;
   tokens: Token[];
   mapElements?: MapElement[];
+  gameId?: number;
   isGM: boolean;
   currentUserId: number;
   mapView: MapView;
+  tokensMovementLocked?: boolean;
+  highlightedPlayerId?: number | null;
+  connectedUserIds?: number[];
+  /** Pour les jetons joueurs : userId -> { displayName, characterName } pour afficher le nom du personnage */
+  connectedUsers?: Array<{ userId: number; displayName: string; characterName?: string }>;
   onMapViewChange?: (view: MapView) => void;
+  onMapPanEnd?: () => void;
   onTokenMove?: (id: number, x: number, y: number) => void;
   onTokenDragStart?: (id: number) => void;
   onTokenDragEnd?: (id: number, x: number, y: number) => void;
   onTokenCreate?: (x: number, y: number) => void;
   onTokenSelect?: (token: Token | null) => void;
+  diceRollOverlay?: React.ReactNode;
 }
 
 export function MapCanvas({
   map,
   tokens,
   mapElements = [],
+  gameId = 0,
   isGM,
   currentUserId,
   mapView,
+  tokensMovementLocked = false,
+  highlightedPlayerId = null,
+  connectedUserIds = [],
+  connectedUsers = [],
   onMapViewChange,
+  onMapPanEnd,
   onTokenMove,
   onTokenDragStart,
   onTokenDragEnd,
   onTokenCreate,
   onTokenSelect,
+  diceRollOverlay,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -98,9 +114,10 @@ export function MapCanvas({
   const canMove = useCallback(
     (t: Token) => {
       if (isGM) return true;
+      if (tokensMovementLocked) return false;
       return t.ownerUserId === currentUserId;
     },
-    [isGM, currentUserId]
+    [isGM, currentUserId, tokensMovementLocked]
   );
 
   const visibleTokens = tokens.filter((t) => isGM || t.visibleToPlayers);
@@ -173,9 +190,12 @@ export function MapCanvas({
     [isGM, onMapViewChange, scale]
   );
 
-  const handleMapMouseUp = () => {
+  const handleMapMouseUp = useCallback(() => {
+    if (panRef.current && didPanRef.current && onMapPanEnd) {
+      onMapPanEnd();
+    }
     panRef.current = null;
-  };
+  }, [onMapPanEnd]);
 
   const handleTokenMouseDown = (e: React.MouseEvent, token: Token) => {
     if (!canMove(token) || !onTokenMove) return;
@@ -284,10 +304,25 @@ export function MapCanvas({
 
   if (!map) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-fantasy-bg text-fantasy-muted-soft text-center px-4">
-        {onTokenCreate
-          ? 'Ajoutez une carte avec le bouton "+ Carte" pour commencer.'
-          : 'Aucune carte pour le moment. Le MJ en ajoutera une.'}
+      <div className="flex-1 flex flex-col items-center justify-center bg-fantasy-bg text-fantasy-muted-soft text-center px-4 gap-4 relative">
+        {diceRollOverlay && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+            {diceRollOverlay}
+          </div>
+        )}
+        <p>
+          {onTokenCreate
+            ? "Aucune carte. Ajoutez une carte pour afficher les jetons."
+            : 'Aucune carte pour le moment. Le MJ en ajoutera une.'}
+        </p>
+        {onTokenCreate && gameId > 0 && (
+          <Link
+            to={`/table/${gameId}/resources`}
+            className="px-4 py-2 rounded bg-fantasy-accent hover:bg-fantasy-accent-hover text-fantasy-bg text-sm font-medium transition-colors"
+          >
+            Ajouter une carte →
+          </Link>
+        )}
       </div>
     );
   }
@@ -343,6 +378,11 @@ export function MapCanvas({
           </button>
         </div>
       )}
+      {diceRollOverlay && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+          {diceRollOverlay}
+        </div>
+      )}
       <div
         className="absolute inset-0 flex items-center justify-center"
         style={{
@@ -385,75 +425,96 @@ export function MapCanvas({
               />
             </div>
           ))}
-          {visibleTokens.map((t) => (
-            <div
-              key={t.id}
-              data-token
-              className="absolute cursor-grab flex flex-col items-center select-none"
-              style={{
-                left: t.x,
-                top: t.y,
-                transform: 'translate(-50%, -50%)',
-                minWidth: t.width ?? 56,
-                minHeight: t.height ?? 56,
-              }}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleTokenMouseDown(e, t);
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onTokenSelect && !didDragRef.current) onTokenSelect(t);
-              }}
-              title={t.name}
-            >
-              {/* Infos PV/Mana au-dessus du jeton - pointer-events-none pour que le jeton reçoive les clics */}
-              {(t.maxHp != null || t.maxMana != null) && (
-                <div className="flex gap-1.5 mb-0.5 text-[9px] font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] whitespace-nowrap pointer-events-none">
-                  {t.maxHp != null && (
-                    <span>
-                      PV {t.hp ?? t.maxHp}/{t.maxHp}
+          {visibleTokens.map((t) => {
+            const displayName =
+              t.ownerUserId != null
+                ? connectedUsers.find((u) => u.userId === t.ownerUserId)
+                    ?.characterName ||
+                  connectedUsers.find((u) => u.userId === t.ownerUserId)
+                    ?.displayName ||
+                  t.name
+                : t.name;
+            return (
+              <div
+                key={t.id}
+                data-token
+                className="absolute cursor-grab flex flex-col items-center select-none"
+                style={{
+                  left: t.x,
+                  top: t.y,
+                  transform: 'translate(-50%, -50%)',
+                  minWidth: t.width ?? 56,
+                  minHeight: t.height ?? 56,
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleTokenMouseDown(e, t);
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onTokenSelect && !didDragRef.current) onTokenSelect(t);
+                }}
+                title={displayName}
+              >
+                {(t.hp != null || t.maxHp != null || t.mana != null || t.maxMana != null) && (
+                  <div className="mb-0.5 flex gap-1.5 text-[9px] font-medium text-fantasy-text-soft pointer-events-none">
+                    {(t.hp != null || t.maxHp != null) && (
+                      <span>PV {t.hp ?? '—'}</span>
+                    )}
+                    {(t.mana != null || t.maxMana != null) && (
+                      <span>Mana {t.mana ?? '—'}</span>
+                    )}
+                  </div>
+                )}
+                {t.iconUrl ? (
+                  <div
+                    className="rounded-full overflow-hidden flex-shrink-0 pointer-events-none"
+                    style={{
+                      width: t.width ?? 56,
+                      height: t.height ?? 56,
+                      border: `2px solid ${canMove(t) ? '#f59e0b' : 'transparent'}`,
+                      boxShadow:
+                        highlightedPlayerId != null &&
+                        t.ownerUserId === highlightedPlayerId
+                          ? '0 0 12px 4px rgba(234, 179, 8, 0.8)'
+                          : undefined,
+                    }}
+                  >
+                    <img
+                      src={t.iconUrl}
+                      alt={displayName}
+                      className="w-full h-full object-cover"
+                      draggable={false}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center overflow-hidden px-1.5 text-[10px] font-bold text-white pointer-events-none"
+                    style={{
+                      backgroundColor: t.color,
+                      borderColor: canMove(t) ? '#f59e0b' : 'transparent',
+                      boxShadow:
+                        highlightedPlayerId != null &&
+                        t.ownerUserId === highlightedPlayerId
+                          ? '0 0 12px 4px rgba(234, 179, 8, 0.8)'
+                          : undefined,
+                    }}
+                  >
+                    <span className="truncate w-full text-center leading-tight">
+                      {(displayName.length > 20 ? `${displayName.slice(0, 20)}…` : displayName)}
+                    </span>
+                  </div>
+                )}
+                {t.ownerUserId != null &&
+                  !connectedUserIds.includes(t.ownerUserId) && (
+                    <span className="mt-0.5 text-[8px] font-medium text-fantasy-muted-soft italic pointer-events-none">
+                      hors ligne
                     </span>
                   )}
-                  {t.maxMana != null && (
-                    <span>
-                      Mana {t.mana ?? t.maxMana}/{t.maxMana}
-                    </span>
-                  )}
-                </div>
-              )}
-              {t.iconUrl ? (
-                <div
-                  className="rounded-full overflow-hidden flex-shrink-0 pointer-events-none"
-                  style={{
-                    width: t.width ?? 56,
-                    height: t.height ?? 56,
-                    border: `2px solid ${canMove(t) ? '#f59e0b' : 'transparent'}`,
-                  }}
-                >
-                  <img
-                    src={t.iconUrl}
-                    alt={t.name}
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
-                </div>
-              ) : (
-                <div
-                  className="w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center overflow-hidden px-1.5 text-[10px] font-bold text-white pointer-events-none"
-                  style={{
-                    backgroundColor: t.color,
-                    borderColor: canMove(t) ? '#f59e0b' : 'transparent',
-                  }}
-                >
-                  <span className="truncate w-full text-center leading-tight">
-                    {t.name.length > 20 ? `${t.name.slice(0, 20)}…` : t.name}
-                  </span>
-                </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

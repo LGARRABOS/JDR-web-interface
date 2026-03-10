@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { GamesAPI } from '../api/client';
 import { ModalConfirm } from '../components/Modal';
+import { Checkbox } from '../components/Checkbox';
 
 interface Game {
   id: number;
@@ -110,14 +111,24 @@ export function GameLobbyPage() {
         <h1 className="text-2xl font-bold font-heading text-fantasy-text-soft">
           Table JDR
         </h1>
-        <div className="flex items-center gap-4">
-          <span className="text-fantasy-muted-soft">{user?.displayName}</span>
-          <button
-            onClick={() => logout().then(() => navigate('/login'))}
-            className="px-4 py-2 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm text-fantasy-text-soft"
+        <div className="flex items-center gap-6">
+          <Link
+            to="/games/wiki"
+            className="text-sm text-fantasy-muted-soft hover:text-fantasy-accent transition-colors"
           >
-            Déconnexion
-          </button>
+            Wiki
+          </Link>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-fantasy-muted-soft">
+              {user?.displayName}
+            </span>
+            <button
+              onClick={() => logout().then(() => navigate('/login'))}
+              className="text-sm text-fantasy-muted-soft hover:text-fantasy-error transition-colors"
+            >
+              Déconnexion
+            </button>
+          </div>
         </div>
       </header>
 
@@ -145,15 +156,13 @@ export function GameLobbyPage() {
                 Créer
               </button>
             </div>
-            <label className="flex items-center gap-2 text-sm text-fantasy-muted cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isGemma}
-                onChange={(e) => setIsGemma(e.target.checked)}
-                className="rounded"
-              />
+            <Checkbox
+              checked={isGemma}
+              onChange={setIsGemma}
+              className="text-sm text-fantasy-muted"
+            >
               Partie dans l&apos;univers GEMMA
-            </label>
+            </Checkbox>
           </form>
         </section>
 

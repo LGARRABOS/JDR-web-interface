@@ -24,6 +24,8 @@ import { PresenceBar } from '../components/PresenceBar';
 import { CharacterSheetPanel } from '../components/CharacterSheetPanel';
 import { MusicPanel } from '../components/MusicPanel';
 import { MusicPlayer } from '../components/MusicPlayer';
+import { DiceRollOverlay } from '../components/DiceRollOverlay';
+import { Checkbox } from '../components/Checkbox';
 import { useGameSocket } from '../hooks/useGameSocket';
 
 const GM_TIPS = [
@@ -55,6 +57,8 @@ export function TabletopPage() {
     inviteCode?: string;
     characterName?: string;
     currentMapId?: number;
+    isGemma?: boolean;
+    tokenMovementLocked?: boolean;
   } | null>(null);
   const [maps, setMaps] = useState<MapData[]>([]);
   const [currentMap, setCurrentMap] = useState<MapData | null>(null);
@@ -77,6 +81,17 @@ export function TabletopPage() {
     result: number;
     displayName?: string;
   } | null>(null);
+  const [lastRollHidden, setLastRollHidden] = useState<{
+    expression: string;
+    result: number;
+    displayName?: string;
+  } | null>(null);
+  const [highlightedPlayerId, setHighlightedPlayerId] = useState<
+    number | null
+  >(null);
+  const [selectedPlayerForTurn, setSelectedPlayerForTurn] = useState<
+    number | null
+  >(null);
   const [connectedUsers, setConnectedUsers] = useState<
     Array<{
       userId: number;
@@ -106,8 +121,16 @@ export function TabletopPage() {
   const mapViewSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+  const mapViewLastSendRef = useRef<number>(0);
+  const mapViewPendingRef = useRef<MapView | null>(null);
+  const mapViewRef = useRef<MapView>(mapView);
+  const sendRef = useRef<((a: string, p?: Record<string, unknown>) => void) | null>(null);
 
   const isGM = game?.role === 'MJ';
+
+  useEffect(() => {
+    mapViewRef.current = mapView;
+  }, [mapView]);
 
   useEffect(() => {
     if (!isGM) return;
@@ -235,7 +258,7 @@ export function TabletopPage() {
     };
   }, []);
 
-  const { send } = useGameSocket(gameId, {
+  const { send, connected } = useGameSocket(gameId, {
     'token.created': (p) => {
       const t = p as Token;
       if (t.mapId === currentMap?.id)
@@ -283,6 +306,22 @@ export function TabletopPage() {
         displayName?: string;
       };
       setLastRoll(r);
+    },
+    'dice.rolled.hidden': (p) => {
+      const r = p as {
+        expression: string;
+        result: number;
+        displayName?: string;
+      };
+      setLastRollHidden(r);
+    },
+    'gemma.tokensLocked': (p) => {
+      const { locked } = p as { locked: boolean };
+      setGame((g) => (g ? { ...g, tokenMovementLocked: locked } : null));
+    },
+    'gemma.turnHighlight': (p) => {
+      const { playerId } = p as { playerId?: number | null };
+      setHighlightedPlayerId(playerId ?? null);
     },
     'presence.joined': (p) => {
       const u = p as {
@@ -379,7 +418,29 @@ export function TabletopPage() {
         offset: { x: offsetX ?? 0, y: offsetY ?? 0 },
       });
     },
+    'map.view.request': () => {
+      const s = sendRef.current;
+      const v = mapViewRef.current;
+      if (s && v) {
+        s('map.view', {
+          scale: v.scale,
+          offsetX: v.offset.x,
+          offsetY: v.offset.y,
+        });
+      }
+    },
   });
+
+  useEffect(() => {
+    sendRef.current = send;
+  }, [send]);
+
+  useEffect(() => {
+    if (connected && !isGM && send) {
+      const t = setTimeout(() => send('map.view.request'), 150);
+      return () => clearTimeout(t);
+    }
+  }, [connected, isGM, send]);
 
   const handleTokenUpdate = useCallback(
     async (
@@ -419,21 +480,49 @@ export function TabletopPage() {
     [loadTokens]
   );
 
+  const flushMapView = useCallback(() => {
+    if (!isGM) return;
+    const v = mapViewRef.current;
+    if (!v) return;
+    if (mapViewSendTimeoutRef.current) {
+      clearTimeout(mapViewSendTimeoutRef.current);
+      mapViewSendTimeoutRef.current = null;
+    }
+    mapViewPendingRef.current = null;
+    mapViewLastSendRef.current = Date.now();
+    send('map.view', {
+      scale: v.scale,
+      offsetX: v.offset.x,
+      offsetY: v.offset.y,
+    });
+  }, [isGM, send]);
+
   const handleMapViewChange = useCallback(
     (view: MapView) => {
       setMapView(view);
       if (!isGM) return;
-      if (mapViewSendTimeoutRef.current) {
-        clearTimeout(mapViewSendTimeoutRef.current);
-      }
-      mapViewSendTimeoutRef.current = setTimeout(() => {
+      mapViewPendingRef.current = view;
+      const now = Date.now();
+      const elapsed = now - mapViewLastSendRef.current;
+      const throttleMs = 50;
+      const flush = () => {
+        const pending = mapViewPendingRef.current;
+        mapViewPendingRef.current = null;
         mapViewSendTimeoutRef.current = null;
-        send('map.view', {
-          scale: view.scale,
-          offsetX: view.offset.x,
-          offsetY: view.offset.y,
-        });
-      }, 80);
+        if (pending) {
+          mapViewLastSendRef.current = Date.now();
+          send('map.view', {
+            scale: pending.scale,
+            offsetX: pending.offset.x,
+            offsetY: pending.offset.y,
+          });
+        }
+      };
+      if (elapsed >= throttleMs || mapViewLastSendRef.current === 0) {
+        flush();
+      } else if (!mapViewSendTimeoutRef.current) {
+        mapViewSendTimeoutRef.current = setTimeout(flush, throttleMs - elapsed);
+      }
     },
     [isGM, send]
   );
@@ -502,14 +591,32 @@ export function TabletopPage() {
   );
 
   const handleRoll = useCallback(
-    async (expression: string) => {
+    async (expression: string, hidden?: boolean) => {
       try {
-        await RollsAPI.roll(gameId, { expression });
+        await RollsAPI.roll(gameId, { expression, hidden });
       } catch {
         // ignore
       }
     },
     [gameId]
+  );
+
+  const handleToggleTokensLocked = useCallback(async () => {
+    const next = !game?.tokenMovementLocked;
+    try {
+      await GamesAPI.update(gameId, { tokenMovementLocked: next });
+      setGame((g) => (g ? { ...g, tokenMovementLocked: next } : null));
+    } catch {
+      loadGame();
+    }
+  }, [gameId, game?.tokenMovementLocked, loadGame]);
+
+  const handleTurnHighlight = useCallback(
+    (playerId: number | null) => {
+      setHighlightedPlayerId(playerId);
+      send('gemma.turnHighlight', { playerId });
+    },
+    [send]
   );
 
   const [characterNameInput, setCharacterNameInput] = useState('');
@@ -624,16 +731,73 @@ export function TabletopPage() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
+      {game.isGemma && isGM && (
+        <div className="px-4 py-2 bg-fantasy-surface border-b border-fantasy-border-soft flex flex-wrap items-center gap-4 text-sm">
+          <strong className="text-fantasy-text-soft">GEMMA :</strong>
+          <Checkbox
+            checked={game.tokenMovementLocked ?? false}
+            onChange={() => handleToggleTokensLocked()}
+            aria-label="Bloquer mouvement des jetons"
+          >
+            <span className="text-fantasy-muted-soft">
+              Bloquer mouvement des jetons
+            </span>
+          </Checkbox>
+          <div className="flex items-center gap-2">
+            <span className="text-fantasy-muted-soft">Tour de :</span>
+            <select
+              value={selectedPlayerForTurn ?? ''}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedPlayerForTurn(v ? parseInt(v, 10) : null);
+              }}
+              className="rounded bg-fantasy-input-soft px-2 py-1 text-sm text-fantasy-text-soft"
+            >
+              <option value="">—</option>
+              {gamePlayers.map((p) => (
+                <option key={p.userId} value={p.userId}>
+                  {p.characterName || p.displayName}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() =>
+                handleTurnHighlight(
+                  selectedPlayerForTurn ?? gamePlayers[0]?.userId ?? null
+                )
+              }
+              className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm text-fantasy-text-soft"
+            >
+              Début du tour
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTurnHighlight(null)}
+              className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm text-fantasy-text-soft"
+            >
+              Fin de surbrillance
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 flex flex-col min-w-0">
           <MapCanvas
             map={currentMap}
             tokens={tokens}
+            gameId={gameId}
             mapElements={mapElements}
             isGM={isGM}
             currentUserId={user?.id ?? 0}
             mapView={mapView}
+            tokensMovementLocked={game.tokenMovementLocked}
+            highlightedPlayerId={highlightedPlayerId}
+            connectedUserIds={connectedUsers.map((u) => u.userId)}
+            connectedUsers={connectedUsers}
             onMapViewChange={isGM ? handleMapViewChange : undefined}
+            onMapPanEnd={isGM ? flushMapView : undefined}
             onTokenMove={handleTokenMove}
             onTokenDragStart={handleTokenDragStart}
             onTokenDragEnd={handleTokenDragEnd}
@@ -641,6 +805,15 @@ export function TabletopPage() {
               isGM && placementData ? handleTokenCreate : undefined
             }
             onTokenSelect={setSelectedToken}
+            diceRollOverlay={
+              game.isGemma ? (
+                <DiceRollOverlay
+                  roll={lastRoll}
+                  durationMs={2500}
+                  inline
+                />
+              ) : undefined
+            }
           />
         </div>
         <aside className="w-80 flex flex-col gap-4 p-4 bg-fantasy-surface/50 overflow-y-auto text-fantasy-text-soft">
@@ -688,7 +861,14 @@ export function TabletopPage() {
           ) : (
             <MusicPlayer gameId={gameId} musicState={musicState} />
           )}
-          <DicePanel gameId={gameId} onRoll={handleRoll} lastRoll={lastRoll} />
+          <DicePanel
+            gameId={gameId}
+            onRoll={handleRoll}
+            lastRoll={lastRoll}
+            lastRollHidden={lastRollHidden}
+            isGemma={game.isGemma}
+            isGM={isGM}
+          />
           <ChatPanel messages={messages} onSend={handleSendMessage} />
         </aside>
       </div>

@@ -28,6 +28,7 @@ func (s *Server) registerRollRoutes() {
 
 type rollReq struct {
 	Expression string `json:"expression"`
+	Hidden     bool   `json:"hidden"`
 }
 
 func (s *Server) handleRoll(w http.ResponseWriter, r *http.Request) {
@@ -55,21 +56,30 @@ func (s *Server) handleRoll(w http.ResponseWriter, r *http.Request) {
 		req.Expression = "1d20"
 	}
 
+	if req.Hidden && role != "MJ" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Seul le MJ peut lancer des dés cachés"})
+		return
+	}
+
 	result, details, err := parseAndRoll(req.Expression)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Expression invalide: " + err.Error()})
 		return
 	}
 
-	res, err := s.db.Exec(
-		"INSERT INTO dice_rolls (game_id, user_id, expression, result, details) VALUES (?, ?, ?, ?, ?)",
-		gameID, u.ID, req.Expression, result, details,
-	)
+	hiddenVal := 0
+	if req.Hidden {
+		hiddenVal = 1
+	}
+	var id int64
+	err = s.db.QueryRow(
+		"INSERT INTO dice_rolls (game_id, user_id, expression, result, details, hidden) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+		gameID, u.ID, req.Expression, result, details, hiddenVal,
+	).Scan(&id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	id, _ := res.LastInsertId()
 
 	roll := &domain.DiceRoll{
 		ID: id, GameID: gameID, UserID: u.ID,
@@ -82,7 +92,11 @@ func (s *Server) handleRoll(w http.ResponseWriter, r *http.Request) {
 		"expression": req.Expression, "result": result, "details": details,
 		"displayName": displayName,
 	}
-	s.hub.Broadcast(gameID, "dice.rolled", payload)
+	if req.Hidden {
+		s.hub.BroadcastToRole(gameID, "MJ", "dice.rolled.hidden", payload)
+	} else {
+		s.hub.Broadcast(gameID, "dice.rolled", payload)
+	}
 }
 
 func (s *Server) handleListRolls(w http.ResponseWriter, r *http.Request) {

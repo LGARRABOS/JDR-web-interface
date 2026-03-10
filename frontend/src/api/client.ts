@@ -33,6 +33,8 @@ export const GamesAPI = {
     api.patch(`/games/${id}/me`, data),
   setCurrentMap: (gameId: number, mapId: number) =>
     api.patch(`/games/${gameId}/current-map`, { mapId }),
+  update: (gameId: number, data: { tokenMovementLocked?: boolean }) =>
+    api.patch(`/games/${gameId}`, data),
   delete: (id: number) => api.delete(`/games/${id}`),
 };
 
@@ -174,7 +176,7 @@ export const MessagesAPI = {
 };
 
 export const RollsAPI = {
-  roll: (gameId: number, data: { expression: string }) =>
+  roll: (gameId: number, data: { expression: string; hidden?: boolean }) =>
     api.post(`/games/${gameId}/roll`, data),
   list: (gameId: number) => api.get(`/games/${gameId}/rolls`),
 };

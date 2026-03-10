@@ -24,6 +24,7 @@ func (s *Server) registerGameRoutes() {
 		r.Get("/{id}/players", s.handleListGamePlayers)
 		r.Patch("/{id}/me", s.handleUpdateMe)
 		r.Patch("/{id}/current-map", s.handleSetCurrentMap)
+		r.Patch("/{id}", s.handleUpdateGame)
 		r.Delete("/{id}", s.handleDeleteGame)
 	})
 }
@@ -199,11 +200,12 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 
 	var g domain.Game
 	var isGemma int
+	var tokenMovementLocked int
 	var currentMapID sql.NullInt64
 	err = s.db.QueryRow(
-		"SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), current_map_id FROM games WHERE id = ?",
+		"SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(token_movement_locked, 0), current_map_id FROM games WHERE id = ?",
 		id,
-	).Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &currentMapID)
+	).Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &tokenMovementLocked, &currentMapID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Partie introuvable"})
 		return
@@ -220,12 +222,60 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 		"ownerId":       g.OwnerID,
 		"role":          role,
 		"isGemma":       isGemma == 1,
+		"tokenMovementLocked": tokenMovementLocked == 1,
 		"characterName": cn,
 	}
 	if currentMapID.Valid {
 		resp["currentMapId"] = currentMapID.Int64
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"game": resp})
+}
+
+type updateGameReq struct {
+	TokenMovementLocked *bool `json:"tokenMovementLocked"`
+}
+
+func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
+	u := s.getSessionUser(r)
+	if u == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Non authentifié"})
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	gameID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
+		return
+	}
+
+	var role string
+	err = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role)
+	if err != nil || role != "MJ" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Réservé au MJ"})
+		return
+	}
+
+	var req updateGameReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Requête invalide"})
+		return
+	}
+
+	if req.TokenMovementLocked != nil {
+		locked := 0
+		if *req.TokenMovementLocked {
+			locked = 1
+		}
+		_, err = s.db.Exec("UPDATE games SET token_movement_locked = ? WHERE id = ?", locked, gameID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+			return
+		}
+		s.hub.Broadcast(gameID, "gemma.tokensLocked", map[string]interface{}{"locked": *req.TokenMovementLocked})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"message": "ok"})
 }
 
 type setCurrentMapReq struct {

@@ -5,6 +5,7 @@ import { RegisterPage } from './pages/RegisterPage';
 import { GameLobbyPage } from './pages/GameLobbyPage';
 import { TabletopPage } from './pages/TabletopPage';
 import { ResourcesPage } from './pages/ResourcesPage';
+import { WikiPage } from './pages/WikiPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ForbiddenPage } from './pages/ForbiddenPage';
 import { ServerErrorPage } from './pages/ServerErrorPage';
@@ -81,6 +82,14 @@ export const App = () => {
           element={
             <ProtectedRoute>
               <ResourcesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/games/wiki"
+          element={
+            <ProtectedRoute>
+              <WikiPage />
             </ProtectedRoute>
           }
         />

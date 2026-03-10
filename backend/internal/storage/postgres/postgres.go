@@ -187,10 +187,12 @@ func AutoMigrate(db *sql.DB) error {
 		stmts[2], // game_players
 		stmts[3], // maps
 		`ALTER TABLE games ADD COLUMN current_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL`,
+		`ALTER TABLE games ADD COLUMN token_movement_locked INTEGER NOT NULL DEFAULT 0`,
 		stmts[4], // tokens
 		stmts[5], // fog_patches
 		stmts[6], // game_messages
 		stmts[7], // dice_rolls
+		`ALTER TABLE dice_rolls ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0`,
 		stmts[8], // game_character_sheets
 		stmts[9], // game_music
 		stmts[10], // game_elements

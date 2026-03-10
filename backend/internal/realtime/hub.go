@@ -46,9 +46,10 @@ type Hub struct {
 
 // BroadcastMsg est un message à envoyer à une room.
 type BroadcastMsg struct {
-	GameID  int64       `json:"gameId"`
-	Type    string      `json:"type"`
-	Payload interface{} `json:"payload"`
+	GameID     int64       `json:"gameId"`
+	Type       string      `json:"type"`
+	Payload    interface{} `json:"payload"`
+	RoleFilter string      `json:"-"` // si non vide, envoyer uniquement aux clients avec ce rôle (interne, pas envoyé)
 }
 
 // NewHub crée un nouveau hub. userInfo peut être nil.
@@ -100,6 +101,16 @@ func (h *Hub) Broadcast(gameID int64, typ string, payload interface{}) {
 	}
 }
 
+// BroadcastToRole envoie un message uniquement aux clients ayant le rôle donné dans la partie.
+func (h *Hub) BroadcastToRole(gameID int64, roleFilter string, typ string, payload interface{}) {
+	msg := &BroadcastMsg{GameID: gameID, Type: typ, Payload: payload, RoleFilter: roleFilter}
+	select {
+	case h.broadcast <- msg:
+	default:
+		log.Printf("hub broadcast buffer full, dropping message")
+	}
+}
+
 // Run démarre la boucle principale du hub.
 func (h *Hub) Run() {
 	for {
@@ -127,6 +138,13 @@ func (h *Hub) Run() {
 			for client := range h.clients {
 				client.mu.RLock()
 				if client.games[msg.GameID] {
+					if msg.RoleFilter != "" && h.userInfo != nil {
+						_, _, role := h.userInfo(client.userID, msg.GameID)
+						if role != msg.RoleFilter {
+							client.mu.RUnlock()
+							continue
+						}
+					}
 					select {
 					case client.send <- data:
 					default:
@@ -160,6 +178,7 @@ func (c *Client) readPump() {
 			Scale    float64 `json:"scale"`
 			OffsetX  float64 `json:"offsetX"`
 			OffsetY  float64 `json:"offsetY"`
+			PlayerID *int64  `json:"playerId"`
 		}
 		if err := json.Unmarshal(raw, &req); err != nil {
 			continue
@@ -181,6 +200,17 @@ func (c *Client) readPump() {
 			continue
 		}
 
+		// Demande de vue carte : un joueur demande la vue actuelle, on diffuse au MJ uniquement
+		if req.Action == "map.view.request" && req.GameID > 0 {
+			if c.hub.userInfo != nil {
+				_, _, role := c.hub.userInfo(c.userID, req.GameID)
+				if role != "MJ" {
+					c.hub.BroadcastToRole(req.GameID, "MJ", "map.view.request", map[string]interface{}{})
+				}
+			}
+			continue
+		}
+
 		// Diffusion musicale : seul le MJ peut envoyer
 		if (req.Action == "music.play" || req.Action == "music.pause" || req.Action == "music.seek") && req.GameID > 0 {
 			if c.hub.userInfo != nil {
@@ -188,6 +218,21 @@ func (c *Client) readPump() {
 				if role == "MJ" {
 					payload := map[string]interface{}{"trackId": req.TrackID, "position": req.Position}
 					c.hub.Broadcast(req.GameID, req.Action, payload)
+				}
+			}
+			continue
+		}
+
+		// GEMMA : surbrillance tour - seul le MJ peut envoyer
+		if req.Action == "gemma.turnHighlight" && req.GameID > 0 {
+			if c.hub.userInfo != nil {
+				_, _, role := c.hub.userInfo(c.userID, req.GameID)
+				if role == "MJ" {
+					payload := map[string]interface{}{"playerId": nil}
+					if req.PlayerID != nil {
+						payload["playerId"] = *req.PlayerID
+					}
+					c.hub.Broadcast(req.GameID, "gemma.turnHighlight", payload)
 				}
 			}
 			continue
