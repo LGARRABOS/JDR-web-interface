@@ -42,6 +42,8 @@ JDR_DB_USER="jdr"
 JDR_DB_NAME="jdr"
 JDR_DB_PASS="${JDR_DB_PASS:-$(openssl rand -hex 16)}"
 sudo -u postgres psql -c "CREATE USER ${JDR_DB_USER} WITH PASSWORD '${JDR_DB_PASS}';" 2>/dev/null || true
+# Toujours mettre à jour le mot de passe (au cas où l'utilisateur existait déjà)
+sudo -u postgres psql -c "ALTER USER ${JDR_DB_USER} WITH PASSWORD '${JDR_DB_PASS}';" 2>/dev/null || true
 sudo -u postgres psql -c "CREATE DATABASE ${JDR_DB_NAME} OWNER ${JDR_DB_USER};" 2>/dev/null || true
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${JDR_DB_NAME} TO ${JDR_DB_USER};" 2>/dev/null || true
 

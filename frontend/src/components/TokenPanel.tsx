@@ -73,7 +73,9 @@ export function TokenPanel({
   tokens,
 }: TokenPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedElement, setSelectedElement] = useState<GameElement | null>(null);
+  const [selectedElement, setSelectedElement] = useState<GameElement | null>(
+    null
+  );
   const [hp, setHp] = useState<number>(10);
   const [maxHp, setMaxHp] = useState<number>(10);
   const [mana, setMana] = useState<number>(0);
@@ -211,7 +213,10 @@ export function TokenPanel({
           {monsters.length === 0 ? (
             <p className="text-sm text-fantasy-muted-soft">
               Aucun ennemi dans les ressources. Ajoutez-en depuis la page{' '}
-              <Link to="resources" className="text-fantasy-accent hover:underline">
+              <Link
+                to="resources"
+                className="text-fantasy-accent hover:underline"
+              >
                 Ressources
               </Link>
               .
