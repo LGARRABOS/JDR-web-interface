@@ -36,8 +36,8 @@ for id in $(seq 100 999); do
     fi
 done
 
-# Stockage rootfs : local-lvm (disques CT). local ne supporte pas les conteneurs.
-# Stockage templates : local ou local-lvm (vztmpl)
+# Stockage rootfs : local-lvm ou local-zfs (disques CT)
+# Stockage templates : "local" a vztmpl par défaut ; local-lvm souvent sans vztmpl
 DEFAULT_ROOTFS="local-lvm"
 DEFAULT_TEMPLATE="local"
 for s in local-lvm local-zfs; do
@@ -46,6 +46,7 @@ for s in local-lvm local-zfs; do
         break
     fi
 done
+# Préférer "local" pour templates (vztmpl) ; sinon local-lvm si local absent
 for s in local local-lvm; do
     if pvesm status "${s}" &>/dev/null; then
         DEFAULT_TEMPLATE="${s}"
@@ -91,16 +92,28 @@ TEMPLATE_PATH=$(pveam list "${TEMPLATE_STORAGE}" 2>/dev/null | grep -E 'debian-(
 if [ -z "${TEMPLATE_PATH}" ]; then
     echo "    Téléchargement du template..."
     pveam update
-    # pveam available : extraire le nom du template (col 2 ou motif debian-XX-standard_*.tar.*)
-    TEMPLATE=$(pveam available --section system 2>/dev/null | grep -E 'debian-(11|12|13)-standard' | head -1 | awk '{print $2}')
-    [ -z "${TEMPLATE}" ] && TEMPLATE=$(pveam available --section system 2>/dev/null | grep -oE 'debian-(11|12|13)-standard_[^[:space:]]+\.tar\.(zst|gz|xz)' | head -1)
+    # Extraction : regex ou colonne 2 (format: section template_name size)
+    TEMPLATE=$(pveam available 2>/dev/null | grep -oE 'debian-[0-9]+-standard_[^[:space:]]+\.tar\.(zst|gz|xz)' | head -1)
+    [ -z "${TEMPLATE}" ] && TEMPLATE=$(pveam available 2>/dev/null | grep debian | head -1 | awk '{print $2}')
     if [ -z "${TEMPLATE}" ]; then
-        echo "Erreur: Aucun template Debian 11/12/13 trouvé. Liste des templates disponibles:"
-        pveam available --section system 2>/dev/null | head -20
+        echo "Erreur: Aucun template Debian trouvé. Sortie de 'pveam available':"
+        pveam available 2>&1 | head -30
         exit 1
     fi
-    echo "    Téléchargement de ${TEMPLATE}..."
-    pveam download "${TEMPLATE_STORAGE}" "${TEMPLATE}"
+    echo "    Téléchargement de ${TEMPLATE} vers ${TEMPLATE_STORAGE}..."
+    if ! pveam download "${TEMPLATE_STORAGE}" "${TEMPLATE}"; then
+        # Fallback : local supporte vztmpl sur la plupart des installs Proxmox
+        ALT_STORAGE="local"
+        [ "${TEMPLATE_STORAGE}" = "local" ] && ALT_STORAGE="local-lvm"
+        echo "    Tentative avec ${ALT_STORAGE}..."
+        if pveam download "${ALT_STORAGE}" "${TEMPLATE}"; then
+            TEMPLATE_STORAGE="${ALT_STORAGE}"
+        else
+            echo "Erreur: Aucun stockage ne supporte les templates (vztmpl)."
+            echo "Vérifiez que 'local' ou 'local-lvm' a le type de contenu vztmpl."
+            exit 1
+        fi
+    fi
     TEMPLATE_PATH="${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}"
 fi
 
