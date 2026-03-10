@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { GameLobbyPage } from './pages/GameLobbyPage';
@@ -42,6 +43,7 @@ export const App = () => {
   return (
     <AuthProvider>
       <Routes>
+        <Route path="/" element={<HomePage />} />
         <Route
           path="/login"
           element={
