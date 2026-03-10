@@ -6,26 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"jdr-backend/internal/storage/sqlite"
 )
-
-func setupTestServer(t *testing.T) http.Handler {
-	t.Helper()
-	db, err := sqlite.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if err := sqlite.AutoMigrate(db); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	handler, err := NewServer(db, "")
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	return handler
-}
 
 func TestHandleRegister(t *testing.T) {
 	handler := setupTestServer(t)
