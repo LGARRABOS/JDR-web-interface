@@ -55,7 +55,7 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &charName); err != nil {
 			continue
 		}
-		role := "PLAYER"
+		var role string
 		if g.OwnerID == u.ID {
 			role = "MJ"
 		} else {

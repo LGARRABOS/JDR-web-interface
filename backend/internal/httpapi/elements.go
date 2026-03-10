@@ -209,7 +209,7 @@ func (s *Server) handleGetElementFile(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.Header().Set("Content-Type", "application/octet-stream")
 	}
-	io.Copy(w, f)
+	_, _ = io.Copy(w, f)
 }
 
 func (s *Server) handleDeleteElement(w http.ResponseWriter, r *http.Request) {

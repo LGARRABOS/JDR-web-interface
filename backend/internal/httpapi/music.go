@@ -209,7 +209,7 @@ func (s *Server) handleGetMusicFile(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/mpeg")
 	}
 	w.Header().Set("Accept-Ranges", "bytes")
-	io.Copy(w, f)
+	_, _ = io.Copy(w, f)
 }
 
 func (s *Server) handleDeleteMusic(w http.ResponseWriter, r *http.Request) {

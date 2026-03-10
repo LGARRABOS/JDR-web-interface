@@ -206,5 +206,5 @@ func (s *Server) handleGetCharacterSheetFile(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Content-Disposition", "inline")
-	io.Copy(w, f)
+	_, _ = io.Copy(w, f)
 }

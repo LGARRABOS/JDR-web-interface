@@ -9,6 +9,10 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type contextKey string
+
+const UserIDKey contextKey = "userID"
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true // En prod, vérifier l'origine
@@ -67,7 +71,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := int64(0)
-	if v := r.Context().Value("userID"); v != nil {
+	if v := r.Context().Value(UserIDKey); v != nil {
 		if id, ok := v.(int64); ok {
 			userID = id
 		}

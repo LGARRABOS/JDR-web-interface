@@ -143,7 +143,7 @@ func (s *Server) wsHandler() http.Handler {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Non authentifié"})
 			return
 		}
-		ctx := context.WithValue(r.Context(), "userID", u.ID)
+		ctx := context.WithValue(r.Context(), realtime.UserIDKey, u.ID)
 		s.hub.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
