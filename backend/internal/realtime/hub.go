@@ -153,8 +153,27 @@ func (c *Client) readPump() {
 			GameID   int64   `json:"gameId"`
 			TrackID  int64   `json:"trackId"`
 			Position float64 `json:"position"`
+			Scale    float64 `json:"scale"`
+			OffsetX  float64 `json:"offsetX"`
+			OffsetY  float64 `json:"offsetY"`
 		}
 		if err := json.Unmarshal(raw, &req); err != nil {
+			continue
+		}
+
+		// Vue carte (pan/zoom) : seul le MJ peut envoyer, diffusion à tous
+		if req.Action == "map.view" && req.GameID > 0 {
+			if c.hub.userInfo != nil {
+				_, _, role := c.hub.userInfo(c.userID, req.GameID)
+				if role == "MJ" {
+					payload := map[string]interface{}{
+						"scale":   req.Scale,
+						"offsetX": req.OffsetX,
+						"offsetY": req.OffsetY,
+					}
+					c.hub.Broadcast(req.GameID, "map.view", payload)
+				}
+			}
 			continue
 		}
 

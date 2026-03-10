@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import {
@@ -8,7 +8,7 @@ import {
   MessagesAPI,
   RollsAPI,
 } from '../api/client';
-import { MapCanvas, type Token, type MapData } from '../components/MapCanvas';
+import { MapCanvas, type Token, type MapData, type MapView } from '../components/MapCanvas';
 import { TokenPanel, type TokenFormData } from '../components/TokenPanel';
 import { DicePanel } from '../components/DicePanel';
 import { ChatPanel } from '../components/ChatPanel';
@@ -86,6 +86,14 @@ export function TabletopPage() {
   );
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [gmTip, setGmTip] = useState(pickRandomTip);
+  const draggingTokenIdRef = useRef<number | null>(null);
+  const [mapView, setMapView] = useState<MapView>({
+    scale: 1,
+    offset: { x: 0, y: 0 },
+  });
+  const mapViewSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   const isGM = game?.role === 'MJ';
 
@@ -179,6 +187,14 @@ export function TabletopPage() {
     loadMessages();
   }, [loadMessages]);
 
+  useEffect(() => {
+    return () => {
+      if (mapViewSendTimeoutRef.current) {
+        clearTimeout(mapViewSendTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const { send } = useGameSocket(gameId, {
     'token.created': (p) => {
       const t = p as Token;
@@ -187,7 +203,7 @@ export function TabletopPage() {
     },
     'token.updated': (p) => {
       const t = p as Token;
-      if (t.mapId === currentMap?.id)
+      if (t.mapId === currentMap?.id && draggingTokenIdRef.current !== t.id)
         setTokens((prev) => prev.map((x) => (x.id === t.id ? t : x)));
     },
     'token.deleted': (p) => {
@@ -281,6 +297,7 @@ export function TabletopPage() {
     'map.displayed': (p) => {
       const { mapId } = p as { mapId: number };
       setGame((g) => (g ? { ...g, currentMapId: mapId } : null));
+      setMapView({ scale: 1, offset: { x: 0, y: 0 } });
     },
     'map.created': (p) => {
       const m = p as MapData;
@@ -295,10 +312,21 @@ export function TabletopPage() {
         g?.currentMapId === mapId ? { ...g, currentMapId: undefined } : g
       );
     },
+    'map.view': (p) => {
+      const { scale, offsetX, offsetY } = p as {
+        scale: number;
+        offsetX: number;
+        offsetY: number;
+      };
+      setMapView({
+        scale: scale ?? 1,
+        offset: { x: offsetX ?? 0, y: offsetY ?? 0 },
+      });
+    },
   });
 
   const handleTokenUpdate = useCallback(
-    async (id: number, data: { hp?: number; maxHp?: number }) => {
+    async (id: number, data: { hp?: number; maxHp?: number; mana?: number; maxMana?: number }) => {
       try {
         await TokensAPI.update(id, data);
         setTokens((prev) =>
@@ -324,13 +352,40 @@ export function TabletopPage() {
     [loadTokens]
   );
 
-  const handleTokenMove = useCallback(
+  const handleMapViewChange = useCallback(
+    (view: MapView) => {
+      setMapView(view);
+      if (!isGM) return;
+      if (mapViewSendTimeoutRef.current) {
+        clearTimeout(mapViewSendTimeoutRef.current);
+      }
+      mapViewSendTimeoutRef.current = setTimeout(() => {
+        mapViewSendTimeoutRef.current = null;
+        send('map.view', {
+          scale: view.scale,
+          offsetX: view.offset.x,
+          offsetY: view.offset.y,
+        });
+      }, 80);
+    },
+    [isGM, send]
+  );
+
+  const handleTokenMove = useCallback((id: number, x: number, y: number) => {
+    setTokens((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, x, y } : t))
+    );
+  }, []);
+
+  const handleTokenDragStart = useCallback((id: number) => {
+    draggingTokenIdRef.current = id;
+  }, []);
+
+  const handleTokenDragEnd = useCallback(
     async (id: number, x: number, y: number) => {
+      draggingTokenIdRef.current = null;
       try {
         await TokensAPI.update(id, { x, y });
-        setTokens((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, x, y } : t))
-        );
       } catch {
         loadTokens();
       }
@@ -341,7 +396,7 @@ export function TabletopPage() {
   const handleTokenCreate = useCallback(
     async (x: number, y: number) => {
       if (!currentMap || !placementData) return;
-      const { name, hp, maxHp } = placementData;
+      const { name, hp, maxHp, mana, maxMana } = placementData;
       try {
         const { data } = await TokensAPI.create(currentMap.id, {
           x,
@@ -350,6 +405,8 @@ export function TabletopPage() {
           name,
           hp,
           maxHp,
+          mana,
+          maxMana,
           visibleToPlayers: true,
         });
         setTokens((prev) => [...prev, data.token]);
@@ -437,6 +494,7 @@ export function TabletopPage() {
               const id = parseInt(e.target.value, 10);
               const map = maps.find((m) => m.id === id) ?? null;
               setCurrentMap(map);
+              setMapView({ scale: 1, offset: { x: 0, y: 0 } });
               if (map) {
                 try {
                   await GamesAPI.setCurrentMap(gameId, map.id);
@@ -502,27 +560,31 @@ export function TabletopPage() {
             tokens={tokens}
             isGM={isGM}
             currentUserId={user?.id ?? 0}
+            mapView={mapView}
+            onMapViewChange={isGM ? handleMapViewChange : undefined}
             onTokenMove={handleTokenMove}
+            onTokenDragStart={handleTokenDragStart}
+            onTokenDragEnd={handleTokenDragEnd}
             onTokenCreate={
               isGM && placementData ? handleTokenCreate : undefined
             }
-            onTokenSelect={isGM ? setSelectedToken : undefined}
+            onTokenSelect={setSelectedToken}
           />
         </div>
         <aside className="w-80 flex flex-col gap-4 p-4 bg-slate-800/50 overflow-y-auto">
           <PresenceBar users={connectedUsers} />
-          {isGM && (
-            <TokenPanel
-              onStartPlacement={setPlacementData}
-              placementActive={placementData != null}
-              onCancelPlacement={() => setPlacementData(null)}
-              selectedToken={selectedToken}
-              onTokenSelect={setSelectedToken}
-              onTokenUpdate={handleTokenUpdate}
-              onTokenDelete={handleTokenDelete}
-              tokens={tokens}
-            />
-          )}
+          <TokenPanel
+            isGM={isGM}
+            currentUserId={user?.id ?? 0}
+            onStartPlacement={setPlacementData}
+            placementActive={placementData != null}
+            onCancelPlacement={() => setPlacementData(null)}
+            selectedToken={selectedToken}
+            onTokenSelect={setSelectedToken}
+            onTokenUpdate={handleTokenUpdate}
+            onTokenDelete={handleTokenDelete}
+            tokens={tokens}
+          />
           {!isGM && (
             <div className="rounded-lg bg-slate-800/80 p-4">
               <label className="block text-sm font-medium mb-2">

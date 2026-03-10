@@ -182,6 +182,16 @@ func AutoMigrate(db *sql.DB) error {
 			return fmt.Errorf("migrate tokens max_hp: %w", err)
 		}
 	}
+	if _, err := db.Exec("ALTER TABLE tokens ADD COLUMN mana INTEGER"); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate tokens mana: %w", err)
+		}
+	}
+	if _, err := db.Exec("ALTER TABLE tokens ADD COLUMN max_mana INTEGER"); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate tokens max_mana: %w", err)
+		}
+	}
 	// Index unique : un seul token PJ par joueur par carte (évite les doublons)
 	if _, err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_pj_unique ON tokens(map_id, owner_user_id) WHERE kind = 'PJ' AND owner_user_id IS NOT NULL"); err != nil {
 		// Ignorer si index existe ou si la table a des doublons (nettoyage manuel possible)

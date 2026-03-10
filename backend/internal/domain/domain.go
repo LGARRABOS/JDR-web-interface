@@ -47,8 +47,10 @@ type Token struct {
 	X                float64 `json:"x"`
 	Y                float64 `json:"y"`
 	VisibleToPlayers bool    `json:"visibleToPlayers"`
-	Hp               *int    `json:"hp,omitempty"`     // PV actuels (ennemis)
-	MaxHp            *int    `json:"maxHp,omitempty"` // PV max (ennemis)
+	Hp               *int    `json:"hp,omitempty"`       // PV actuels
+	MaxHp            *int    `json:"maxHp,omitempty"`   // PV max
+	Mana             *int    `json:"mana,omitempty"`    // Mana actuel
+	MaxMana          *int    `json:"maxMana,omitempty"` // Mana max
 }
 
 // FogPatch représente une zone de brouillard de guerre.

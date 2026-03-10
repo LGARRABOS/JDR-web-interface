@@ -66,11 +66,11 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 							var ownerID sql.NullInt64
 							var iconURL sql.NullString
 							var visible int
-							var hp, maxHp sql.NullInt64
+							var hp, maxHp, mana, maxMana sql.NullInt64
 							_ = s.db.QueryRow(`
-								SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp
+								SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana
 								FROM tokens WHERE id = ?
-							`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp)
+							`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana)
 							if hp.Valid {
 								h := int(hp.Int64)
 								t.Hp = &h
@@ -78,6 +78,14 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 							if maxHp.Valid {
 								m := int(maxHp.Int64)
 								t.MaxHp = &m
+							}
+							if mana.Valid {
+								m := int(mana.Int64)
+								t.Mana = &m
+							}
+							if maxMana.Valid {
+								m := int(maxMana.Int64)
+								t.MaxMana = &m
 							}
 							t.OwnerUserID = &u.ID
 							t.VisibleToPlayers = true
@@ -93,7 +101,7 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana
 		FROM tokens WHERE map_id = ?
 	`, mapID)
 	if err != nil {
@@ -108,8 +116,8 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 		var ownerID sql.NullInt64
 		var iconURL sql.NullString
 		var visible int
-		var hp, maxHp sql.NullInt64
-		if err := rows.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp); err != nil {
+		var hp, maxHp, mana, maxMana sql.NullInt64
+		if err := rows.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana); err != nil {
 			continue
 		}
 		if ownerID.Valid {
@@ -126,6 +134,14 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 		if maxHp.Valid {
 			m := int(maxHp.Int64)
 			t.MaxHp = &m
+		}
+		if mana.Valid {
+			m := int(mana.Int64)
+			t.Mana = &m
+		}
+		if maxMana.Valid {
+			m := int(maxMana.Int64)
+			t.MaxMana = &m
 		}
 		tokens = append(tokens, &t)
 	}
@@ -144,6 +160,8 @@ type createTokenReq struct {
 	VisibleToPlayers bool    `json:"visibleToPlayers"`
 	Hp               *int    `json:"hp"`
 	MaxHp            *int    `json:"maxHp"`
+	Mana             *int    `json:"mana"`
+	MaxMana          *int    `json:"maxMana"`
 }
 
 func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
@@ -182,9 +200,9 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := s.db.Exec(`
-		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp))
+		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp), nullInt(req.Mana), nullInt(req.MaxMana))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
@@ -205,6 +223,8 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		VisibleToPlayers:  req.VisibleToPlayers,
 		Hp:                req.Hp,
 		MaxHp:             req.MaxHp,
+		Mana:              req.Mana,
+		MaxMana:           req.MaxMana,
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"token": t})
 	s.hub.Broadcast(gameID, "token.created", t)
@@ -218,6 +238,8 @@ type updateTokenReq struct {
 	VisibleToPlayers *bool    `json:"visibleToPlayers"`
 	Hp               *int     `json:"hp"`
 	MaxHp            *int     `json:"maxHp"`
+	Mana             *int     `json:"mana"`
+	MaxMana          *int     `json:"maxMana"`
 }
 
 func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
@@ -276,6 +298,14 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		updates = append(updates, "max_hp = ?")
 		args = append(args, *req.MaxHp)
 	}
+	if req.Mana != nil {
+		updates = append(updates, "mana = ?")
+		args = append(args, *req.Mana)
+	}
+	if req.MaxMana != nil {
+		updates = append(updates, "max_mana = ?")
+		args = append(args, *req.MaxMana)
+	}
 	if len(updates) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucune modification"})
 		return
@@ -292,11 +322,11 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 	var ownerID sql.NullInt64
 	var iconURL sql.NullString
 	var visible int
-	var hp, maxHp sql.NullInt64
+	var hp, maxHp, mana, maxMana sql.NullInt64
 	_ = s.db.QueryRow(`
-		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana
 		FROM tokens WHERE id = ?
-	`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp)
+	`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana)
 	if ownerID.Valid {
 		t.OwnerUserID = &ownerID.Int64
 	}
@@ -311,6 +341,14 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 	if maxHp.Valid {
 		m := int(maxHp.Int64)
 		t.MaxHp = &m
+	}
+	if mana.Valid {
+		m := int(mana.Int64)
+		t.Mana = &m
+	}
+	if maxMana.Valid {
+		m := int(maxMana.Int64)
+		t.MaxMana = &m
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"token": t})
 	s.hub.Broadcast(gameID, "token.updated", t)

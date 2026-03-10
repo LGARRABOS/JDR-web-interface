@@ -81,6 +81,8 @@ export const TokensAPI = {
       ownerUserId?: number;
       hp?: number;
       maxHp?: number;
+      mana?: number;
+      maxMana?: number;
       visibleToPlayers?: boolean;
     }
   ) => api.post(`/maps/${mapId}/tokens`, data),
@@ -93,6 +95,8 @@ export const TokensAPI = {
       color?: string;
       hp?: number;
       maxHp?: number;
+      mana?: number;
+      maxMana?: number;
     }
   ) => api.patch(`/tokens/${id}`, data),
   delete: (id: number) => api.delete(`/tokens/${id}`),
