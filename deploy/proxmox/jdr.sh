@@ -36,17 +36,22 @@ for id in $(seq 100 999); do
     fi
 done
 
-# Stockage rootfs : local-lvm par défaut (local ne supporte pas les disques de conteneurs)
+# Stockage rootfs : local-lvm (disques CT). local ne supporte pas les conteneurs.
+# Stockage templates : local ou local-lvm (vztmpl)
 DEFAULT_ROOTFS="local-lvm"
-if ! pvesm status "${DEFAULT_ROOTFS}" &>/dev/null; then
-    DEFAULT_ROOTFS="local"
-fi
-
-# Stockage templates : local (où sont stockés les vztmpl)
 DEFAULT_TEMPLATE="local"
-if ! pvesm status "${DEFAULT_TEMPLATE}" &>/dev/null; then
-    DEFAULT_TEMPLATE="local-lvm"
-fi
+for s in local-lvm local-zfs; do
+    if pvesm status "${s}" &>/dev/null; then
+        DEFAULT_ROOTFS="${s}"
+        break
+    fi
+done
+for s in local local-lvm; do
+    if pvesm status "${s}" &>/dev/null; then
+        DEFAULT_TEMPLATE="${s}"
+        break
+    fi
+done
 
 # Paramètres (valeurs par défaut ou saisie)
 read -r -p "ID du conteneur [${DEFAULT_CTID}]: " CTID
@@ -80,17 +85,21 @@ if pct status "${CTID}" &>/dev/null; then
     exit 1
 fi
 
-# Télécharger le template Debian 12 si nécessaire
-echo "==> Vérification du template Debian 12..."
-TEMPLATE_PATH=$(pveam list "${TEMPLATE_STORAGE}" 2>/dev/null | grep debian-12-standard | head -1 | awk '{print $1}')
+# Télécharger le template Debian si nécessaire (12, 13 ou 11)
+echo "==> Vérification du template Debian..."
+TEMPLATE_PATH=$(pveam list "${TEMPLATE_STORAGE}" 2>/dev/null | grep -E 'debian-(11|12|13)-standard' | head -1 | awk '{print $1}')
 if [ -z "${TEMPLATE_PATH}" ]; then
     echo "    Téléchargement du template..."
     pveam update
-    TEMPLATE=$(pveam available | grep debian-12-standard | head -1 | awk '{print $1}')
+    # pveam available : extraire le nom du template (col 2 ou motif debian-XX-standard_*.tar.*)
+    TEMPLATE=$(pveam available --section system 2>/dev/null | grep -E 'debian-(11|12|13)-standard' | head -1 | awk '{print $2}')
+    [ -z "${TEMPLATE}" ] && TEMPLATE=$(pveam available --section system 2>/dev/null | grep -oE 'debian-(11|12|13)-standard_[^[:space:]]+\.tar\.(zst|gz|xz)' | head -1)
     if [ -z "${TEMPLATE}" ]; then
-        echo "Erreur: Impossible de trouver le template Debian 12."
+        echo "Erreur: Aucun template Debian 11/12/13 trouvé. Liste des templates disponibles:"
+        pveam available --section system 2>/dev/null | head -20
         exit 1
     fi
+    echo "    Téléchargement de ${TEMPLATE}..."
     pveam download "${TEMPLATE_STORAGE}" "${TEMPLATE}"
     TEMPLATE_PATH="${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}"
 fi
