@@ -19,7 +19,8 @@ export function Checkbox({
   'aria-label': ariaLabel,
   children,
 }: CheckboxProps) {
-  const inputId = id ?? `checkbox-${React.useId()}`;
+  const generatedId = React.useId();
+  const inputId = id ?? `checkbox-${generatedId}`;
   return (
     <label
       htmlFor={inputId}

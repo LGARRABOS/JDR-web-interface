@@ -28,6 +28,27 @@ body {
   background: var(--color-fantasy-bg);
   color: var(--color-fantasy-text);
   min-height: 100vh;
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url('/bg-emblem.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: min(62vw, 700px);
+  opacity: 0.14;
+  filter: blur(3px) brightness(1.15);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
 }
 
 /* Scrollbar personnalisée (Chrome, Safari, Edge) */

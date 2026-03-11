@@ -34,11 +34,11 @@ interface MapEditorProps {
 }
 
 export function MapEditor({
-  gameId,
+  gameId: _gameId,
   maps,
   elements,
   onMapsChange,
-  onElementsChange,
+  onElementsChange: _onElementsChange,
 }: MapEditorProps) {
   const [selectedMap, setSelectedMap] = useState<MapData | null>(null);
   const [tokens, setTokens] = useState<Token[]>([]);
@@ -162,7 +162,7 @@ export function MapEditor({
     const ro = new ResizeObserver(updateScaleToFit);
     if (viewportRef.current) ro.observe(viewportRef.current);
     return () => ro.disconnect();
-  }, [selectedMap?.id, updateScaleToFit]);
+  }, [selectedMap, updateScaleToFit]);
 
   const handleMapSelect = (map: MapData) => {
     setSelectedMap(map);
@@ -618,16 +618,6 @@ export function MapEditor({
                               selectedMap
                             ) {
                               e.stopPropagation();
-                              const mapRect =
-                                mapContainerRef.current.getBoundingClientRect();
-                              const x =
-                                ((e.clientX - mapRect.left) *
-                                  selectedMap.width) /
-                                mapRect.width;
-                              const y =
-                                ((e.clientY - mapRect.top) *
-                                  selectedMap.height) /
-                                mapRect.height;
                               dragRef.current = {
                                 type: 'mapElement',
                                 id: el.id,
@@ -692,16 +682,6 @@ export function MapEditor({
                                 selectedMap
                               ) {
                                 e.stopPropagation();
-                                const mapRect =
-                                  mapContainerRef.current.getBoundingClientRect();
-                                const x =
-                                  ((e.clientX - mapRect.left) *
-                                    selectedMap.width) /
-                                  mapRect.width;
-                                const y =
-                                  ((e.clientY - mapRect.top) *
-                                    selectedMap.height) /
-                                  mapRect.height;
                                 dragRef.current = {
                                   type: 'token',
                                   id: t.id,

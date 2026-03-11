@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 
 export interface Token {
@@ -139,7 +139,7 @@ export function MapCanvas({
     if (!map) return;
     const t = setTimeout(() => fitScaleToViewport(), 50);
     return () => clearTimeout(t);
-  }, [map?.id, fitScaleToViewport]);
+  }, [map, fitScaleToViewport]);
 
   const updateView = useCallback(
     (updates: Partial<MapView>) => {
@@ -239,7 +239,7 @@ export function MapCanvas({
     [onTokenMove, scale]
   );
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     const wasDragging = dragRef.current;
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
@@ -257,7 +257,7 @@ export function MapCanvas({
     setTimeout(() => {
       didDragRef.current = false;
     }, 0);
-  };
+  }, [onTokenDragEnd]);
 
   useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
@@ -266,7 +266,7 @@ export function MapCanvas({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [handleMouseMove]);
+  }, [handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
     window.addEventListener('mousemove', handleMapMouseMove);
@@ -275,7 +275,7 @@ export function MapCanvas({
       window.removeEventListener('mousemove', handleMapMouseMove);
       window.removeEventListener('mouseup', handleMapMouseUp);
     };
-  }, [handleMapMouseMove]);
+  }, [handleMapMouseMove, handleMapMouseUp]);
 
   const placementClickRef = useRef(false);
   const handleCanvasClick = (e: React.MouseEvent) => {
