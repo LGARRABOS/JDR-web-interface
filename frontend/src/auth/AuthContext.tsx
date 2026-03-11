@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data } = await AuthAPI.login({ email, password });
       setUser(data.user);
+      setError(null);
       return data.user;
     } catch (err: unknown) {
       const msg =
@@ -78,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           displayName,
         });
         setUser(data.user);
+        setError(null);
         return data.user;
       } catch (err: unknown) {
         const msg =

@@ -13,6 +13,24 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    const data = err.response?.data;
+    if (data && typeof data === 'object' && !data.message && data.error) {
+      data.message = data.error;
+    }
+    if (data && typeof data === 'object' && !data.message && err.response?.status) {
+      const status = err.response.status;
+      if (status === 401) data.message = 'Identifiants incorrects';
+      else if (status === 403) data.message = 'Accès refusé';
+      else if (status === 404) data.message = 'Ressource introuvable';
+      else if (status >= 500) data.message = 'Erreur serveur, réessayez plus tard';
+    }
+    return Promise.reject(err);
+  }
+);
+
 export const AuthAPI = {
   register: (data: { email: string; password: string; displayName: string }) =>
     api.post('/auth/register', data),
@@ -20,6 +38,13 @@ export const AuthAPI = {
     api.post('/auth/login', data),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
+  updateProfile: (data: {
+    displayName?: string;
+    email?: string;
+    password?: string;
+  }) => api.patch('/auth/me', data),
+  purgeAssets: () => api.post('/auth/me/purge-assets'),
+  deleteAccount: () => api.delete('/auth/me'),
 };
 
 export const GamesAPI = {

@@ -26,6 +26,7 @@ import { MusicPanel } from '../components/MusicPanel';
 import { MusicPlayer } from '../components/MusicPlayer';
 import { DiceRollOverlay } from '../components/DiceRollOverlay';
 import { Checkbox } from '../components/Checkbox';
+import { CopyableCode } from '../components/CopyableCode';
 import { useGameSocket } from '../hooks/useGameSocket';
 
 const GM_TIPS = [
@@ -595,7 +596,23 @@ export function TabletopPage() {
     async (expression: string, hidden?: boolean) => {
       setRollError(null);
       try {
-        await RollsAPI.roll(gameId, { expression, hidden });
+        const { data } = await RollsAPI.roll(gameId, { expression, hidden });
+        const roll = (data as { roll?: { expression: string; result: number } })
+          ?.roll;
+        if (roll) {
+          const displayName =
+            game?.characterName ?? user?.displayName ?? 'Vous';
+          const r = {
+            expression: roll.expression,
+            result: roll.result,
+            displayName,
+          };
+          if (hidden) {
+            setLastRollHidden(r);
+          } else {
+            setLastRoll(r);
+          }
+        }
       } catch (e) {
         const msg =
           (e as { response?: { data?: { message?: string }; status?: number } })
@@ -606,7 +623,7 @@ export function TabletopPage() {
         console.error('[Roll]', msg, e);
       }
     },
-    [gameId]
+    [gameId, game?.characterName, user?.displayName]
   );
 
   const handleToggleTokensLocked = useCallback(async () => {
@@ -729,12 +746,11 @@ export function TabletopPage() {
             </button>
           </span>
           {game.inviteCode && (
-            <span className="flex items-center gap-2">
-              Code d&apos;invitation :{' '}
-              <code className="px-2 py-0.5 rounded bg-fantasy-surface font-mono font-bold text-fantasy-accent-hover">
-                {game.inviteCode}
-              </code>
-            </span>
+            <CopyableCode
+              code={game.inviteCode}
+              label="Code d'invitation :"
+              className="flex items-center gap-2"
+            />
           )}
         </div>
       )}

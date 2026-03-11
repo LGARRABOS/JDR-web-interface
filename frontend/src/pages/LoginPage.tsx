@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
-  const { login } = useAuth();
+  const { login, error: authError } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (authError) setErr(authError);
+  }, [authError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,7 +21,7 @@ export function LoginPage() {
       await login(email, password);
       navigate('/games');
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Erreur');
+      setErr(getErrorMessage(e));
     }
   };
 
@@ -26,6 +31,14 @@ export function LoginPage() {
         <h1 className="text-2xl font-bold font-heading text-center mb-6 text-fantasy-text-soft">
           Connexion
         </h1>
+        {err && (
+          <div
+            role="alert"
+            className="mb-4 p-3 rounded bg-fantasy-danger/20 border border-fantasy-error text-fantasy-error text-sm"
+          >
+            {err}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-fantasy-muted-soft mb-1">
@@ -51,7 +64,6 @@ export function LoginPage() {
               required
             />
           </div>
-          {err && <p className="text-fantasy-error text-sm">{err}</p>}
           <button
             type="submit"
             className="w-full py-2 rounded bg-fantasy-accent hover:bg-fantasy-accent-hover text-fantasy-bg font-medium"

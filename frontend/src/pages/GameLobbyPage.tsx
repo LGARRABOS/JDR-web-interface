@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { GamesAPI } from '../api/client';
+import { getErrorMessage } from '../utils/errorMessage';
 import { ModalConfirm } from '../components/Modal';
 import { Checkbox } from '../components/Checkbox';
+import { CopyableCode } from '../components/CopyableCode';
+import { ProfileModal } from '../components/ProfileModal';
 
 interface Game {
   id: number;
@@ -15,7 +18,8 @@ interface Game {
 }
 
 export function GameLobbyPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const navigate = useNavigate();
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,10 +56,7 @@ export function GameLobbyPage() {
       loadGames();
       if (data.game?.id) navigate(`/table/${data.game.id}`);
     } catch (e: unknown) {
-      setErr(
-        (e as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? 'Erreur'
-      );
+      setErr(getErrorMessage(e));
     }
   };
 
@@ -70,10 +71,7 @@ export function GameLobbyPage() {
       await GamesAPI.delete(deleteGameId);
       loadGames();
     } catch (e: unknown) {
-      setErr(
-        (e as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? 'Erreur'
-      );
+      setErr(getErrorMessage(e));
     } finally {
       setDeleteGameId(null);
     }
@@ -89,10 +87,7 @@ export function GameLobbyPage() {
       loadGames();
       if (data.gameId) navigate(`/table/${data.gameId}`);
     } catch (e: unknown) {
-      setErr(
-        (e as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? 'Code invalide'
-      );
+      setErr(getErrorMessage(e));
     }
   };
 
@@ -107,6 +102,21 @@ export function GameLobbyPage() {
         confirmLabel="Supprimer"
         danger
       />
+      <ProfileModal
+        open={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+        user={user}
+        onSuccess={refresh}
+        onAccountDeleted={() => logout().then(() => navigate('/login'))}
+      />
+      {err && (
+        <div
+          role="alert"
+          className="mb-6 p-3 rounded bg-fantasy-danger/20 border border-fantasy-error text-fantasy-error text-sm"
+        >
+          {err}
+        </div>
+      )}
       <header className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold font-heading text-fantasy-text-soft">
           Table JDR
@@ -119,9 +129,14 @@ export function GameLobbyPage() {
             Wiki
           </Link>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-fantasy-muted-soft">
+            <button
+              type="button"
+              onClick={() => setProfileModalOpen(true)}
+              className="text-sm text-fantasy-muted-soft hover:text-fantasy-accent transition-colors"
+              title="Modifier mon profil"
+            >
               {user?.displayName}
-            </span>
+            </button>
             <button
               onClick={() => logout().then(() => navigate('/login'))}
               className="text-sm text-fantasy-muted-soft hover:text-fantasy-error transition-colors"
@@ -185,7 +200,6 @@ export function GameLobbyPage() {
               Rejoindre
             </button>
           </form>
-          {err && <p className="mt-2 text-fantasy-error text-sm">{err}</p>}
         </section>
 
         <section className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-6">
@@ -218,8 +232,8 @@ export function GameLobbyPage() {
                         Joueur
                       </span>
                     )}
-                    <span className="ml-2 text-xs text-fantasy-muted-soft">
-                      Code: {g.inviteCode}
+                    <span className="ml-2 text-xs text-fantasy-muted-soft inline-flex">
+                      <CopyableCode code={g.inviteCode} label="Code:" />
                     </span>
                     {g.isGemma && (
                       <span className="ml-2 px-1.5 py-0.5 rounded text-xs bg-fantasy-accent/50 text-fantasy-bg">
