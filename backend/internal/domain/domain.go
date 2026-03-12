@@ -54,17 +54,25 @@ type Token struct {
 	MaxHp            *int    `json:"maxHp,omitempty"`   // PV max
 	Mana             *int    `json:"mana,omitempty"`    // Mana actuel
 	MaxMana          *int    `json:"maxMana,omitempty"` // Mana max
+	ElementID        *int64  `json:"elementId,omitempty"` // Lien vers game_elements (monstre source)
 }
 
 // GameElement représente un élément de la bibliothèque (monstre ou décor).
 type GameElement struct {
-	ID        int64    `json:"id"`
-	GameID    int64    `json:"gameId"`
-	Name      string   `json:"name"`
-	ImageURL  string   `json:"imageUrl"`
-	Category  string   `json:"category"` // monster, decor
-	Tags      []string `json:"tags,omitempty"`
-	CreatedAt string   `json:"createdAt"`
+	ID          int64    `json:"id"`
+	GameID      int64    `json:"gameId"`
+	Name        string   `json:"name"`
+	ImageURL    string   `json:"imageUrl"`
+	Category    string   `json:"category"` // monster, decor
+	Tags        []string `json:"tags,omitempty"`
+	CreatedAt   string   `json:"createdAt"`
+	Description string   `json:"description,omitempty"`
+	UniqueTrait string   `json:"uniqueTrait,omitempty"`
+	Loot        string   `json:"loot,omitempty"`
+	MaxHp       *int     `json:"maxHp,omitempty"`
+	MaxMana     *int     `json:"maxMana,omitempty"`
+	IconPosX    int      `json:"iconPosX,omitempty"` // 0-100, position horizontale du crop
+	IconPosY    int      `json:"iconPosY,omitempty"` // 0-100, position verticale du crop
 }
 
 // MapElement représente un élément de décor fixe sur une carte.

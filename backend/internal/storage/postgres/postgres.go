@@ -204,6 +204,14 @@ func AutoMigrate(db *sql.DB) error {
 		stmts[11], // map_elements
 		`ALTER TABLE tokens DROP CONSTRAINT IF EXISTS tokens_kind_check`,
 		`ALTER TABLE tokens ADD CONSTRAINT tokens_kind_check CHECK (kind IN ('PJ','PNJ','OBJET','MORT'))`,
+		`ALTER TABLE game_elements ADD COLUMN description TEXT`,
+		`ALTER TABLE game_elements ADD COLUMN unique_trait TEXT`,
+		`ALTER TABLE game_elements ADD COLUMN loot TEXT`,
+		`ALTER TABLE game_elements ADD COLUMN max_hp INTEGER`,
+		`ALTER TABLE game_elements ADD COLUMN max_mana INTEGER`,
+		`ALTER TABLE game_elements ADD COLUMN icon_pos_x INTEGER DEFAULT 50`,
+		`ALTER TABLE game_elements ADD COLUMN icon_pos_y INTEGER DEFAULT 50`,
+		`ALTER TABLE tokens ADD COLUMN element_id INTEGER REFERENCES game_elements(id) ON DELETE SET NULL`,
 	}
 
 	for _, stmt := range orderedStmts {

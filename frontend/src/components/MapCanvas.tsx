@@ -18,6 +18,7 @@ export interface Token {
   maxHp?: number;
   mana?: number;
   maxMana?: number;
+  elementId?: number;
 }
 
 export interface MapData {
@@ -72,6 +73,7 @@ interface MapCanvasProps {
   onTokenDragEnd?: (id: number, x: number, y: number) => void;
   onTokenCreate?: (x: number, y: number) => void;
   onTokenSelect?: (token: Token | null) => void;
+  onTokenDoubleClick?: (token: Token) => void;
   diceRollOverlay?: React.ReactNode;
 }
 
@@ -95,6 +97,7 @@ export function MapCanvas({
   onTokenDragEnd,
   onTokenCreate,
   onTokenSelect,
+  onTokenDoubleClick,
   diceRollOverlay,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -116,6 +119,9 @@ export function MapCanvas({
   } | null>(null);
   const didPanRef = useRef(false);
   const didDragRef = useRef(false);
+  const lastTokenClickRef = useRef<{ tokenId: number; time: number } | null>(
+    null
+  );
   const [inspectedTokenId, setInspectedTokenId] = useState<number | null>(null);
 
   const canMove = useCallback(
@@ -506,6 +512,18 @@ export function MapCanvas({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!didDragRef.current) {
+                    const now = Date.now();
+                    const last = lastTokenClickRef.current;
+                    if (
+                      last &&
+                      last.tokenId === t.id &&
+                      now - last.time < 350
+                    ) {
+                      lastTokenClickRef.current = null;
+                      onTokenDoubleClick?.(t);
+                      return;
+                    }
+                    lastTokenClickRef.current = { tokenId: t.id, time: now };
                     const willClose = inspectedTokenId === t.id;
                     setInspectedTokenId(willClose ? null : t.id);
                     onTokenSelect?.(willClose ? null : t);
@@ -614,17 +632,34 @@ export function MapCanvas({
                       t.maxHp != null ||
                       t.mana != null ||
                       t.maxMana != null) && (
-                      <div className="mt-1 text-xs text-fantasy-muted-soft space-y-0.5">
-                        {(t.hp != null || t.maxHp != null) && (
-                          <div>
-                            PV {t.hp ?? '—'} / {t.maxHp ?? '—'}
-                          </div>
-                        )}
-                        {(t.mana != null || t.maxMana != null) && (
-                          <div>
-                            Mana {t.mana ?? '—'} / {t.maxMana ?? '—'}
-                          </div>
-                        )}
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <div className="text-xs text-fantasy-muted-soft space-y-0.5">
+                          {(t.hp != null || t.maxHp != null) && (
+                            <div>
+                              PV {t.hp ?? '—'} / {t.maxHp ?? '—'}
+                            </div>
+                          )}
+                          {(t.mana != null || t.maxMana != null) && (
+                            <div>
+                              Mana {t.mana ?? '—'} / {t.maxMana ?? '—'}
+                            </div>
+                          )}
+                        </div>
+                        {(t.kind === 'PNJ' || t.kind === 'MORT') &&
+                          t.elementId != null &&
+                          onTokenDoubleClick && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onTokenDoubleClick(t);
+                              }}
+                              className="shrink-0 p-1 rounded bg-fantasy-accent/80 hover:bg-fantasy-accent text-fantasy-bg text-xs"
+                              title="Ouvrir la fiche monstre"
+                            >
+                              📋
+                            </button>
+                          )}
                       </div>
                     )}
                 </div>

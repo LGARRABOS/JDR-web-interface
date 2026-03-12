@@ -4,6 +4,10 @@ import { GamesAPI, MapsAPI, MusicAPI, ElementsAPI } from '../api/client';
 import type { MapData } from '../components/MapCanvas';
 import { MapEditor } from '../components/MapEditor';
 import { Modal, ModalButtons, ModalConfirm } from '../components/Modal';
+import {
+  MonsterEditorModal,
+  type GameElementFull,
+} from '../components/MonsterEditorModal';
 
 interface MusicTrack {
   id: number;
@@ -20,6 +24,13 @@ interface GameElement {
   category: string;
   tags?: string[];
   createdAt: string;
+  description?: string;
+  uniqueTrait?: string;
+  loot?: string;
+  maxHp?: number;
+  maxMana?: number;
+  iconPosX?: number;
+  iconPosY?: number;
 }
 
 type ResourcesTab = 'resources' | 'elements' | 'editor';
@@ -340,6 +351,8 @@ export function ResourcesPage() {
   const [deleteMapId, setDeleteMapId] = useState<number | null>(null);
   const [deleteTrackId, setDeleteTrackId] = useState<number | null>(null);
   const [deleteElementId, setDeleteElementId] = useState<number | null>(null);
+  const [monsterEditorElement, setMonsterEditorElement] =
+    useState<GameElementFull | null>(null);
   const [elementSearchQuery, setElementSearchQuery] = useState('');
   const [elementFilterCategory, setElementFilterCategory] = useState<
     'all' | 'monster' | 'decor'
@@ -509,14 +522,46 @@ export function ResourcesPage() {
           tags
         );
         setElements((prev) => [...prev, data.element]);
+        setPendingElementFile(null);
+        if (cat === 'monster') {
+          const el = data.element as GameElementFull;
+          setMonsterEditorElement({
+            ...el,
+            description: el.description ?? '',
+            uniqueTrait: el.uniqueTrait ?? '',
+            loot: el.loot ?? '',
+            maxHp: el.maxHp ?? 10,
+            maxMana: el.maxMana ?? 0,
+            iconPosX: el.iconPosX ?? 50,
+            iconPosY: el.iconPosY ?? 50,
+          });
+        }
       } catch {
         loadElements();
       } finally {
         setElementUploading(false);
-        setPendingElementFile(null);
       }
     },
     [gameId, loadElements, pendingElementFile]
+  );
+
+  const handleMonsterEditorSave = useCallback(
+    async (patch: Partial<GameElementFull>) => {
+      if (!monsterEditorElement) return;
+      const { data } = await ElementsAPI.update(
+        gameId,
+        monsterEditorElement.id,
+        patch
+      );
+      const updated = (data as { element?: GameElementFull }).element;
+      if (updated) {
+        setElements((prev) =>
+          prev.map((e) => (e.id === updated.id ? updated : e))
+        );
+      }
+      setMonsterEditorElement(null);
+    },
+    [gameId, monsterEditorElement]
   );
 
   const handleDeleteElementConfirm = useCallback(async () => {
@@ -663,6 +708,15 @@ export function ResourcesPage() {
         danger
       />
 
+      {monsterEditorElement && (
+        <MonsterEditorModal
+          element={monsterEditorElement}
+          onClose={() => setMonsterEditorElement(null)}
+          onSave={handleMonsterEditorSave}
+          mode="edit"
+        />
+      )}
+
       <main className="flex-1 min-h-0 overflow-auto p-6">
         <div
           className={`mx-auto ${activeTab === 'editor' ? 'max-w-[none] w-full h-full' : 'max-w-4xl'}`}
@@ -758,16 +812,35 @@ export function ResourcesPage() {
                         <span className="text-sm truncate" title={el.name}>
                           {el.name}
                         </span>
-                        <span className="text-xs text-fantasy-muted-soft">
-                          {el.category === 'monster' ? 'Monstre' : 'Décor'}
-                        </span>
-                        <button
-                          onClick={() => setDeleteElementId(el.id)}
-                          className="text-fantasy-error hover:text-fantasy-error text-xs px-2 py-0.5 rounded"
-                          title="Supprimer"
-                        >
-                          ✕
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {el.category === 'monster' && (
+                            <button
+                              onClick={() =>
+                                setMonsterEditorElement({
+                                  ...el,
+                                  description: el.description ?? '',
+                                  uniqueTrait: el.uniqueTrait ?? '',
+                                  loot: el.loot ?? '',
+                                  maxHp: el.maxHp ?? 10,
+                                  maxMana: el.maxMana ?? 0,
+                                  iconPosX: el.iconPosX ?? 50,
+                                  iconPosY: el.iconPosY ?? 50,
+                                })
+                              }
+                              className="text-fantasy-accent hover:text-fantasy-accent-hover text-xs px-2 py-0.5 rounded"
+                              title="Modifier"
+                            >
+                              Modifier
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setDeleteElementId(el.id)}
+                            className="text-fantasy-error hover:text-fantasy-error text-xs px-2 py-0.5 rounded"
+                            title="Supprimer"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}

@@ -18,6 +18,10 @@ import {
   type MapElement,
 } from '../components/MapCanvas';
 import { TokenPanel, type TokenFormData } from '../components/TokenPanel';
+import {
+  MonsterEditorModal,
+  type GameElementFull,
+} from '../components/MonsterEditorModal';
 import { DicePanel } from '../components/DicePanel';
 import { ChatPanel } from '../components/ChatPanel';
 import { PresenceBar } from '../components/PresenceBar';
@@ -67,8 +71,19 @@ export function TabletopPage() {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [mapElements, setMapElements] = useState<MapElement[]>([]);
   const [elements, setElements] = useState<
-    Array<{ id: number; name: string; imageUrl: string; category: string }>
+    Array<{
+      id: number;
+      name: string;
+      imageUrl: string;
+      category: string;
+      maxHp?: number;
+      maxMana?: number;
+    }>
   >([]);
+  const [monsterViewElement, setMonsterViewElement] = useState<{
+    element: GameElementFull;
+    tokenData: { hp: number; maxHp: number; mana: number; maxMana: number };
+  } | null>(null);
   const [messages, setMessages] = useState<
     Array<{
       id: number;
@@ -254,6 +269,33 @@ export function TabletopPage() {
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
+
+  const handleTokenDoubleClick = useCallback(
+    (t: Token) => {
+      if (
+        (t.kind === 'PNJ' || t.kind === 'MORT') &&
+        t.elementId != null
+      ) {
+        ElementsAPI.get(gameId, t.elementId)
+          .then(({ data }) => {
+            const el = (data as { element?: GameElementFull }).element;
+            if (el) {
+              setMonsterViewElement({
+                element: el,
+                tokenData: {
+                  hp: t.hp ?? el.maxHp ?? 10,
+                  maxHp: t.maxHp ?? el.maxHp ?? 10,
+                  mana: t.mana ?? el.maxMana ?? 0,
+                  maxMana: t.maxMana ?? el.maxMana ?? 0,
+                },
+              });
+            }
+          })
+          .catch(() => setMonsterViewElement(null));
+      }
+    },
+    [gameId]
+  );
 
   useEffect(() => {
     return () => {
@@ -585,7 +627,17 @@ export function TabletopPage() {
       if (!currentMap || !placementData) return;
       const data = placementData;
       setPlacementData(null);
-      const { name, hp, maxHp, mana, maxMana, iconUrl, width, height } = data;
+        const {
+          name,
+          hp,
+          maxHp,
+          mana,
+          maxMana,
+          iconUrl,
+          width,
+          height,
+          elementId,
+        } = data;
       try {
         const { data: res } = await TokensAPI.create(currentMap.id, {
           x,
@@ -600,6 +652,7 @@ export function TabletopPage() {
           width,
           height,
           visibleToPlayers: true,
+          elementId,
         });
         setTokens((prev) =>
           prev.some((t) => t.id === res.token.id) ? prev : [...prev, res.token]
@@ -861,6 +914,7 @@ export function TabletopPage() {
               isGM && placementData ? handleTokenCreate : undefined
             }
             onTokenSelect={setSelectedToken}
+            onTokenDoubleClick={handleTokenDoubleClick}
             fogVisionRadius={game?.fogVisionRadius}
             diceRollOverlay={
               game.isGemma ? (
@@ -954,6 +1008,7 @@ export function TabletopPage() {
                 : null
             }
             onTokenSelect={setSelectedToken}
+            onTokenDoubleClick={handleTokenDoubleClick}
             onTokenUpdate={handleTokenUpdate}
             onTokenDelete={handleTokenDelete}
             tokens={tokens}
@@ -985,6 +1040,15 @@ export function TabletopPage() {
           )}
         </aside>
       </div>
+
+      {monsterViewElement && (
+        <MonsterEditorModal
+          element={monsterViewElement.element}
+          onClose={() => setMonsterViewElement(null)}
+          mode="view"
+          tokenData={monsterViewElement.tokenData}
+        />
+      )}
     </div>
   );
 }

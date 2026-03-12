@@ -128,6 +128,7 @@ export const TokensAPI = {
       mana?: number;
       maxMana?: number;
       visibleToPlayers?: boolean;
+      elementId?: number;
     }
   ) => api.post(`/maps/${mapId}/tokens`, data),
   update: (
@@ -151,6 +152,22 @@ export const TokensAPI = {
 
 export const ElementsAPI = {
   list: (gameId: number) => api.get(`/games/${gameId}/elements`),
+  get: (gameId: number, id: number) =>
+    api.get(`/games/${gameId}/elements/${id}`),
+  update: (
+    gameId: number,
+    id: number,
+    data: {
+      name?: string;
+      description?: string;
+      uniqueTrait?: string;
+      loot?: string;
+      maxHp?: number;
+      maxMana?: number;
+      iconPosX?: number;
+      iconPosY?: number;
+    }
+  ) => api.patch(`/games/${gameId}/elements/${id}`, data),
   upload: async (
     gameId: number,
     file: File,

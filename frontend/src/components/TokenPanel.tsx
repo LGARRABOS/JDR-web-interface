@@ -11,6 +11,7 @@ export interface TokenFormData {
   iconUrl?: string;
   width?: number;
   height?: number;
+  elementId?: number;
 }
 
 interface GameElement {
@@ -18,6 +19,8 @@ interface GameElement {
   name: string;
   imageUrl: string;
   category: string;
+  maxHp?: number;
+  maxMana?: number;
 }
 
 interface Token {
@@ -32,6 +35,7 @@ interface Token {
   maxHp?: number;
   mana?: number;
   maxMana?: number;
+  elementId?: number;
 }
 
 interface TokenPanelProps {
@@ -43,6 +47,7 @@ interface TokenPanelProps {
   onCancelPlacement: () => void;
   selectedToken: Token | null;
   onTokenSelect: (token: Token | null) => void;
+  onTokenDoubleClick?: (token: Token) => void;
   onTokenUpdate: (
     id: number,
     data: {
@@ -68,6 +73,7 @@ export function TokenPanel({
   onCancelPlacement,
   selectedToken,
   onTokenSelect,
+  onTokenDoubleClick,
   onTokenUpdate,
   onTokenDelete,
   tokens,
@@ -96,6 +102,10 @@ export function TokenPanel({
   const [editHeight, setEditHeight] = useState<number>(56);
   const [deleteTokenId, setDeleteTokenId] = useState<number | null>(null);
   const [deleteTokenName, setDeleteTokenName] = useState<string>('');
+  const lastTokenListClickRef = useRef<{
+    tokenId: number;
+    time: number;
+  } | null>(null);
 
   const canEditToken = (t: Token) => isGM || t.ownerUserId === currentUserId;
 
@@ -135,10 +145,12 @@ export function TokenPanel({
 
   const handleSelectElement = (el: GameElement) => {
     setSelectedElement(el);
-    setHp(10);
-    setMaxHp(10);
-    setMana(0);
-    setMaxMana(0);
+    const defHp = el.maxHp ?? 10;
+    const defMana = el.maxMana ?? 0;
+    setHp(defHp);
+    setMaxHp(defHp);
+    setMana(defMana);
+    setMaxMana(defMana);
     setWidth(56);
     setHeight(56);
   };
@@ -159,6 +171,7 @@ export function TokenPanel({
       iconUrl: selectedElement.imageUrl,
       width: width,
       height: height,
+      elementId: selectedElement.id,
     });
   };
 
@@ -405,9 +418,22 @@ export function TokenPanel({
                     ? 'bg-fantasy-accent/30'
                     : 'hover:bg-fantasy-input-soft/50'
                 }`}
-                onClick={() =>
-                  onTokenSelect(selectedToken?.id === t.id ? null : t)
-                }
+                onClick={() => {
+                  const now = Date.now();
+                  const last = lastTokenListClickRef.current;
+                  if (
+                    onTokenDoubleClick &&
+                    last &&
+                    last.tokenId === t.id &&
+                    now - last.time < 350
+                  ) {
+                    lastTokenListClickRef.current = null;
+                    onTokenDoubleClick(t);
+                    return;
+                  }
+                  lastTokenListClickRef.current = { tokenId: t.id, time: now };
+                  onTokenSelect(selectedToken?.id === t.id ? null : t);
+                }}
               >
                 <span
                   className="truncate flex-1 text-fantasy-text-soft"
