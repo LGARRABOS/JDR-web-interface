@@ -188,6 +188,7 @@ func AutoMigrate(db *sql.DB) error {
 		stmts[3], // maps
 		`ALTER TABLE games ADD COLUMN current_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL`,
 		`ALTER TABLE games ADD COLUMN token_movement_locked INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE games ADD COLUMN fog_vision_radius INTEGER NOT NULL DEFAULT 0`,
 		stmts[4], // tokens
 		stmts[5], // fog_patches
 		stmts[6], // game_messages
@@ -201,6 +202,8 @@ func AutoMigrate(db *sql.DB) error {
 		`ALTER TABLE game_elements ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE`,
 		`UPDATE game_elements ge SET user_id = g.owner_id FROM games g WHERE g.id = ge.game_id AND ge.user_id IS NULL`,
 		stmts[11], // map_elements
+		`ALTER TABLE tokens DROP CONSTRAINT IF EXISTS tokens_kind_check`,
+		`ALTER TABLE tokens ADD CONSTRAINT tokens_kind_check CHECK (kind IN ('PJ','PNJ','OBJET','MORT'))`,
 	}
 
 	for _, stmt := range orderedStmts {

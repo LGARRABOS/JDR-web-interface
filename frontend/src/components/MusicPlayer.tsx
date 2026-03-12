@@ -14,11 +14,14 @@ interface MusicPlayerProps {
     trackId: number | null;
     position: number;
     playing: boolean;
+    volume?: number;
   } | null;
 }
 
 export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [currentPosition, setCurrentPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -27,14 +30,21 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
       .catch(() => setTracks([]));
   }, [gameId]);
 
-  const trackUrl = musicState?.trackId
-    ? `/api/games/${gameId}/music/${musicState.trackId}/file`
-    : '';
+  const track = musicState?.trackId
+    ? tracks.find((t) => t.id === musicState.trackId)
+    : null;
+  const trackUrl =
+    track?.url ??
+    (musicState?.trackId
+      ? `/api/games/${gameId}/music/${musicState.trackId}/file`
+      : '');
 
   useEffect(() => {
     if (!musicState || !musicState.trackId) return;
     const audio = audioRef.current;
     if (!audio) return;
+
+    audio.volume = musicState.volume ?? 1;
 
     if (musicState.playing) {
       if (
@@ -55,19 +65,52 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
     }
   }, [musicState, trackUrl]);
 
-  if (!musicState || tracks.length === 0) return null;
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onTimeUpdate = () => setCurrentPosition(audio.currentTime);
+    const onDurationChange = () => setDuration(audio.duration);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('durationchange', onDurationChange);
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('durationchange', onDurationChange);
+    };
+  }, [musicState?.trackId]);
+
+  if (!musicState) return null;
+
+  const pos = musicState.playing ? currentPosition : musicState.position;
 
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
       <h3 className="text-sm font-semibold font-heading mb-2 text-fantasy-text-soft">
         Musique
       </h3>
-      {track && musicState.playing ? (
+      {musicState.playing ? (
         <p className="text-sm text-fantasy-text-soft truncate">
-          ▶ {track.filename}
+          ▶ {track?.filename ?? 'En cours'}
         </p>
       ) : (
-        <p className="text-sm text-fantasy-muted-soft">En pause</p>
+        <p className="text-sm text-fantasy-muted-soft truncate">
+          ⏸ {track?.filename ?? 'En pause'}
+        </p>
+      )}
+      {track && duration > 0 && (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-xs text-fantasy-muted-soft w-8 shrink-0">
+            {Math.floor(pos / 60)}:{(Math.floor(pos % 60) + '').padStart(2, '0')}
+          </span>
+          <div className="flex-1 h-2 rounded bg-fantasy-input-soft overflow-hidden">
+            <div
+              className="h-full bg-fantasy-accent/50"
+              style={{ width: `${(pos / duration) * 100}%` }}
+            />
+          </div>
+          <span className="text-xs text-fantasy-muted-soft w-8 shrink-0">
+            {Math.floor(duration / 60)}:{(Math.floor(duration % 60) + '').padStart(2, '0')}
+          </span>
+        </div>
       )}
       <audio ref={audioRef} className="hidden" />
     </div>

@@ -201,11 +201,12 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 	var g domain.Game
 	var isGemma int
 	var tokenMovementLocked int
+	var fogVisionRadius int
 	var currentMapID sql.NullInt64
 	err = s.db.QueryRow(
-		"SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(token_movement_locked, 0), current_map_id FROM games WHERE id = ?",
+		"SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(token_movement_locked, 0), COALESCE(fog_vision_radius, 0), current_map_id FROM games WHERE id = ?",
 		id,
-	).Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &tokenMovementLocked, &currentMapID)
+	).Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &tokenMovementLocked, &fogVisionRadius, &currentMapID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Partie introuvable"})
 		return
@@ -216,14 +217,15 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 		cn = characterName.String
 	}
 	resp := map[string]interface{}{
-		"id":             g.ID,
-		"name":           g.Name,
-		"inviteCode":     g.InviteCode,
-		"ownerId":       g.OwnerID,
-		"role":          role,
-		"isGemma":       isGemma == 1,
+		"id":                 g.ID,
+		"name":               g.Name,
+		"inviteCode":         g.InviteCode,
+		"ownerId":            g.OwnerID,
+		"role":               role,
+		"isGemma":            isGemma == 1,
 		"tokenMovementLocked": tokenMovementLocked == 1,
-		"characterName": cn,
+		"fogVisionRadius":    fogVisionRadius,
+		"characterName":      cn,
 	}
 	if currentMapID.Valid {
 		resp["currentMapId"] = currentMapID.Int64
@@ -233,6 +235,7 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 
 type updateGameReq struct {
 	TokenMovementLocked *bool `json:"tokenMovementLocked"`
+	FogVisionRadius    *int  `json:"fogVisionRadius"`
 }
 
 func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
@@ -273,6 +276,19 @@ func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.hub.Broadcast(gameID, "gemma.tokensLocked", map[string]interface{}{"locked": *req.TokenMovementLocked})
+	}
+
+	if req.FogVisionRadius != nil {
+		radius := *req.FogVisionRadius
+		if radius < 0 {
+			radius = 0
+		}
+		_, err = s.db.Exec("UPDATE games SET fog_vision_radius = ? WHERE id = ?", radius, gameID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+			return
+		}
+		s.hub.Broadcast(gameID, "game.settings", map[string]interface{}{"fogVisionRadius": radius})
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"message": "ok"})

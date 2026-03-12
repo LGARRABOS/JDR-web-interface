@@ -58,7 +58,7 @@ export const GamesAPI = {
     api.patch(`/games/${id}/me`, data),
   setCurrentMap: (gameId: number, mapId: number) =>
     api.patch(`/games/${gameId}/current-map`, { mapId }),
-  update: (gameId: number, data: { tokenMovementLocked?: boolean }) =>
+  update: (gameId: number, data: { tokenMovementLocked?: boolean; fogVisionRadius?: number }) =>
     api.patch(`/games/${gameId}`, data),
   delete: (id: number) => api.delete(`/games/${id}`),
 };

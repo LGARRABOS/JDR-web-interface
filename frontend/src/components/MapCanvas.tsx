@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 export interface Token {
@@ -56,6 +56,7 @@ interface MapCanvasProps {
   currentUserId: number;
   mapView: MapView;
   tokensMovementLocked?: boolean;
+  fogVisionRadius?: number;
   highlightedPlayerId?: number | null;
   connectedUserIds?: number[];
   /** Pour les jetons joueurs : userId -> { displayName, characterName } pour afficher le nom du personnage */
@@ -79,6 +80,7 @@ export function MapCanvas({
   currentUserId,
   mapView,
   tokensMovementLocked = false,
+  fogVisionRadius = 0,
   highlightedPlayerId = null,
   connectedUserIds = [],
   connectedUsers = [],
@@ -110,6 +112,7 @@ export function MapCanvas({
   } | null>(null);
   const didPanRef = useRef(false);
   const didDragRef = useRef(false);
+  const [inspectedTokenId, setInspectedTokenId] = useState<number | null>(null);
 
   const canMove = useCallback(
     (t: Token) => {
@@ -121,6 +124,8 @@ export function MapCanvas({
   );
 
   const visibleTokens = tokens.filter((t) => isGM || t.visibleToPlayers);
+  const pjTokens = tokens.filter((t) => t.kind === 'PJ');
+  const fogMaskId = `fog-mask-${map?.id ?? 0}`;
 
   const fitScaleToViewport = useCallback(() => {
     if (!map || !onMapViewChange || !canvasRef.current) return;
@@ -137,7 +142,12 @@ export function MapCanvas({
 
   useEffect(() => {
     if (!map) return;
-    const t = setTimeout(() => fitScaleToViewport(), 50);
+    const runFit = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => fitScaleToViewport());
+      });
+    };
+    const t = setTimeout(runFit, 100);
     return () => clearTimeout(t);
   }, [map, fitScaleToViewport]);
 
@@ -279,21 +289,27 @@ export function MapCanvas({
 
   const placementClickRef = useRef(false);
   const handleCanvasClick = (e: React.MouseEvent) => {
-    if (!isGM || !onTokenCreate || !map) return;
     if ((e.target as HTMLElement).closest('[data-token]')) return;
+    setInspectedTokenId(null);
+    onTokenSelect?.(null);
+    if (!isGM || !onTokenCreate || !map) return;
     if (didPanRef.current) {
       didPanRef.current = false;
       return;
     }
     if (placementClickRef.current) return;
     placementClickRef.current = true;
-    const mapRect = mapContainerRef.current?.getBoundingClientRect();
-    if (!mapRect) {
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    if (!canvasRect || canvasRect.width <= 0 || canvasRect.height <= 0) {
       placementClickRef.current = false;
       return;
     }
-    const x = ((e.clientX - mapRect.left) * map.width) / mapRect.width;
-    const y = ((e.clientY - mapRect.top) * map.height) / mapRect.height;
+    const canvasCenterX = canvasRect.left + canvasRect.width / 2;
+    const canvasCenterY = canvasRect.top + canvasRect.height / 2;
+    const x =
+      map.width / 2 + (e.clientX - canvasCenterX) / scale - offset.x;
+    const y =
+      map.height / 2 + (e.clientY - canvasCenterY) / scale - offset.y;
     if (x >= 0 && y >= 0 && x <= map.width && y <= map.height) {
       onTokenCreate(x, y);
     }
@@ -425,6 +441,43 @@ export function MapCanvas({
               />
             </div>
           ))}
+          {isGM === false && fogVisionRadius > 0 && pjTokens.length > 0 && (
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ width: map.width, height: map.height, zIndex: 5 }}
+            >
+              <svg
+                width={map.width}
+                height={map.height}
+                className="absolute inset-0 w-full h-full"
+              >
+                <defs>
+                  <mask id={fogMaskId}>
+                    <rect
+                      width={map.width}
+                      height={map.height}
+                      fill="white"
+                    />
+                    {pjTokens.map((t) => (
+                      <circle
+                        key={t.id}
+                        cx={t.x}
+                        cy={t.y}
+                        r={fogVisionRadius}
+                        fill="black"
+                      />
+                    ))}
+                  </mask>
+                </defs>
+                <rect
+                  width={map.width}
+                  height={map.height}
+                  fill="#2d2a26"
+                  mask={`url(#${fogMaskId})`}
+                />
+              </svg>
+            </div>
+          )}
           {visibleTokens.map((t) => {
             const displayName =
               t.ownerUserId != null
@@ -445,6 +498,7 @@ export function MapCanvas({
                   transform: 'translate(-50%, -50%)',
                   minWidth: t.width ?? 56,
                   minHeight: t.height ?? 56,
+                  zIndex: 10,
                 }}
                 onMouseDown={(e) => {
                   e.preventDefault();
@@ -453,21 +507,28 @@ export function MapCanvas({
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (onTokenSelect && !didDragRef.current) onTokenSelect(t);
+                  if (!didDragRef.current) {
+                    const willClose = inspectedTokenId === t.id;
+                    setInspectedTokenId(willClose ? null : t.id);
+                    onTokenSelect?.(willClose ? null : t);
+                  }
                 }}
                 title={displayName}
               >
-                {(t.hp != null || t.maxHp != null || t.mana != null || t.maxMana != null) && (
-                  <div className="mb-0.5 flex gap-1.5 text-[9px] font-medium text-fantasy-text-soft pointer-events-none">
-                    {(t.hp != null || t.maxHp != null) && (
-                      <span>PV {t.hp ?? '—'}</span>
-                    )}
-                    {(t.mana != null || t.maxMana != null) && (
-                      <span>Mana {t.mana ?? '—'}</span>
-                    )}
+                {t.kind === 'MORT' ? (
+                  <div
+                    className="rounded-full flex items-center justify-center flex-shrink-0 pointer-events-none text-2xl"
+                    style={{
+                      width: t.width ?? 56,
+                      height: t.height ?? 56,
+                      backgroundColor: 'rgba(0,0,0,0.5)',
+                      border: '2px solid #6b7280',
+                    }}
+                    title={`${displayName} (vaincu)`}
+                  >
+                    💀
                   </div>
-                )}
-                {t.iconUrl ? (
+                ) : t.iconUrl ? (
                   <div
                     className="rounded-full overflow-hidden flex-shrink-0 pointer-events-none"
                     style={{
@@ -507,7 +568,8 @@ export function MapCanvas({
                   </div>
                 )}
                 {t.ownerUserId != null &&
-                  !connectedUserIds.includes(t.ownerUserId) && (
+                  !connectedUserIds.includes(t.ownerUserId) &&
+                  t.kind !== 'MORT' && (
                     <span className="mt-0.5 text-[8px] font-medium text-fantasy-muted-soft italic pointer-events-none">
                       hors ligne
                     </span>
@@ -515,6 +577,50 @@ export function MapCanvas({
               </div>
             );
           })}
+          {inspectedTokenId != null && (() => {
+            const t = visibleTokens.find((tok) => tok.id === inspectedTokenId);
+            if (!t) return null;
+            const popupName =
+              t.ownerUserId != null
+                ? connectedUsers.find((u) => u.userId === t.ownerUserId)
+                    ?.characterName ||
+                  connectedUsers.find((u) => u.userId === t.ownerUserId)
+                    ?.displayName ||
+                  t.name
+                : t.name;
+            return (
+              <div
+                className="absolute z-30 rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-2 shadow-lg text-sm min-w-[120px]"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  left: t.x,
+                  top: t.y - (t.height ?? 56) / 2 - 4,
+                  transform: 'translate(-50%, -100%)',
+                }}
+              >
+                <div className="font-medium text-fantasy-text-soft truncate">
+                  {popupName}
+                  {t.kind === 'MORT' && (
+                    <span className="text-fantasy-muted-soft ml-1">(vaincu)</span>
+                  )}
+                </div>
+                {t.kind !== 'MORT' &&
+                  (t.hp != null ||
+                    t.maxHp != null ||
+                    t.mana != null ||
+                    t.maxMana != null) && (
+                    <div className="mt-1 text-xs text-fantasy-muted-soft space-y-0.5">
+                      {(t.hp != null || t.maxHp != null) && (
+                        <div>PV {t.hp ?? '—'} / {t.maxHp ?? '—'}</div>
+                      )}
+                      {(t.mana != null || t.maxMana != null) && (
+                        <div>Mana {t.mana ?? '—'} / {t.maxMana ?? '—'}</div>
+                      )}
+                    </div>
+                  )}
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>

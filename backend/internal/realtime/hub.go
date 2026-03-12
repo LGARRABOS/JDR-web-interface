@@ -175,6 +175,7 @@ func (c *Client) readPump() {
 			GameID   int64   `json:"gameId"`
 			TrackID  int64   `json:"trackId"`
 			Position float64 `json:"position"`
+			Volume   float64 `json:"volume"`
 			Scale    float64 `json:"scale"`
 			OffsetX  float64 `json:"offsetX"`
 			OffsetY  float64 `json:"offsetY"`
@@ -216,7 +217,7 @@ func (c *Client) readPump() {
 			if c.hub.userInfo != nil {
 				_, _, role := c.hub.userInfo(c.userID, req.GameID)
 				if role == "MJ" {
-					payload := map[string]interface{}{"trackId": req.TrackID, "position": req.Position}
+					payload := map[string]interface{}{"trackId": req.TrackID, "position": req.Position, "volume": req.Volume}
 					c.hub.Broadcast(req.GameID, req.Action, payload)
 				}
 			}

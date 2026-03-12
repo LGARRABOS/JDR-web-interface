@@ -413,11 +413,18 @@ export function TokenPanel({
                   className="truncate flex-1 text-fantasy-text-soft"
                   title={t.name}
                 >
+                  {t.kind === 'MORT' && '💀 '}
                   {t.name}
+                  {t.kind === 'MORT' && (
+                    <span className="text-fantasy-muted-soft text-xs ml-1">
+                      (vaincu)
+                    </span>
+                  )}
                 </span>
                 {selectedToken?.id === t.id && !canEditToken(t) ? (
                   <span className="flex items-center gap-1">
-                    {(t.maxHp != null || t.maxMana != null) && (
+                    {t.kind !== 'MORT' &&
+                      (t.maxHp != null || t.maxMana != null) && (
                       <span className="text-fantasy-muted-soft text-xs">
                         {t.maxHp != null && `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
                         {t.maxHp != null && t.maxMana != null && ' '}
@@ -461,7 +468,8 @@ export function TokenPanel({
                   </div>
                 ) : (
                   <span className="flex items-center gap-1">
-                    {(t.maxHp != null || t.maxMana != null) && (
+                    {t.kind !== 'MORT' &&
+                      (t.maxHp != null || t.maxMana != null) && (
                       <span className="text-fantasy-muted-soft text-xs">
                         {t.maxHp != null && `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
                         {t.maxHp != null && t.maxMana != null && ' '}
@@ -491,8 +499,35 @@ export function TokenPanel({
           {selectedToken && canEditToken(selectedToken) && (
             <div className="mt-3 p-3 rounded-lg bg-fantasy-input-soft/50 border border-fantasy-border-soft space-y-3">
               <div className="text-sm font-medium text-fantasy-text-soft truncate">
+                {selectedToken.kind === 'MORT' && '💀 '}
                 {selectedToken.name}
+                {selectedToken.kind === 'MORT' && (
+                  <span className="text-fantasy-muted-soft text-xs ml-1">
+                    (vaincu)
+                  </span>
+                )}
               </div>
+              {selectedToken.kind === 'MORT' ? (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-fantasy-muted-soft flex-1">
+                    Marqueur de créature vaincue. Supprimez pour retirer de la
+                    carte.
+                  </p>
+                  {isGM && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeleteTokenId(selectedToken.id);
+                        setDeleteTokenName(selectedToken.name);
+                      }}
+                      className="px-2 py-1 rounded text-fantasy-error hover:bg-fantasy-danger/30 text-xs"
+                    >
+                      Supprimer
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
               {selectedToken.iconUrl && (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -615,6 +650,8 @@ export function TokenPanel({
                   </div>
                 </div>
               </div>
+                </>
+              )}
             </div>
           )}
         </div>

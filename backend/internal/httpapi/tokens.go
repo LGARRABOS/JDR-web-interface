@@ -287,6 +287,11 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var currentKind string
+	_ = s.db.QueryRow("SELECT kind FROM tokens WHERE id = ?", id).Scan(&currentKind)
+
+	convertToMort := req.Hp != nil && *req.Hp == 0 && currentKind == "PNJ"
+
 	updates := []string{}
 	args := []interface{}{}
 	if req.X != nil {
@@ -313,21 +318,26 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		updates = append(updates, "visible_to_players = ?")
 		args = append(args, v)
 	}
-	if req.Hp != nil {
-		updates = append(updates, "hp = ?")
-		args = append(args, *req.Hp)
-	}
-	if req.MaxHp != nil {
-		updates = append(updates, "max_hp = ?")
-		args = append(args, *req.MaxHp)
-	}
-	if req.Mana != nil {
-		updates = append(updates, "mana = ?")
-		args = append(args, *req.Mana)
-	}
-	if req.MaxMana != nil {
-		updates = append(updates, "max_mana = ?")
-		args = append(args, *req.MaxMana)
+	if convertToMort {
+		updates = append(updates, "kind = ?", "hp = NULL", "max_hp = NULL", "mana = NULL", "max_mana = NULL")
+		args = append(args, "MORT")
+	} else {
+		if req.Hp != nil {
+			updates = append(updates, "hp = ?")
+			args = append(args, *req.Hp)
+		}
+		if req.MaxHp != nil {
+			updates = append(updates, "max_hp = ?")
+			args = append(args, *req.MaxHp)
+		}
+		if req.Mana != nil {
+			updates = append(updates, "mana = ?")
+			args = append(args, *req.Mana)
+		}
+		if req.MaxMana != nil {
+			updates = append(updates, "max_mana = ?")
+			args = append(args, *req.MaxMana)
+		}
 	}
 	if req.IconURL != nil {
 		updates = append(updates, "icon_url = ?")

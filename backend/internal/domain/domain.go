@@ -41,7 +41,7 @@ type Token struct {
 	MapID            int64   `json:"mapId"`
 	CreatedBy        int64   `json:"createdBy"`
 	OwnerUserID      *int64  `json:"ownerUserId,omitempty"`
-	Kind             string  `json:"kind"` // PJ, PNJ, OBJET
+	Kind             string  `json:"kind"` // PJ, PNJ, OBJET, MORT (vaincu)
 	Name             string  `json:"name"`
 	Color            string  `json:"color"`
 	IconURL          string  `json:"iconUrl,omitempty"`

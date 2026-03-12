@@ -60,6 +60,7 @@ export function TabletopPage() {
     currentMapId?: number;
     isGemma?: boolean;
     tokenMovementLocked?: boolean;
+    fogVisionRadius?: number;
   } | null>(null);
   const [maps, setMaps] = useState<MapData[]>([]);
   const [currentMap, setCurrentMap] = useState<MapData | null>(null);
@@ -108,6 +109,7 @@ export function TabletopPage() {
     trackId: number | null;
     position: number;
     playing: boolean;
+    volume?: number;
   } | null>(null);
   const [placementData, setPlacementData] = useState<TokenFormData | null>(
     null
@@ -320,6 +322,12 @@ export function TabletopPage() {
       const { locked } = p as { locked: boolean };
       setGame((g) => (g ? { ...g, tokenMovementLocked: locked } : null));
     },
+    'game.settings': (p) => {
+      const { fogVisionRadius } = p as { fogVisionRadius?: number };
+      if (fogVisionRadius !== undefined) {
+        setGame((g) => (g ? { ...g, fogVisionRadius } : null));
+      }
+    },
     'gemma.turnHighlight': (p) => {
       const { playerId } = p as { playerId?: number | null };
       setHighlightedPlayerId(playerId ?? null);
@@ -364,13 +372,23 @@ export function TabletopPage() {
       setConnectedUsers(Array.from(seen.values()));
     },
     'music.play': (p) => {
-      const { trackId, position } = p as { trackId: number; position: number };
-      setMusicState({ trackId, position: position ?? 0, playing: true });
+      const { trackId, position, volume } = p as {
+        trackId: number;
+        position: number;
+        volume?: number;
+      };
+      setMusicState({
+        trackId,
+        position: position ?? 0,
+        playing: true,
+        volume: volume ?? 1,
+      });
     },
     'music.pause': (p) => {
-      const { trackId, position } = p as {
+      const { trackId, position, volume } = p as {
         trackId?: number;
         position?: number;
+        volume?: number;
       };
       setMusicState((prev) =>
         prev
@@ -378,16 +396,21 @@ export function TabletopPage() {
               trackId: trackId ?? prev.trackId,
               position: position ?? prev.position,
               playing: false,
+              volume: volume ?? prev.volume ?? 1,
             }
           : null
       );
     },
     'music.seek': (p) => {
-      const { trackId, position } = p as { trackId: number; position: number };
+      const { trackId, position, volume } = p as {
+        trackId: number;
+        position: number;
+        volume?: number;
+      };
       setMusicState((prev) =>
         prev
-          ? { ...prev, trackId, position }
-          : { trackId, position, playing: false }
+          ? { ...prev, trackId, position, volume: volume ?? prev.volume ?? 1 }
+          : { trackId, position, playing: false, volume: volume ?? 1 }
       );
     },
     'map.displayed': (p) => {
@@ -457,10 +480,17 @@ export function TabletopPage() {
       }
     ) => {
       try {
-        await TokensAPI.update(id, data);
-        setTokens((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, ...data } : t))
-        );
+        const res = await TokensAPI.update(id, data);
+        const updated = (res.data as { token?: Token }).token;
+        if (updated) {
+          setTokens((prev) =>
+            prev.map((t) => (t.id === id ? { ...t, ...updated } : t))
+          );
+        } else {
+          setTokens((prev) =>
+            prev.map((t) => (t.id === id ? { ...t, ...data } : t))
+          );
+        }
       } catch {
         loadTokens();
       }
@@ -755,7 +785,7 @@ export function TabletopPage() {
         </div>
       )}
 
-      {game.isGemma && isGM && (
+          {game.isGemma && isGM && (
         <div className="px-4 py-2 bg-fantasy-surface border-b border-fantasy-border-soft flex flex-wrap items-center gap-4 text-sm">
           <strong className="text-fantasy-text-soft">GEMMA :</strong>
           <Checkbox
@@ -820,7 +850,7 @@ export function TabletopPage() {
             highlightedPlayerId={highlightedPlayerId}
             connectedUserIds={connectedUsers.map((u) => u.userId)}
             connectedUsers={connectedUsers}
-            onMapViewChange={isGM ? handleMapViewChange : undefined}
+            onMapViewChange={handleMapViewChange}
             onMapPanEnd={isGM ? flushMapView : undefined}
             onTokenMove={handleTokenMove}
             onTokenDragStart={handleTokenDragStart}
@@ -829,6 +859,7 @@ export function TabletopPage() {
               isGM && placementData ? handleTokenCreate : undefined
             }
             onTokenSelect={setSelectedToken}
+            fogVisionRadius={game?.fogVisionRadius}
             diceRollOverlay={
               game.isGemma ? (
                 <DiceRollOverlay
@@ -842,6 +873,69 @@ export function TabletopPage() {
         </div>
         <aside className="w-80 flex flex-col gap-4 p-4 bg-fantasy-surface/50 overflow-y-auto text-fantasy-text-soft">
           <PresenceBar users={connectedUsers} />
+          <DicePanel
+            gameId={gameId}
+            onRoll={handleRoll}
+            rollError={rollError}
+            lastRoll={lastRoll}
+            lastRollHidden={lastRollHidden}
+            isGemma={game.isGemma}
+            isGM={isGM}
+          />
+          <ChatPanel messages={messages} onSend={handleSendMessage} />
+          {isGM && game && (
+            <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
+              <h3 className="text-sm font-semibold font-heading mb-2 text-fantasy-text-soft">
+                Paramètres carte
+              </h3>
+              <label className="flex items-center gap-2 cursor-pointer mb-2">
+                <Checkbox
+                  checked={(game.fogVisionRadius ?? 0) > 0}
+                  onChange={async () => {
+                    const next = (game.fogVisionRadius ?? 0) > 0 ? 0 : 120;
+                    try {
+                      await GamesAPI.update(gameId, { fogVisionRadius: next });
+                      setGame((g) => (g ? { ...g, fogVisionRadius: next } : null));
+                    } catch {
+                      loadGame();
+                    }
+                  }}
+                  aria-label="Zone d'obscurité"
+                />
+                <span className="text-sm text-fantasy-muted-soft">
+                  Zone d&apos;obscurité (nuit/grotte)
+                </span>
+              </label>
+              {(game.fogVisionRadius ?? 0) > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-fantasy-muted-soft">Rayon :</span>
+                  <input
+                    type="number"
+                    min={40}
+                    max={300}
+                    step={20}
+                    value={game.fogVisionRadius ?? 120}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!Number.isNaN(v) && v >= 0) {
+                        setGame((g) => (g ? { ...g, fogVisionRadius: v } : null));
+                      }
+                    }}
+                    onBlur={async () => {
+                      const r = game.fogVisionRadius ?? 120;
+                      try {
+                        await GamesAPI.update(gameId, { fogVisionRadius: r });
+                      } catch {
+                        loadGame();
+                      }
+                    }}
+                    className="w-16 rounded bg-fantasy-input-soft px-2 py-1 text-sm text-fantasy-text-soft"
+                  />
+                  <span className="text-xs text-fantasy-muted-soft">px</span>
+                </div>
+              )}
+            </div>
+          )}
           <TokenPanel
             isGM={isGM}
             currentUserId={user?.id ?? 0}
@@ -885,16 +979,6 @@ export function TabletopPage() {
           ) : (
             <MusicPlayer gameId={gameId} musicState={musicState} />
           )}
-          <DicePanel
-            gameId={gameId}
-            onRoll={handleRoll}
-            rollError={rollError}
-            lastRoll={lastRoll}
-            lastRollHidden={lastRollHidden}
-            isGemma={game.isGemma}
-            isGM={isGM}
-          />
-          <ChatPanel messages={messages} onSend={handleSendMessage} />
         </aside>
       </div>
     </div>
