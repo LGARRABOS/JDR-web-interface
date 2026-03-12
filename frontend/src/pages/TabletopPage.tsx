@@ -272,10 +272,7 @@ export function TabletopPage() {
 
   const handleTokenDoubleClick = useCallback(
     (t: Token) => {
-      if (
-        (t.kind === 'PNJ' || t.kind === 'MORT') &&
-        t.elementId != null
-      ) {
+      if ((t.kind === 'PNJ' || t.kind === 'MORT') && t.elementId != null) {
         ElementsAPI.get(gameId, t.elementId)
           .then(({ data }) => {
             const el = (data as { element?: GameElementFull }).element;
@@ -627,17 +624,17 @@ export function TabletopPage() {
       if (!currentMap || !placementData) return;
       const data = placementData;
       setPlacementData(null);
-        const {
-          name,
-          hp,
-          maxHp,
-          mana,
-          maxMana,
-          iconUrl,
-          width,
-          height,
-          elementId,
-        } = data;
+      const {
+        name,
+        hp,
+        maxHp,
+        mana,
+        maxMana,
+        iconUrl,
+        width,
+        height,
+        elementId,
+      } = data;
       try {
         const { data: res } = await TokensAPI.create(currentMap.id, {
           x,

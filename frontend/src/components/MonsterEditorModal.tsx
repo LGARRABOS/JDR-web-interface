@@ -58,10 +58,10 @@ export function MonsterEditorModal({
   }, [onClose]);
 
   const isEdit = mode === 'edit';
-  const displayHp = tokenData ? tokenData.hp : element.maxHp ?? 10;
-  const displayMaxHp = tokenData ? tokenData.maxHp : element.maxHp ?? 10;
-  const displayMana = tokenData ? tokenData.mana : element.maxMana ?? 0;
-  const displayMaxMana = tokenData ? tokenData.maxMana : element.maxMana ?? 0;
+  const displayHp = tokenData ? tokenData.hp : (element.maxHp ?? 10);
+  const displayMaxHp = tokenData ? tokenData.maxHp : (element.maxHp ?? 10);
+  const displayMana = tokenData ? tokenData.mana : (element.maxMana ?? 0);
+  const displayMaxMana = tokenData ? tokenData.maxMana : (element.maxMana ?? 0);
 
   const handleImageDrag = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -113,7 +113,18 @@ export function MonsterEditorModal({
     } finally {
       setSaving(false);
     }
-  }, [name, description, uniqueTrait, loot, maxHp, maxMana, iconPosX, iconPosY, onSave, onClose]);
+  }, [
+    name,
+    description,
+    uniqueTrait,
+    loot,
+    maxHp,
+    maxMana,
+    iconPosX,
+    iconPosY,
+    onSave,
+    onClose,
+  ]);
 
   return (
     <div
