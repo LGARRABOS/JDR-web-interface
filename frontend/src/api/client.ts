@@ -20,12 +20,18 @@ api.interceptors.response.use(
     if (data && typeof data === 'object' && !data.message && data.error) {
       data.message = data.error;
     }
-    if (data && typeof data === 'object' && !data.message && err.response?.status) {
+    if (
+      data &&
+      typeof data === 'object' &&
+      !data.message &&
+      err.response?.status
+    ) {
       const status = err.response.status;
       if (status === 401) data.message = 'Identifiants incorrects';
       else if (status === 403) data.message = 'Accès refusé';
       else if (status === 404) data.message = 'Ressource introuvable';
-      else if (status >= 500) data.message = 'Erreur serveur, réessayez plus tard';
+      else if (status >= 500)
+        data.message = 'Erreur serveur, réessayez plus tard';
     }
     return Promise.reject(err);
   }
@@ -58,8 +64,10 @@ export const GamesAPI = {
     api.patch(`/games/${id}/me`, data),
   setCurrentMap: (gameId: number, mapId: number) =>
     api.patch(`/games/${gameId}/current-map`, { mapId }),
-  update: (gameId: number, data: { tokenMovementLocked?: boolean; fogVisionRadius?: number }) =>
-    api.patch(`/games/${gameId}`, data),
+  update: (
+    gameId: number,
+    data: { tokenMovementLocked?: boolean; fogVisionRadius?: number }
+  ) => api.patch(`/games/${gameId}`, data),
   delete: (id: number) => api.delete(`/games/${id}`),
 };
 

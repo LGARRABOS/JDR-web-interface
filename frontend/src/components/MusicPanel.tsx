@@ -139,7 +139,10 @@ export function MusicPanel({
 
   const handleNext = useCallback(() => {
     if (tracks.length === 0) return;
-    const idx = currentIndex < 0 || currentIndex >= tracks.length - 1 ? 0 : currentIndex + 1;
+    const idx =
+      currentIndex < 0 || currentIndex >= tracks.length - 1
+        ? 0
+        : currentIndex + 1;
     handlePlay(tracks[idx].id, 0);
   }, [tracks, currentIndex, handlePlay]);
 
@@ -219,7 +222,9 @@ export function MusicPanel({
               </button>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-fantasy-muted-soft w-8 shrink-0">Vol</span>
+              <span className="text-xs text-fantasy-muted-soft w-8 shrink-0">
+                Vol
+              </span>
               <input
                 type="range"
                 min={0}
@@ -233,7 +238,8 @@ export function MusicPanel({
             {isPlaying && duration > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-fantasy-muted-soft w-8 shrink-0">
-                  {Math.floor(position / 60)}:{(Math.floor(position % 60) + '').padStart(2, '0')}
+                  {Math.floor(position / 60)}:
+                  {(Math.floor(position % 60) + '').padStart(2, '0')}
                 </span>
                 <input
                   type="range"
@@ -245,7 +251,8 @@ export function MusicPanel({
                   className="flex-1 h-2 rounded bg-fantasy-input-soft accent-fantasy-accent"
                 />
                 <span className="text-xs text-fantasy-muted-soft w-8 shrink-0">
-                  {Math.floor(duration / 60)}:{(Math.floor(duration % 60) + '').padStart(2, '0')}
+                  {Math.floor(duration / 60)}:
+                  {(Math.floor(duration % 60) + '').padStart(2, '0')}
                 </span>
               </div>
             )}

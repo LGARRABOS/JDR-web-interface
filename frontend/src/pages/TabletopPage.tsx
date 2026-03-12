@@ -88,9 +88,9 @@ export function TabletopPage() {
     result: number;
     displayName?: string;
   } | null>(null);
-  const [highlightedPlayerId, setHighlightedPlayerId] = useState<
-    number | null
-  >(null);
+  const [highlightedPlayerId, setHighlightedPlayerId] = useState<number | null>(
+    null
+  );
   const [selectedPlayerForTurn, setSelectedPlayerForTurn] = useState<
     number | null
   >(null);
@@ -127,7 +127,9 @@ export function TabletopPage() {
   const mapViewLastSendRef = useRef<number>(0);
   const mapViewPendingRef = useRef<MapView | null>(null);
   const mapViewRef = useRef<MapView>(mapView);
-  const sendRef = useRef<((a: string, p?: Record<string, unknown>) => void) | null>(null);
+  const sendRef = useRef<
+    ((a: string, p?: Record<string, unknown>) => void) | null
+  >(null);
 
   const isGM = game?.role === 'MJ';
 
@@ -785,7 +787,7 @@ export function TabletopPage() {
         </div>
       )}
 
-          {game.isGemma && isGM && (
+      {game.isGemma && isGM && (
         <div className="px-4 py-2 bg-fantasy-surface border-b border-fantasy-border-soft flex flex-wrap items-center gap-4 text-sm">
           <strong className="text-fantasy-text-soft">GEMMA :</strong>
           <Checkbox
@@ -862,11 +864,7 @@ export function TabletopPage() {
             fogVisionRadius={game?.fogVisionRadius}
             diceRollOverlay={
               game.isGemma ? (
-                <DiceRollOverlay
-                  roll={lastRoll}
-                  durationMs={2500}
-                  inline
-                />
+                <DiceRollOverlay roll={lastRoll} durationMs={2500} inline />
               ) : undefined
             }
           />
@@ -895,7 +893,9 @@ export function TabletopPage() {
                     const next = (game.fogVisionRadius ?? 0) > 0 ? 0 : 120;
                     try {
                       await GamesAPI.update(gameId, { fogVisionRadius: next });
-                      setGame((g) => (g ? { ...g, fogVisionRadius: next } : null));
+                      setGame((g) =>
+                        g ? { ...g, fogVisionRadius: next } : null
+                      );
                     } catch {
                       loadGame();
                     }
@@ -908,7 +908,9 @@ export function TabletopPage() {
               </label>
               {(game.fogVisionRadius ?? 0) > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-fantasy-muted-soft">Rayon :</span>
+                  <span className="text-sm text-fantasy-muted-soft">
+                    Rayon :
+                  </span>
                   <input
                     type="number"
                     min={40}
@@ -918,7 +920,9 @@ export function TabletopPage() {
                     onChange={(e) => {
                       const v = parseInt(e.target.value, 10);
                       if (!Number.isNaN(v) && v >= 0) {
-                        setGame((g) => (g ? { ...g, fogVisionRadius: v } : null));
+                        setGame((g) =>
+                          g ? { ...g, fogVisionRadius: v } : null
+                        );
                       }
                     }}
                     onBlur={async () => {

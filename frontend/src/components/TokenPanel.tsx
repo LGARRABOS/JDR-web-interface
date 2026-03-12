@@ -425,13 +425,14 @@ export function TokenPanel({
                   <span className="flex items-center gap-1">
                     {t.kind !== 'MORT' &&
                       (t.maxHp != null || t.maxMana != null) && (
-                      <span className="text-fantasy-muted-soft text-xs">
-                        {t.maxHp != null && `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
-                        {t.maxHp != null && t.maxMana != null && ' '}
-                        {t.maxMana != null &&
-                          `Mana ${t.mana ?? t.maxMana}/${t.maxMana}`}
-                      </span>
-                    )}
+                        <span className="text-fantasy-muted-soft text-xs">
+                          {t.maxHp != null &&
+                            `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
+                          {t.maxHp != null && t.maxMana != null && ' '}
+                          {t.maxMana != null &&
+                            `Mana ${t.mana ?? t.maxMana}/${t.maxMana}`}
+                        </span>
+                      )}
                     {isGM && (
                       <button
                         type="button"
@@ -470,13 +471,14 @@ export function TokenPanel({
                   <span className="flex items-center gap-1">
                     {t.kind !== 'MORT' &&
                       (t.maxHp != null || t.maxMana != null) && (
-                      <span className="text-fantasy-muted-soft text-xs">
-                        {t.maxHp != null && `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
-                        {t.maxHp != null && t.maxMana != null && ' '}
-                        {t.maxMana != null &&
-                          `Mana ${t.mana ?? t.maxMana}/${t.maxMana}`}
-                      </span>
-                    )}
+                        <span className="text-fantasy-muted-soft text-xs">
+                          {t.maxHp != null &&
+                            `PV ${t.hp ?? t.maxHp}/${t.maxHp}`}
+                          {t.maxHp != null && t.maxMana != null && ' '}
+                          {t.maxMana != null &&
+                            `Mana ${t.mana ?? t.maxMana}/${t.maxMana}`}
+                        </span>
+                      )}
                     {isGM && (
                       <button
                         type="button"
@@ -528,128 +530,134 @@ export function TokenPanel({
                 </div>
               ) : (
                 <>
-              {selectedToken.iconUrl && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs text-fantasy-muted-soft mb-0.5">
-                      Taille (W × H)
-                    </label>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        min={20}
-                        className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
-                        value={editWidth}
-                        onChange={(e) => {
-                          const v = Math.max(
-                            20,
-                            parseInt(e.target.value, 10) || 56
-                          );
-                          setEditWidth(v);
-                          scheduleTokenUpdate(selectedToken, {
-                            width: v,
-                            height: editHeight,
-                          });
-                        }}
-                      />
-                      <span className="text-fantasy-muted-soft text-sm">×</span>
-                      <input
-                        type="number"
-                        min={20}
-                        className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
-                        value={editHeight}
-                        onChange={(e) => {
-                          const v = Math.max(
-                            20,
-                            parseInt(e.target.value, 10) || 56
-                          );
-                          setEditHeight(v);
-                          scheduleTokenUpdate(selectedToken, {
-                            width: editWidth,
-                            height: v,
-                          });
-                        }}
-                      />
+                  {selectedToken.iconUrl && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-fantasy-muted-soft mb-0.5">
+                          Taille (W × H)
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={20}
+                            className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
+                            value={editWidth}
+                            onChange={(e) => {
+                              const v = Math.max(
+                                20,
+                                parseInt(e.target.value, 10) || 56
+                              );
+                              setEditWidth(v);
+                              scheduleTokenUpdate(selectedToken, {
+                                width: v,
+                                height: editHeight,
+                              });
+                            }}
+                          />
+                          <span className="text-fantasy-muted-soft text-sm">
+                            ×
+                          </span>
+                          <input
+                            type="number"
+                            min={20}
+                            className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
+                            value={editHeight}
+                            onChange={(e) => {
+                              const v = Math.max(
+                                20,
+                                parseInt(e.target.value, 10) || 56
+                              );
+                              setEditHeight(v);
+                              scheduleTokenUpdate(selectedToken, {
+                                width: editWidth,
+                                height: v,
+                              });
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-fantasy-muted-soft mb-0.5">
+                        PV
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
+                          value={editHp}
+                          onChange={(e) => {
+                            const v = Math.max(
+                              0,
+                              parseInt(e.target.value, 10) || 0
+                            );
+                            setEditHp(v);
+                            scheduleTokenUpdate(selectedToken, { hp: v });
+                          }}
+                        />
+                        <span className="text-fantasy-muted-soft text-sm">
+                          /
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
+                          value={editMaxHp}
+                          onChange={(e) => {
+                            const v = Math.max(
+                              0,
+                              parseInt(e.target.value, 10) || 0
+                            );
+                            setEditMaxHp(v);
+                            if (editHp > v) setEditHp(v);
+                            scheduleTokenUpdate(selectedToken, { maxHp: v });
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-fantasy-muted-soft mb-0.5">
+                        Mana
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
+                          value={editMana}
+                          onChange={(e) => {
+                            const v = Math.max(
+                              0,
+                              parseInt(e.target.value, 10) || 0
+                            );
+                            setEditMana(v);
+                            scheduleTokenUpdate(selectedToken, { mana: v });
+                          }}
+                        />
+                        <span className="text-fantasy-muted-soft text-sm">
+                          /
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
+                          value={editMaxMana}
+                          onChange={(e) => {
+                            const v = Math.max(
+                              0,
+                              parseInt(e.target.value, 10) || 0
+                            );
+                            setEditMaxMana(v);
+                            if (editMana > v) setEditMana(v);
+                            scheduleTokenUpdate(selectedToken, { maxMana: v });
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs text-fantasy-muted-soft mb-0.5">
-                    PV
-                  </label>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
-                      value={editHp}
-                      onChange={(e) => {
-                        const v = Math.max(
-                          0,
-                          parseInt(e.target.value, 10) || 0
-                        );
-                        setEditHp(v);
-                        scheduleTokenUpdate(selectedToken, { hp: v });
-                      }}
-                    />
-                    <span className="text-fantasy-muted-soft text-sm">/</span>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
-                      value={editMaxHp}
-                      onChange={(e) => {
-                        const v = Math.max(
-                          0,
-                          parseInt(e.target.value, 10) || 0
-                        );
-                        setEditMaxHp(v);
-                        if (editHp > v) setEditHp(v);
-                        scheduleTokenUpdate(selectedToken, { maxHp: v });
-                      }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-fantasy-muted-soft mb-0.5">
-                    Mana
-                  </label>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
-                      value={editMana}
-                      onChange={(e) => {
-                        const v = Math.max(
-                          0,
-                          parseInt(e.target.value, 10) || 0
-                        );
-                        setEditMana(v);
-                        scheduleTokenUpdate(selectedToken, { mana: v });
-                      }}
-                    />
-                    <span className="text-fantasy-muted-soft text-sm">/</span>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-14 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
-                      value={editMaxMana}
-                      onChange={(e) => {
-                        const v = Math.max(
-                          0,
-                          parseInt(e.target.value, 10) || 0
-                        );
-                        setEditMaxMana(v);
-                        if (editMana > v) setEditMana(v);
-                        scheduleTokenUpdate(selectedToken, { maxMana: v });
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
                 </>
               )}
             </div>

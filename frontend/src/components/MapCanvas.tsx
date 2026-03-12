@@ -60,7 +60,11 @@ interface MapCanvasProps {
   highlightedPlayerId?: number | null;
   connectedUserIds?: number[];
   /** Pour les jetons joueurs : userId -> { displayName, characterName } pour afficher le nom du personnage */
-  connectedUsers?: Array<{ userId: number; displayName: string; characterName?: string }>;
+  connectedUsers?: Array<{
+    userId: number;
+    displayName: string;
+    characterName?: string;
+  }>;
   onMapViewChange?: (view: MapView) => void;
   onMapPanEnd?: () => void;
   onTokenMove?: (id: number, x: number, y: number) => void;
@@ -306,10 +310,8 @@ export function MapCanvas({
     }
     const canvasCenterX = canvasRect.left + canvasRect.width / 2;
     const canvasCenterY = canvasRect.top + canvasRect.height / 2;
-    const x =
-      map.width / 2 + (e.clientX - canvasCenterX) / scale - offset.x;
-    const y =
-      map.height / 2 + (e.clientY - canvasCenterY) / scale - offset.y;
+    const x = map.width / 2 + (e.clientX - canvasCenterX) / scale - offset.x;
+    const y = map.height / 2 + (e.clientY - canvasCenterY) / scale - offset.y;
     if (x >= 0 && y >= 0 && x <= map.width && y <= map.height) {
       onTokenCreate(x, y);
     }
@@ -328,7 +330,7 @@ export function MapCanvas({
         )}
         <p>
           {onTokenCreate
-            ? "Aucune carte. Ajoutez une carte pour afficher les jetons."
+            ? 'Aucune carte. Ajoutez une carte pour afficher les jetons.'
             : 'Aucune carte pour le moment. Le MJ en ajoutera une.'}
         </p>
         {onTokenCreate && gameId > 0 && (
@@ -453,11 +455,7 @@ export function MapCanvas({
               >
                 <defs>
                   <mask id={fogMaskId}>
-                    <rect
-                      width={map.width}
-                      height={map.height}
-                      fill="white"
-                    />
+                    <rect width={map.width} height={map.height} fill="white" />
                     {pjTokens.map((t) => (
                       <circle
                         key={t.id}
@@ -563,7 +561,9 @@ export function MapCanvas({
                     }}
                   >
                     <span className="truncate w-full text-center leading-tight">
-                      {(displayName.length > 20 ? `${displayName.slice(0, 20)}…` : displayName)}
+                      {displayName.length > 20
+                        ? `${displayName.slice(0, 20)}…`
+                        : displayName}
                     </span>
                   </div>
                 )}
@@ -577,50 +577,59 @@ export function MapCanvas({
               </div>
             );
           })}
-          {inspectedTokenId != null && (() => {
-            const t = visibleTokens.find((tok) => tok.id === inspectedTokenId);
-            if (!t) return null;
-            const popupName =
-              t.ownerUserId != null
-                ? connectedUsers.find((u) => u.userId === t.ownerUserId)
-                    ?.characterName ||
-                  connectedUsers.find((u) => u.userId === t.ownerUserId)
-                    ?.displayName ||
-                  t.name
-                : t.name;
-            return (
-              <div
-                className="absolute z-30 rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-2 shadow-lg text-sm min-w-[120px]"
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  left: t.x,
-                  top: t.y - (t.height ?? 56) / 2 - 4,
-                  transform: 'translate(-50%, -100%)',
-                }}
-              >
-                <div className="font-medium text-fantasy-text-soft truncate">
-                  {popupName}
-                  {t.kind === 'MORT' && (
-                    <span className="text-fantasy-muted-soft ml-1">(vaincu)</span>
-                  )}
+          {inspectedTokenId != null &&
+            (() => {
+              const t = visibleTokens.find(
+                (tok) => tok.id === inspectedTokenId
+              );
+              if (!t) return null;
+              const popupName =
+                t.ownerUserId != null
+                  ? connectedUsers.find((u) => u.userId === t.ownerUserId)
+                      ?.characterName ||
+                    connectedUsers.find((u) => u.userId === t.ownerUserId)
+                      ?.displayName ||
+                    t.name
+                  : t.name;
+              return (
+                <div
+                  className="absolute z-30 rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-2 shadow-lg text-sm min-w-[120px]"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    left: t.x,
+                    top: t.y - (t.height ?? 56) / 2 - 4,
+                    transform: 'translate(-50%, -100%)',
+                  }}
+                >
+                  <div className="font-medium text-fantasy-text-soft truncate">
+                    {popupName}
+                    {t.kind === 'MORT' && (
+                      <span className="text-fantasy-muted-soft ml-1">
+                        (vaincu)
+                      </span>
+                    )}
+                  </div>
+                  {t.kind !== 'MORT' &&
+                    (t.hp != null ||
+                      t.maxHp != null ||
+                      t.mana != null ||
+                      t.maxMana != null) && (
+                      <div className="mt-1 text-xs text-fantasy-muted-soft space-y-0.5">
+                        {(t.hp != null || t.maxHp != null) && (
+                          <div>
+                            PV {t.hp ?? '—'} / {t.maxHp ?? '—'}
+                          </div>
+                        )}
+                        {(t.mana != null || t.maxMana != null) && (
+                          <div>
+                            Mana {t.mana ?? '—'} / {t.maxMana ?? '—'}
+                          </div>
+                        )}
+                      </div>
+                    )}
                 </div>
-                {t.kind !== 'MORT' &&
-                  (t.hp != null ||
-                    t.maxHp != null ||
-                    t.mana != null ||
-                    t.maxMana != null) && (
-                    <div className="mt-1 text-xs text-fantasy-muted-soft space-y-0.5">
-                      {(t.hp != null || t.maxHp != null) && (
-                        <div>PV {t.hp ?? '—'} / {t.maxHp ?? '—'}</div>
-                      )}
-                      {(t.mana != null || t.maxMana != null) && (
-                        <div>Mana {t.mana ?? '—'} / {t.maxMana ?? '—'}</div>
-                      )}
-                    </div>
-                  )}
-              </div>
-            );
-          })()}
+              );
+            })()}
         </div>
       </div>
     </div>

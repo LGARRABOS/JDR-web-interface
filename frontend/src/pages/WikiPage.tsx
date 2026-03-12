@@ -13,7 +13,8 @@ export function WikiPage() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<WikiArticle | null>(
-    () => WIKI_ARTICLES.find((a) => a.category === 'Démarrage') ?? WIKI_ARTICLES[0]
+    () =>
+      WIKI_ARTICLES.find((a) => a.category === 'Démarrage') ?? WIKI_ARTICLES[0]
   );
 
   const allTags = useMemo(() => getAllTags(), []);
@@ -83,7 +84,9 @@ export function WikiPage() {
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         {/* Tags - barre horizontale sous le header */}
         <div className="shrink-0 px-4 py-3 border-b border-fantasy-border-soft bg-fantasy-surface/30">
-          <p className="text-xs text-fantasy-muted-soft mb-2">Filtrer par tag</p>
+          <p className="text-xs text-fantasy-muted-soft mb-2">
+            Filtrer par tag
+          </p>
           <div className="flex flex-wrap gap-2">
             {allTags.map((tag) => (
               <button
@@ -137,7 +140,9 @@ export function WikiPage() {
           )}
           <aside
             className={`w-56 shrink-0 border-r border-fantasy-border-soft bg-fantasy-surface/80 overflow-y-auto sm:block ${
-              sidebarOpen ? 'fixed inset-y-0 left-0 z-10 pt-16 block' : 'hidden sm:block'
+              sidebarOpen
+                ? 'fixed inset-y-0 left-0 z-10 pt-16 block'
+                : 'hidden sm:block'
             }`}
           >
             <nav className="p-4 space-y-4">
@@ -194,7 +199,10 @@ export function WikiPage() {
                 </div>
                 <div className="prose prose-invert max-w-none text-fantasy-text-soft space-y-3">
                   {selectedArticle.content.split(/\n\n+/).map((para, i) => (
-                    <p key={i} className="text-fantasy-text-soft leading-relaxed">
+                    <p
+                      key={i}
+                      className="text-fantasy-text-soft leading-relaxed"
+                    >
                       {para}
                     </p>
                   ))}

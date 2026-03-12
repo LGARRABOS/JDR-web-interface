@@ -56,8 +56,7 @@ export function DiceRollOverlay({
 
   const accentColor = getRollColor(displayRoll.expression, displayRoll.result);
   const modifier = getModifierFromExpression(displayRoll.expression);
-  const rawResult =
-    modifier !== 0 ? displayRoll.result - modifier : null;
+  const rawResult = modifier !== 0 ? displayRoll.result - modifier : null;
 
   const content = (
     <div
@@ -65,40 +64,40 @@ export function DiceRollOverlay({
         visible ? 'opacity-100 scale-100' : 'opacity-0 scale-90'
       }`}
     >
-        <div
-          className="relative rounded-2xl px-12 py-8 shadow-[0_8px_32px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,0,0,0.2)] overflow-hidden"
-          style={{
-            background:
-              'linear-gradient(145deg, rgba(45,38,32,0.98) 0%, rgba(26,22,18,0.98) 100%)',
-            borderLeft: `4px solid ${accentColor}`,
-            borderRight: `4px solid ${accentColor}`,
-            borderTop: '1px solid rgba(201,162,39,0.3)',
-            borderBottom: '1px solid rgba(201,162,39,0.3)',
-          }}
+      <div
+        className="relative rounded-2xl px-12 py-8 shadow-[0_8px_32px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,0,0,0.2)] overflow-hidden"
+        style={{
+          background:
+            'linear-gradient(145deg, rgba(45,38,32,0.98) 0%, rgba(26,22,18,0.98) 100%)',
+          borderLeft: `4px solid ${accentColor}`,
+          borderRight: `4px solid ${accentColor}`,
+          borderTop: '1px solid rgba(201,162,39,0.3)',
+          borderBottom: '1px solid rgba(201,162,39,0.3)',
+        }}
+      >
+        <p className="text-fantasy-muted-soft text-sm mb-3 text-center">
+          {displayRoll.displayName ?? 'Lancer'} a lancé
+        </p>
+        <p
+          className="text-[5rem] font-bold text-fantasy-accent leading-none text-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
+          style={{ fontVariantNumeric: 'tabular-nums' }}
         >
-          <p className="text-fantasy-muted-soft text-sm mb-3 text-center">
-            {displayRoll.displayName ?? 'Lancer'} a lancé
+          {displayRoll.result}
+        </p>
+        {rawResult !== null && (
+          <p className="text-lg text-fantasy-muted-soft text-center mt-1">
+            Dé brut : {rawResult}
           </p>
-          <p
-            className="text-[5rem] font-bold text-fantasy-accent leading-none text-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
-            style={{ fontVariantNumeric: 'tabular-nums' }}
+        )}
+        <div className="mt-4 flex justify-center">
+          <span
+            className="px-3 py-1 rounded-lg text-sm font-medium bg-fantasy-input-soft text-fantasy-text-soft border border-fantasy-border-soft"
+            style={{ borderColor: `${accentColor}40` }}
           >
-            {displayRoll.result}
-          </p>
-          {rawResult !== null && (
-            <p className="text-lg text-fantasy-muted-soft text-center mt-1">
-              Dé brut : {rawResult}
-            </p>
-          )}
-          <div className="mt-4 flex justify-center">
-            <span
-              className="px-3 py-1 rounded-lg text-sm font-medium bg-fantasy-input-soft text-fantasy-text-soft border border-fantasy-border-soft"
-              style={{ borderColor: `${accentColor}40` }}
-            >
-              {displayRoll.expression}
-            </span>
-          </div>
+            {displayRoll.expression}
+          </span>
         </div>
+      </div>
     </div>
   );
 

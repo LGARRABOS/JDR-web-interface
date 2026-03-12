@@ -6,7 +6,11 @@ interface CopyableCodeProps {
   label?: string;
 }
 
-export function CopyableCode({ code, className = '', label }: CopyableCodeProps) {
+export function CopyableCode({
+  code,
+  className = '',
+  label,
+}: CopyableCodeProps) {
   const [copied, setCopied] = useState(false);
 
   const handleClick = useCallback(async () => {
@@ -39,7 +43,9 @@ export function CopyableCode({ code, className = '', label }: CopyableCodeProps)
         {code}
       </button>
       {copied && (
-        <span className="text-xs text-fantasy-accent animate-pulse">Copié !</span>
+        <span className="text-xs text-fantasy-accent animate-pulse">
+          Copié !
+        </span>
       )}
     </span>
   );

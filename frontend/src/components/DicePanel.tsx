@@ -96,7 +96,9 @@ export function DicePanel({
   const [advancedMode, setAdvancedMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'public' | 'hidden'>('public');
 
-  const currentExpr = advancedMode ? expr : buildExpression(selectedDice, modifier);
+  const currentExpr = advancedMode
+    ? expr
+    : buildExpression(selectedDice, modifier);
 
   const handleSubmit = (e: React.FormEvent, hidden = false) => {
     e.preventDefault();
@@ -130,7 +132,9 @@ export function DicePanel({
             ))}
           </div>
           <div className="flex gap-2 items-center">
-            <label className="text-sm text-fantasy-muted-soft">Modificateur:</label>
+            <label className="text-sm text-fantasy-muted-soft">
+              Modificateur:
+            </label>
             <input
               type="number"
               value={modifier}

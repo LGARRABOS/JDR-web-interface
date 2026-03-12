@@ -163,9 +163,7 @@ export function ProfileModal({
             Minimum 6 caractères
           </p>
         </div>
-        {error && (
-          <p className="text-sm text-fantasy-error">{error}</p>
-        )}
+        {error && <p className="text-sm text-fantasy-error">{error}</p>}
 
         <div className="pt-4 mt-4 border-t border-fantasy-border-soft">
           <h3 className="text-sm font-medium text-fantasy-text-soft mb-2">

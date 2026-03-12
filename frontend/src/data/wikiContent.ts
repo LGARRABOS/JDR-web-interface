@@ -104,7 +104,7 @@ Le jeton apparaît immédiatement. Vous pouvez le déplacer par glisser-déposer
   },
   {
     id: 'musique-ambiance',
-    title: 'Musique d\'ambiance',
+    title: "Musique d'ambiance",
     category: 'Maître du Jeu',
     tags: ['MJ', 'musique', 'ressources'],
     content: `La musique est partagée en temps réel avec tous les joueurs.
@@ -377,7 +377,10 @@ export function getArticlesByCategory(category: string): WikiArticle[] {
   return WIKI_ARTICLES.filter((a) => a.category === category);
 }
 
-export function searchArticles(query: string, tagFilter?: string): WikiArticle[] {
+export function searchArticles(
+  query: string,
+  tagFilter?: string
+): WikiArticle[] {
   const q = query.trim().toLowerCase();
   const tag = tagFilter?.toLowerCase();
   return WIKI_ARTICLES.filter((a) => {

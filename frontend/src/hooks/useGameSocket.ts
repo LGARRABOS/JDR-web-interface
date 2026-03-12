@@ -17,7 +17,9 @@ export function useGameSocket(
   const handlersRef = useRef(handlers);
   const gameIdRef = useRef(gameId);
   const intentionalCloseRef = useRef(false);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   handlersRef.current = handlers;
   gameIdRef.current = gameId;

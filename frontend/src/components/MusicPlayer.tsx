@@ -99,7 +99,8 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
       {track && duration > 0 && (
         <div className="mt-2 flex items-center gap-2">
           <span className="text-xs text-fantasy-muted-soft w-8 shrink-0">
-            {Math.floor(pos / 60)}:{(Math.floor(pos % 60) + '').padStart(2, '0')}
+            {Math.floor(pos / 60)}:
+            {(Math.floor(pos % 60) + '').padStart(2, '0')}
           </span>
           <div className="flex-1 h-2 rounded bg-fantasy-input-soft overflow-hidden">
             <div
@@ -108,7 +109,8 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
             />
           </div>
           <span className="text-xs text-fantasy-muted-soft w-8 shrink-0">
-            {Math.floor(duration / 60)}:{(Math.floor(duration % 60) + '').padStart(2, '0')}
+            {Math.floor(duration / 60)}:
+            {(Math.floor(duration % 60) + '').padStart(2, '0')}
           </span>
         </div>
       )}
