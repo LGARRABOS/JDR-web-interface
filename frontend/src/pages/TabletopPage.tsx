@@ -299,7 +299,14 @@ export function TabletopPage() {
   );
 
   const handleMonsterStatusUpdate = useCallback(
-    (tokenId: number, statusEffects: Array<{ name: string; effect: string; turnsRemaining: number }>) => {
+    (
+      tokenId: number,
+      statusEffects: Array<{
+        name: string;
+        effect: string;
+        turnsRemaining: number;
+      }>
+    ) => {
       TokensAPI.update(tokenId, { statusEffects });
     },
     []
@@ -410,9 +417,7 @@ export function TabletopPage() {
         characterName?: string;
       };
       setConnectedUsers((prev) =>
-        prev.map((u) =>
-          u.userId === userId ? { ...u, characterName } : u
-        )
+        prev.map((u) => (u.userId === userId ? { ...u, characterName } : u))
       );
     },
     'presence.list': (p) => {

@@ -275,7 +275,7 @@ Cliquez sur "Fin de surbrillance" pour retirer l'effet. Tous les participants vo
   },
   {
     id: 'portee-attaque',
-    title: 'Portée d\'attaque',
+    title: "Portée d'attaque",
     category: 'Mode GEMMA',
     tags: ['GEMMA', 'jetons', 'combat'],
     content: `En mode GEMMA, les jetons de personnage (PJ) peuvent avoir une portée d'attaque définie.

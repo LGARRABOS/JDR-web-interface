@@ -57,9 +57,8 @@ export function MonsterEditorModal({
   const [iconScale, setIconScale] = useState(element.iconScale ?? 1);
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [localStatusEffects, setLocalStatusEffects] = useState<StatusEffect[]>(
-    statusEffects
-  );
+  const [localStatusEffects, setLocalStatusEffects] =
+    useState<StatusEffect[]>(statusEffects);
   const [newStatusName, setNewStatusName] = useState('');
   const [newStatusEffect, setNewStatusEffect] = useState('');
   const [newStatusTurns, setNewStatusTurns] = useState(1);
@@ -369,7 +368,9 @@ export function MonsterEditorModal({
                             </p>
                           )}
                           <span className="text-fantasy-muted-soft text-xs">
-                            {s.turnsRemaining} tour{s.turnsRemaining !== 1 ? 's' : ''} restant{s.turnsRemaining !== 1 ? 's' : ''}
+                            {s.turnsRemaining} tour
+                            {s.turnsRemaining !== 1 ? 's' : ''} restant
+                            {s.turnsRemaining !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {tokenId != null && onStatusUpdate && (

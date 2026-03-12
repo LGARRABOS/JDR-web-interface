@@ -528,15 +528,13 @@ export function MapCanvas({
           {visibleTokens.map((t) => {
             const displayName =
               t.ownerUserId != null
-                ? (t.name && t.name.trim() !== ''
-                    ? t.name
-                    : connectedUsers.find(
-                          (u) => u.userId === t.ownerUserId
-                        )?.characterName ||
-                      connectedUsers.find(
-                        (u) => u.userId === t.ownerUserId
-                      )?.displayName ||
-                      t.name)
+                ? t.name && t.name.trim() !== ''
+                  ? t.name
+                  : connectedUsers.find((u) => u.userId === t.ownerUserId)
+                      ?.characterName ||
+                    connectedUsers.find((u) => u.userId === t.ownerUserId)
+                      ?.displayName ||
+                    t.name
                 : t.name;
             return (
               <div
