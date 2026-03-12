@@ -350,7 +350,10 @@ export function CharacterSheetForm({
         const dy = (ev.clientY - centerY) / (size / 2);
         const x = Math.round(50 + dx * 50);
         const y = Math.round(50 + dy * 50);
-        setTokenIconPos(Math.max(0, Math.min(100, x)), Math.max(0, Math.min(100, y)));
+        setTokenIconPos(
+          Math.max(0, Math.min(100, x)),
+          Math.max(0, Math.min(100, y))
+        );
       };
 
       const up = () => {
@@ -439,10 +442,14 @@ export function CharacterSheetForm({
                   </div>
                   <div className="flex flex-col gap-2">
                     <div className="flex gap-2 items-center text-xs text-fantasy-muted-soft">
-                      <span>Position: X {tokenIconPosX}% Y {tokenIconPosY}%</span>
+                      <span>
+                        Position: X {tokenIconPosX}% Y {tokenIconPosY}%
+                      </span>
                     </div>
                     <div className="flex gap-2 items-center">
-                      <span className="text-xs text-fantasy-muted-soft">Zoom:</span>
+                      <span className="text-xs text-fantasy-muted-soft">
+                        Zoom:
+                      </span>
                       <button
                         type="button"
                         onClick={() => setTokenIconScale(tokenIconScale - 0.1)}
@@ -450,7 +457,9 @@ export function CharacterSheetForm({
                       >
                         −
                       </button>
-                      <span className="text-xs w-8 text-center">{Math.round(tokenIconScale * 100)}%</span>
+                      <span className="text-xs w-8 text-center">
+                        {Math.round(tokenIconScale * 100)}%
+                      </span>
                       <button
                         type="button"
                         onClick={() => setTokenIconScale(tokenIconScale + 0.1)}
@@ -460,14 +469,18 @@ export function CharacterSheetForm({
                       </button>
                     </div>
                     <div className="flex gap-2 items-center">
-                      <label className="text-xs text-fantasy-muted-soft">Format jeton:</label>
+                      <label className="text-xs text-fantasy-muted-soft">
+                        Format jeton:
+                      </label>
                       <input
                         type="number"
                         min={20}
                         className="w-14 rounded bg-fantasy-input-soft px-2 py-1 text-sm text-fantasy-text-soft border border-fantasy-border-soft"
                         value={tokenWidth}
                         onChange={(e) =>
-                          setTokenWidth(Math.max(20, parseInt(e.target.value, 10) || 56))
+                          setTokenWidth(
+                            Math.max(20, parseInt(e.target.value, 10) || 56)
+                          )
                         }
                       />
                       <span className="text-fantasy-muted-soft text-sm">×</span>
@@ -477,7 +490,9 @@ export function CharacterSheetForm({
                         className="w-14 rounded bg-fantasy-input-soft px-2 py-1 text-sm text-fantasy-text-soft border border-fantasy-border-soft"
                         value={tokenHeight}
                         onChange={(e) =>
-                          setTokenHeight(Math.max(20, parseInt(e.target.value, 10) || 56))
+                          setTokenHeight(
+                            Math.max(20, parseInt(e.target.value, 10) || 56)
+                          )
                         }
                       />
                     </div>
@@ -551,7 +566,8 @@ export function CharacterSheetForm({
               />
             </div>
             <p className="text-xs text-fantasy-muted-soft mt-1">
-              Format: {tokenWidth}×{tokenHeight} px · Zoom: {Math.round(tokenIconScale * 100)}%
+              Format: {tokenWidth}×{tokenHeight} px · Zoom:{' '}
+              {Math.round(tokenIconScale * 100)}%
             </p>
           </div>
         )}

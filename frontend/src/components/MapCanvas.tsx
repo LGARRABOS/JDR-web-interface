@@ -566,15 +566,18 @@ export function MapCanvas({
                       alt={displayName}
                       className="w-full h-full object-cover"
                       style={{
-                        objectPosition: t.iconPosX != null && t.iconPosY != null
-                          ? `${t.iconPosX}% ${t.iconPosY}%`
-                          : undefined,
-                        transform: t.iconScale != null && t.iconScale !== 1
-                          ? `scale(${t.iconScale})`
-                          : undefined,
-                        transformOrigin: t.iconPosX != null && t.iconPosY != null
-                          ? `${t.iconPosX}% ${t.iconPosY}%`
-                          : undefined,
+                        objectPosition:
+                          t.iconPosX != null && t.iconPosY != null
+                            ? `${t.iconPosX}% ${t.iconPosY}%`
+                            : undefined,
+                        transform:
+                          t.iconScale != null && t.iconScale !== 1
+                            ? `scale(${t.iconScale})`
+                            : undefined,
+                        transformOrigin:
+                          t.iconPosX != null && t.iconPosY != null
+                            ? `${t.iconPosX}% ${t.iconPosY}%`
+                            : undefined,
                       }}
                       draggable={false}
                     />

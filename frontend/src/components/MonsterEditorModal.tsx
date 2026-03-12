@@ -197,7 +197,9 @@ export function MonsterEditorModal({
                   >
                     −
                   </button>
-                  <span className="w-7 text-center">{Math.round(iconScale * 100)}%</span>
+                  <span className="w-7 text-center">
+                    {Math.round(iconScale * 100)}%
+                  </span>
                   <button
                     type="button"
                     onClick={() => setIconScale((s) => Math.min(2, s + 0.1))}
