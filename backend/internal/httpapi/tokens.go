@@ -69,10 +69,13 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 						var hp, maxHp, mana, maxMana sql.NullInt64
 						var width, height sql.NullInt64
 						var elemID sql.NullInt64
+						var iconPosX, iconPosY int
 						_ = s.db.QueryRow(`
-							SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, element_id
+							SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), element_id
 							FROM tokens WHERE id = ?
-						`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &elemID)
+						`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &elemID)
+						t.IconPosX = iconPosX
+						t.IconPosY = iconPosY
 						if elemID.Valid {
 							t.ElementID = &elemID.Int64
 						}
@@ -113,7 +116,7 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, element_id
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), element_id
 		FROM tokens WHERE map_id = ?
 	`, mapID)
 	if err != nil {
@@ -129,9 +132,12 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 		var iconURL sql.NullString
 		var visible int
 		var hp, maxHp, mana, maxMana, width, height sql.NullInt64
-		if err := rows.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &elemID); err != nil {
+		var iconPosX, iconPosY int
+		if err := rows.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &elemID); err != nil {
 			continue
 		}
+		t.IconPosX = iconPosX
+		t.IconPosY = iconPosY
 		if ownerID.Valid {
 			t.OwnerUserID = &ownerID.Int64
 		}
@@ -225,11 +231,21 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		visible = 1
 	}
 
+	iconPosX, iconPosY := 50, 50
+	iconScale := 1.0
+	if req.ElementID != nil {
+		var ex, ey int
+		var es float64
+		if err := s.db.QueryRow("SELECT COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1) FROM game_elements WHERE id = ?", *req.ElementID).Scan(&ex, &ey, &es); err == nil {
+			iconPosX, iconPosY, iconScale = ex, ey, es
+		}
+	}
+
 	var id int64
 	err = s.db.QueryRow(`
-		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, element_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
-	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp), nullInt(req.Mana), nullInt(req.MaxMana), nullInt(req.Width), nullInt(req.Height), nullInt64(req.ElementID)).Scan(&id)
+		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, icon_pos_x, icon_pos_y, icon_scale, element_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp), nullInt(req.Mana), nullInt(req.MaxMana), nullInt(req.Width), nullInt(req.Height), iconPosX, iconPosY, iconScale, nullInt64(req.ElementID)).Scan(&id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
@@ -248,12 +264,15 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		Y:                 req.Y,
 		Width:             req.Width,
 		Height:            req.Height,
+		IconPosX:          iconPosX,
+		IconPosY:          iconPosY,
+		IconScale:         iconScale,
 		VisibleToPlayers:  req.VisibleToPlayers,
 		Hp:                req.Hp,
 		MaxHp:             req.MaxHp,
 		Mana:              req.Mana,
 		MaxMana:           req.MaxMana,
-		ElementID:        req.ElementID,
+		ElementID:         req.ElementID,
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"token": t})
 	s.hub.Broadcast(gameID, "token.created", t)
@@ -267,6 +286,9 @@ type updateTokenReq struct {
 	IconURL          *string  `json:"iconUrl"`
 	Width            *int     `json:"width"`
 	Height           *int     `json:"height"`
+	IconPosX         *int     `json:"iconPosX"`
+	IconPosY         *int     `json:"iconPosY"`
+	IconScale         *float64 `json:"iconScale"`
 	VisibleToPlayers *bool    `json:"visibleToPlayers"`
 	Hp               *int     `json:"hp"`
 	MaxHp            *int     `json:"maxHp"`
@@ -360,6 +382,18 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		updates = append(updates, "height = ?")
 		args = append(args, *req.Height)
 	}
+	if req.IconPosX != nil {
+		updates = append(updates, "icon_pos_x = ?")
+		args = append(args, *req.IconPosX)
+	}
+	if req.IconPosY != nil {
+		updates = append(updates, "icon_pos_y = ?")
+		args = append(args, *req.IconPosY)
+	}
+	if req.IconScale != nil {
+		updates = append(updates, "icon_scale = ?")
+		args = append(args, *req.IconScale)
+	}
 	if len(updates) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucune modification"})
 		return
@@ -377,10 +411,15 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 	var iconURL sql.NullString
 	var visible int
 	var hp, maxHp, mana, maxMana, width, height sql.NullInt64
+	var iconPosX, iconPosY int
+	var iconScale float64
 	_ = s.db.QueryRow(`
-		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, element_id
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), element_id
 		FROM tokens WHERE id = ?
-	`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &elemID)
+	`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &iconScale, &elemID)
+	t.IconPosX = iconPosX
+	t.IconPosY = iconPosY
+	t.IconScale = iconScale
 	if ownerID.Valid {
 		t.OwnerUserID = &ownerID.Int64
 	}

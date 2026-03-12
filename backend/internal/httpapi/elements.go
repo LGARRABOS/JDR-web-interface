@@ -49,7 +49,7 @@ func (s *Server) handleListElements(w http.ResponseWriter, r *http.Request) {
 
 	// Éléments partagés : tous ceux uploadés par ce MJ (toutes parties confondues)
 	rows, err := s.db.Query(
-		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at, COALESCE(description, ''), COALESCE(unique_trait, ''), COALESCE(loot, ''), max_hp, max_mana, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50) FROM game_elements WHERE user_id = ? ORDER BY id",
+		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at, COALESCE(description, ''), COALESCE(unique_trait, ''), COALESCE(loot, ''), max_hp, max_mana, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1) FROM game_elements WHERE user_id = ? ORDER BY id",
 		u.ID,
 	)
 	if err != nil {
@@ -65,7 +65,8 @@ func (s *Server) handleListElements(w http.ResponseWriter, r *http.Request) {
 		var desc, trait, loot string
 		var maxHp, maxMana sql.NullInt64
 		var iconX, iconY int
-		if err := rows.Scan(&e.ID, &e.GameID, &e.Name, &e.ImageURL, &e.Category, &tagsJSON, &e.CreatedAt, &desc, &trait, &loot, &maxHp, &maxMana, &iconX, &iconY); err != nil {
+		var iconScale float64
+		if err := rows.Scan(&e.ID, &e.GameID, &e.Name, &e.ImageURL, &e.Category, &tagsJSON, &e.CreatedAt, &desc, &trait, &loot, &maxHp, &maxMana, &iconX, &iconY, &iconScale); err != nil {
 			continue
 		}
 		_ = json.Unmarshal([]byte(tagsJSON), &e.Tags)
@@ -82,6 +83,7 @@ func (s *Server) handleListElements(w http.ResponseWriter, r *http.Request) {
 		}
 		e.IconPosX = iconX
 		e.IconPosY = iconY
+		e.IconScale = iconScale
 		elements = append(elements, &e)
 	}
 
@@ -115,10 +117,11 @@ func (s *Server) handleGetElement(w http.ResponseWriter, r *http.Request) {
 	var desc, trait, loot string
 	var maxHp, maxMana sql.NullInt64
 	var iconX, iconY int
+	var iconScale float64
 	err = s.db.QueryRow(
-		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at, COALESCE(description, ''), COALESCE(unique_trait, ''), COALESCE(loot, ''), max_hp, max_mana, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50) FROM game_elements WHERE id = ? AND (user_id = ? OR game_id = ?)",
+		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at, COALESCE(description, ''), COALESCE(unique_trait, ''), COALESCE(loot, ''), max_hp, max_mana, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1) FROM game_elements WHERE id = ? AND (user_id = ? OR game_id = ?)",
 		id, u.ID, gameID,
-	).Scan(&e.ID, &e.GameID, &e.Name, &e.ImageURL, &e.Category, &tagsJSON, &e.CreatedAt, &desc, &trait, &loot, &maxHp, &maxMana, &iconX, &iconY)
+	).Scan(&e.ID, &e.GameID, &e.Name, &e.ImageURL, &e.Category, &tagsJSON, &e.CreatedAt, &desc, &trait, &loot, &maxHp, &maxMana, &iconX, &iconY, &iconScale)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Élément introuvable"})
 		return
@@ -137,6 +140,7 @@ func (s *Server) handleGetElement(w http.ResponseWriter, r *http.Request) {
 	}
 	e.IconPosX = iconX
 	e.IconPosY = iconY
+	e.IconScale = iconScale
 	writeJSON(w, http.StatusOK, map[string]interface{}{"element": e})
 }
 
@@ -147,8 +151,9 @@ type patchElementReq struct {
 	Loot        *string `json:"loot"`
 	MaxHp       *int    `json:"maxHp"`
 	MaxMana     *int    `json:"maxMana"`
-	IconPosX    *int    `json:"iconPosX"`
-	IconPosY    *int    `json:"iconPosY"`
+	IconPosX    *int     `json:"iconPosX"`
+	IconPosY    *int     `json:"iconPosY"`
+	IconScale   *float64 `json:"iconScale"`
 }
 
 func (s *Server) handlePatchElement(w http.ResponseWriter, r *http.Request) {
@@ -213,6 +218,10 @@ func (s *Server) handlePatchElement(w http.ResponseWriter, r *http.Request) {
 		updates = append(updates, "icon_pos_y = ?")
 		args = append(args, *req.IconPosY)
 	}
+	if req.IconScale != nil {
+		updates = append(updates, "icon_scale = ?")
+		args = append(args, *req.IconScale)
+	}
 	if len(updates) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucune modification"})
 		return
@@ -232,9 +241,9 @@ func (s *Server) handlePatchElement(w http.ResponseWriter, r *http.Request) {
 	var maxHp, maxMana sql.NullInt64
 	var iconX, iconY int
 	_ = s.db.QueryRow(
-		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at, COALESCE(description, ''), COALESCE(unique_trait, ''), COALESCE(loot, ''), max_hp, max_mana, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50) FROM game_elements WHERE id = ?",
+		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at, COALESCE(description, ''), COALESCE(unique_trait, ''), COALESCE(loot, ''), max_hp, max_mana, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1) FROM game_elements WHERE id = ?",
 		id,
-	).Scan(&e.ID, &e.GameID, &e.Name, &e.ImageURL, &e.Category, &tagsJSON, &e.CreatedAt, &desc, &trait, &loot, &maxHp, &maxMana, &iconX, &iconY)
+	).Scan(&e.ID, &e.GameID, &e.Name, &e.ImageURL, &e.Category, &tagsJSON, &e.CreatedAt, &desc, &trait, &loot, &maxHp, &maxMana, &iconX, &iconY, &e.IconScale)
 	_ = json.Unmarshal([]byte(tagsJSON), &e.Tags)
 	e.Description = desc
 	e.UniqueTrait = trait

@@ -31,6 +31,7 @@ interface GameElement {
   maxMana?: number;
   iconPosX?: number;
   iconPosY?: number;
+  iconScale?: number;
 }
 
 type ResourcesTab = 'resources' | 'elements' | 'editor';
@@ -534,6 +535,7 @@ export function ResourcesPage() {
             maxMana: el.maxMana ?? 0,
             iconPosX: el.iconPosX ?? 50,
             iconPosY: el.iconPosY ?? 50,
+            iconScale: el.iconScale ?? 1,
           });
         }
       } catch {
@@ -825,6 +827,7 @@ export function ResourcesPage() {
                                   maxMana: el.maxMana ?? 0,
                                   iconPosX: el.iconPosX ?? 50,
                                   iconPosY: el.iconPosY ?? 50,
+                                  iconScale: el.iconScale ?? 1,
                                 })
                               }
                               className="text-fantasy-accent hover:text-fantasy-accent-hover text-xs px-2 py-0.5 rounded"

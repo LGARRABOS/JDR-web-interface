@@ -1010,7 +1010,7 @@ export function TabletopPage() {
             onTokenDelete={handleTokenDelete}
             tokens={tokens}
           />
-          {!isGM && (
+          {!isGM && !game.isGemma && (
             <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
               <label className="block text-sm font-medium mb-2 text-fantasy-text-soft">
                 Nom de personnage
@@ -1028,6 +1028,7 @@ export function TabletopPage() {
           <CharacterSheetPanel
             gameId={gameId}
             isGM={isGM}
+            isGemma={game.isGemma}
             players={gamePlayers}
           />
           {isGM ? (

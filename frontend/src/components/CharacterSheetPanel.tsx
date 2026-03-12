@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CharacterSheetsAPI } from '../api/client';
+import {
+  CharacterSheetForm,
+  type CharacterSheetData,
+} from './CharacterSheetForm';
 
 interface Player {
   userId: number;
@@ -10,18 +14,21 @@ interface Player {
 interface CharacterSheetPanelProps {
   gameId: number;
   isGM: boolean;
+  isGemma?: boolean;
   players?: Player[];
 }
 
 export function CharacterSheetPanel({
   gameId,
   isGM,
+  isGemma = false,
   players = [],
 }: CharacterSheetPanelProps) {
   const [sheet, setSheet] = useState<{
-    filename: string;
-    mimeType: string;
-    url: string;
+    filename?: string;
+    mimeType?: string;
+    url?: string;
+    data?: CharacterSheetData | null;
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -34,7 +41,7 @@ export function CharacterSheetPanel({
       setError(null);
       try {
         const { data } = await CharacterSheetsAPI.get(gameId, userId);
-        setSheet(data);
+        setSheet(data as typeof sheet);
       } catch (e: unknown) {
         const err = e as { response?: { status?: number } };
         if (err.response?.status === 404) {
@@ -87,6 +94,131 @@ export function CharacterSheetPanel({
     [gameId, loadSheet]
   );
 
+  const [sheetModalOpen, setSheetModalOpen] = useState(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSheetModalOpen(false);
+    };
+    if (sheetModalOpen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
+    };
+  }, [sheetModalOpen]);
+
+  const handleCloseSheetModal = useCallback(() => {
+    setSheetModalOpen(false);
+    loadSheet(isGM ? (selectedUserId ?? undefined) : undefined);
+  }, [loadSheet, isGM, selectedUserId]);
+
+  if (isGemma) {
+    return (
+      <>
+        <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
+          <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">
+            Fiche personnage
+          </h3>
+          {isGM ? (
+            <div className="space-y-2">
+              <label className="block text-xs text-fantasy-muted-soft">
+                Consulter la fiche de
+              </label>
+              <select
+                value={selectedUserId ?? ''}
+                onChange={(e) =>
+                  setSelectedUserId(
+                    e.target.value ? parseInt(e.target.value, 10) : null
+                  )
+                }
+                className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm border border-fantasy-border-soft"
+              >
+                <option value="">— Sélectionner un joueur —</option>
+                {players.map((u) => (
+                  <option key={u.userId} value={u.userId}>
+                    {u.characterName || u.displayName || `Joueur ${u.userId}`}
+                  </option>
+                ))}
+              </select>
+              {selectedUserId && (
+                <>
+                  {loading ? (
+                    <p className="text-sm text-fantasy-muted-soft">
+                      Chargement...
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSheetModalOpen(true)}
+                      className="w-full mt-2 px-4 py-2 rounded bg-fantasy-accent hover:bg-fantasy-accent-hover text-fantasy-bg text-sm font-medium"
+                    >
+                      Voir la fiche
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <>
+              {loading ? (
+                <p className="text-sm text-fantasy-muted-soft">Chargement...</p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSheetModalOpen(true)}
+                  className="w-full px-4 py-2 rounded bg-fantasy-accent hover:bg-fantasy-accent-hover text-fantasy-bg text-sm font-medium"
+                >
+                  Éditer ma fiche personnage
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {sheetModalOpen && (
+          <div
+            ref={overlayRef}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            onClick={(e) =>
+              (e.target as HTMLElement) === overlayRef.current &&
+              handleCloseSheetModal()
+            }
+          >
+            <div
+              className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 py-3 border-b border-fantasy-border-soft flex items-center justify-between">
+                <h2 className="text-lg font-semibold font-heading text-fantasy-text-soft">
+                  {isGM ? 'Fiche personnage' : 'Ma fiche personnage'}
+                </h2>
+                <button
+                  type="button"
+                  onClick={handleCloseSheetModal}
+                  className="text-fantasy-muted-soft hover:text-fantasy-text-soft text-2xl leading-none"
+                  aria-label="Fermer"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto flex-1">
+                <CharacterSheetForm
+                  gameId={gameId}
+                  initialData={sheet?.data ?? null}
+                  readOnly={isGM}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
       <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">
@@ -117,7 +249,7 @@ export function CharacterSheetPanel({
             <>
               {loading ? (
                 <p className="text-sm text-fantasy-muted-soft">Chargement...</p>
-              ) : sheet ? (
+              ) : sheet?.url ? (
                 <a
                   href={sheet.url}
                   target="_blank"
@@ -158,7 +290,7 @@ export function CharacterSheetPanel({
             <p className="mt-2 text-sm text-fantasy-muted-soft">
               Chargement...
             </p>
-          ) : sheet ? (
+          ) : sheet?.url ? (
             <div className="mt-3">
               <a
                 href={sheet.url}

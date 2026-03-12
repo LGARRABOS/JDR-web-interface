@@ -212,6 +212,14 @@ func AutoMigrate(db *sql.DB) error {
 		`ALTER TABLE game_elements ADD COLUMN icon_pos_x INTEGER DEFAULT 50`,
 		`ALTER TABLE game_elements ADD COLUMN icon_pos_y INTEGER DEFAULT 50`,
 		`ALTER TABLE tokens ADD COLUMN element_id INTEGER REFERENCES game_elements(id) ON DELETE SET NULL`,
+		`ALTER TABLE game_character_sheets ADD COLUMN data JSONB`,
+		`ALTER TABLE game_character_sheets ALTER COLUMN filename DROP NOT NULL`,
+		`ALTER TABLE game_character_sheets ALTER COLUMN storage_path DROP NOT NULL`,
+		`ALTER TABLE game_character_sheets ALTER COLUMN mime_type DROP NOT NULL`,
+		`ALTER TABLE tokens ADD COLUMN icon_pos_x INTEGER DEFAULT 50`,
+		`ALTER TABLE tokens ADD COLUMN icon_pos_y INTEGER DEFAULT 50`,
+		`ALTER TABLE game_elements ADD COLUMN icon_scale REAL DEFAULT 1`,
+		`ALTER TABLE tokens ADD COLUMN icon_scale REAL DEFAULT 1`,
 	}
 
 	for _, stmt := range orderedStmts {

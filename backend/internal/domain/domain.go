@@ -49,10 +49,13 @@ type Token struct {
 	Y                float64 `json:"y"`
 	Width            *int    `json:"width,omitempty"`
 	Height           *int    `json:"height,omitempty"`
+	IconPosX         int     `json:"iconPosX,omitempty"`   // 0-100, position horizontale du crop
+	IconPosY         int     `json:"iconPosY,omitempty"`   // 0-100, position verticale du crop
+	IconScale        float64 `json:"iconScale,omitempty"` // zoom de l'image (1 = 100%, 1.5 = 150%)
 	VisibleToPlayers bool    `json:"visibleToPlayers"`
-	Hp               *int    `json:"hp,omitempty"`       // PV actuels
+	Hp               *int   `json:"hp,omitempty"`       // PV actuels
 	MaxHp            *int    `json:"maxHp,omitempty"`   // PV max
-	Mana             *int    `json:"mana,omitempty"`    // Mana actuel
+	Mana             *int    `json:"mana,omitempty"`     // Mana actuel
 	MaxMana          *int    `json:"maxMana,omitempty"` // Mana max
 	ElementID        *int64  `json:"elementId,omitempty"` // Lien vers game_elements (monstre source)
 }
@@ -71,8 +74,9 @@ type GameElement struct {
 	Loot        string   `json:"loot,omitempty"`
 	MaxHp       *int     `json:"maxHp,omitempty"`
 	MaxMana     *int     `json:"maxMana,omitempty"`
-	IconPosX    int      `json:"iconPosX,omitempty"` // 0-100, position horizontale du crop
-	IconPosY    int      `json:"iconPosY,omitempty"` // 0-100, position verticale du crop
+	IconPosX    int     `json:"iconPosX,omitempty"`   // 0-100, position horizontale du crop
+	IconPosY    int     `json:"iconPosY,omitempty"`   // 0-100, position verticale du crop
+	IconScale   float64 `json:"iconScale,omitempty"`  // zoom de l'image (1 = 100%, 1.5 = 150%)
 }
 
 // MapElement représente un élément de décor fixe sur une carte.

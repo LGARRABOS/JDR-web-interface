@@ -12,6 +12,9 @@ export interface Token {
   y: number;
   width?: number;
   height?: number;
+  iconPosX?: number;
+  iconPosY?: number;
+  iconScale?: number;
   visibleToPlayers: boolean;
   ownerUserId?: number;
   hp?: number;
@@ -562,6 +565,17 @@ export function MapCanvas({
                       src={t.iconUrl}
                       alt={displayName}
                       className="w-full h-full object-cover"
+                      style={{
+                        objectPosition: t.iconPosX != null && t.iconPosY != null
+                          ? `${t.iconPosX}% ${t.iconPosY}%`
+                          : undefined,
+                        transform: t.iconScale != null && t.iconScale !== 1
+                          ? `scale(${t.iconScale})`
+                          : undefined,
+                        transformOrigin: t.iconPosX != null && t.iconPosY != null
+                          ? `${t.iconPosX}% ${t.iconPosY}%`
+                          : undefined,
+                      }}
                       draggable={false}
                     />
                   </div>

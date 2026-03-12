@@ -77,10 +77,17 @@ export const CharacterSheetsAPI = {
       `/games/${gameId}/character-sheet`,
       userId != null ? { params: { userId } } : undefined
     ),
+  patch: (gameId: number, data: Record<string, unknown>) =>
+    api.patch(`/games/${gameId}/character-sheet`, { data }),
   upload: (gameId: number, file: File) => {
     const form = new FormData();
     form.append('file', file);
     return api.post(`/games/${gameId}/character-sheet`, form);
+  },
+  uploadAvatar: (gameId: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/games/${gameId}/character-sheet/avatar`, form);
   },
 };
 
@@ -141,6 +148,9 @@ export const TokensAPI = {
       iconUrl?: string;
       width?: number;
       height?: number;
+      iconPosX?: number;
+      iconPosY?: number;
+      iconScale?: number;
       hp?: number;
       maxHp?: number;
       mana?: number;
@@ -166,6 +176,7 @@ export const ElementsAPI = {
       maxMana?: number;
       iconPosX?: number;
       iconPosY?: number;
+      iconScale?: number;
     }
   ) => api.patch(`/games/${gameId}/elements/${id}`, data),
   upload: async (

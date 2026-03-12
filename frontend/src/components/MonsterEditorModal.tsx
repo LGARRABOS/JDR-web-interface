@@ -15,6 +15,7 @@ export interface GameElementFull {
   maxMana?: number;
   iconPosX?: number;
   iconPosY?: number;
+  iconScale?: number;
 }
 
 interface MonsterEditorModalProps {
@@ -108,6 +109,7 @@ export function MonsterEditorModal({
         maxMana,
         iconPosX,
         iconPosY,
+        iconScale,
       });
       onClose();
     } finally {
@@ -159,6 +161,12 @@ export function MonsterEditorModal({
               ref={containerRef}
               className="relative w-32 h-32 mx-auto rounded-full overflow-hidden bg-fantasy-input-soft border-2 border-fantasy-border-soft cursor-pointer"
               onMouseDown={handleImageDrag}
+              onWheel={(e) => {
+                if (!isEdit) return;
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                setIconScale((s) => Math.max(0.5, Math.min(2, s + delta)));
+              }}
               style={{ cursor: isEdit ? 'grab' : 'default' }}
             >
               <img
@@ -167,6 +175,8 @@ export function MonsterEditorModal({
                 className="w-full h-full object-cover"
                 style={{
                   objectPosition: `${iconPosX}% ${iconPosY}%`,
+                  transform: `scale(${iconScale})`,
+                  transformOrigin: `${iconPosX}% ${iconPosY}%`,
                 }}
                 draggable={false}
               />
@@ -175,9 +185,27 @@ export function MonsterEditorModal({
               )}
             </div>
             {isEdit && (
-              <div className="flex gap-2 justify-center text-xs text-fantasy-muted-soft">
+              <div className="flex flex-wrap gap-3 justify-center text-xs text-fantasy-muted-soft items-center">
                 <span>X: {iconPosX}%</span>
                 <span>Y: {iconPosY}%</span>
+                <div className="flex gap-1 items-center">
+                  <span>Zoom:</span>
+                  <button
+                    type="button"
+                    onClick={() => setIconScale((s) => Math.max(0.5, s - 0.1))}
+                    className="w-5 h-5 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft font-bold text-[10px]"
+                  >
+                    −
+                  </button>
+                  <span className="w-7 text-center">{Math.round(iconScale * 100)}%</span>
+                  <button
+                    type="button"
+                    onClick={() => setIconScale((s) => Math.min(2, s + 0.1))}
+                    className="w-5 h-5 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft font-bold text-[10px]"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
             )}
           </div>
