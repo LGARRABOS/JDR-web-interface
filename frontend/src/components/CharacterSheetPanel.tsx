@@ -16,6 +16,7 @@ interface CharacterSheetPanelProps {
   isGM: boolean;
   isGemma?: boolean;
   players?: Player[];
+  onSheetSaved?: () => void;
 }
 
 export function CharacterSheetPanel({
@@ -23,6 +24,7 @@ export function CharacterSheetPanel({
   isGM,
   isGemma = false,
   players = [],
+  onSheetSaved,
 }: CharacterSheetPanelProps) {
   const [sheet, setSheet] = useState<{
     filename?: string;
@@ -104,12 +106,13 @@ export function CharacterSheetPanel({
     if (sheetModalOpen) {
       document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
+      loadSheet(isGM ? (selectedUserId ?? undefined) : undefined);
     }
     return () => {
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
     };
-  }, [sheetModalOpen]);
+  }, [sheetModalOpen, isGM, selectedUserId, loadSheet]);
 
   const handleCloseSheetModal = useCallback(() => {
     setSheetModalOpen(false);
@@ -206,11 +209,18 @@ export function CharacterSheetPanel({
                 </button>
               </div>
               <div className="p-4 overflow-y-auto flex-1">
-                <CharacterSheetForm
-                  gameId={gameId}
-                  initialData={sheet?.data ?? null}
-                  readOnly={isGM}
-                />
+                {loading ? (
+                  <p className="text-sm text-fantasy-muted-soft py-8 text-center">
+                    Chargement de la fiche...
+                  </p>
+                ) : (
+                  <CharacterSheetForm
+                    gameId={gameId}
+                    initialData={sheet?.data ?? null}
+                    readOnly={isGM}
+                    onSaveSuccess={onSheetSaved}
+                  />
+                )}
               </div>
             </div>
           </div>

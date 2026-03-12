@@ -70,12 +70,22 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 						var width, height sql.NullInt64
 						var elemID sql.NullInt64
 						var iconPosX, iconPosY int
+						var iconScale float64
+						var attackRange sql.NullInt64
+						var statusEffectsJSON string
 						_ = s.db.QueryRow(`
-							SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), element_id
+							SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), attack_range, element_id, COALESCE(status_effects::text, '[]')
 							FROM tokens WHERE id = ?
-						`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &elemID)
+						`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &iconScale, &attackRange, &elemID, &statusEffectsJSON)
+						_ = json.Unmarshal([]byte(statusEffectsJSON), &t.StatusEffects)
 						t.IconPosX = iconPosX
 						t.IconPosY = iconPosY
+						t.IconScale = iconScale
+						if attackRange.Valid {
+							ar := int(attackRange.Int64)
+							t.AttackRange = &ar
+						}
+
 						if elemID.Valid {
 							t.ElementID = &elemID.Int64
 						}
@@ -116,7 +126,7 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), element_id
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), attack_range, element_id, COALESCE(status_effects::text, '[]')
 		FROM tokens WHERE map_id = ?
 	`, mapID)
 	if err != nil {
@@ -133,11 +143,20 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 		var visible int
 		var hp, maxHp, mana, maxMana, width, height sql.NullInt64
 		var iconPosX, iconPosY int
-		if err := rows.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &elemID); err != nil {
+		var iconScale float64
+		var attackRange sql.NullInt64
+		var statusEffectsJSON string
+		if err := rows.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &iconScale, &attackRange, &elemID, &statusEffectsJSON); err != nil {
 			continue
 		}
+		_ = json.Unmarshal([]byte(statusEffectsJSON), &t.StatusEffects)
 		t.IconPosX = iconPosX
 		t.IconPosY = iconPosY
+		t.IconScale = iconScale
+		if attackRange.Valid {
+			ar := int(attackRange.Int64)
+			t.AttackRange = &ar
+		}
 		if ownerID.Valid {
 			t.OwnerUserID = &ownerID.Int64
 		}
@@ -279,21 +298,23 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateTokenReq struct {
-	X                *float64 `json:"x"`
-	Y                *float64 `json:"y"`
-	Name             *string  `json:"name"`
-	Color            *string  `json:"color"`
-	IconURL          *string  `json:"iconUrl"`
-	Width            *int     `json:"width"`
-	Height           *int     `json:"height"`
-	IconPosX         *int     `json:"iconPosX"`
-	IconPosY         *int     `json:"iconPosY"`
-	IconScale         *float64 `json:"iconScale"`
-	VisibleToPlayers *bool    `json:"visibleToPlayers"`
-	Hp               *int     `json:"hp"`
-	MaxHp            *int     `json:"maxHp"`
-	Mana             *int     `json:"mana"`
-	MaxMana          *int     `json:"maxMana"`
+	X                *float64            `json:"x"`
+	Y                *float64            `json:"y"`
+	Name             *string             `json:"name"`
+	Color            *string             `json:"color"`
+	IconURL          *string             `json:"iconUrl"`
+	Width            *int                `json:"width"`
+	Height           *int                `json:"height"`
+	IconPosX         *int                `json:"iconPosX"`
+	IconPosY         *int                `json:"iconPosY"`
+	IconScale        *float64            `json:"iconScale"`
+	AttackRange      *int                `json:"attackRange"`
+	VisibleToPlayers *bool               `json:"visibleToPlayers"`
+	Hp               *int                `json:"hp"`
+	MaxHp            *int                `json:"maxHp"`
+	Mana             *int                `json:"mana"`
+	MaxMana          *int                `json:"maxMana"`
+	StatusEffects    *[]domain.StatusEffect `json:"statusEffects"`
 }
 
 func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
@@ -370,6 +391,11 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 			args = append(args, *req.MaxMana)
 		}
 	}
+	if req.StatusEffects != nil {
+		statusJSON, _ := json.Marshal(*req.StatusEffects)
+		updates = append(updates, "status_effects = ?::jsonb")
+		args = append(args, string(statusJSON))
+	}
 	if req.IconURL != nil {
 		updates = append(updates, "icon_url = ?")
 		args = append(args, *req.IconURL)
@@ -394,6 +420,10 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		updates = append(updates, "icon_scale = ?")
 		args = append(args, *req.IconScale)
 	}
+	if req.AttackRange != nil {
+		updates = append(updates, "attack_range = ?")
+		args = append(args, *req.AttackRange)
+	}
 	if len(updates) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucune modification"})
 		return
@@ -413,13 +443,20 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 	var hp, maxHp, mana, maxMana, width, height sql.NullInt64
 	var iconPosX, iconPosY int
 	var iconScale float64
+	var attackRange sql.NullInt64
+	var statusEffectsJSON string
 	_ = s.db.QueryRow(`
-		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), element_id
+		SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), attack_range, element_id, COALESCE(status_effects::text, '[]')
 		FROM tokens WHERE id = ?
-	`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &iconScale, &elemID)
+	`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &iconScale, &attackRange, &elemID, &statusEffectsJSON)
+	_ = json.Unmarshal([]byte(statusEffectsJSON), &t.StatusEffects)
 	t.IconPosX = iconPosX
 	t.IconPosY = iconPosY
 	t.IconScale = iconScale
+	if attackRange.Valid {
+		ar := int(attackRange.Int64)
+		t.AttackRange = &ar
+	}
 	if ownerID.Valid {
 		t.OwnerUserID = &ownerID.Int64
 	}
@@ -454,6 +491,76 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		h := int(height.Int64)
 		t.Height = &h
 	}
+	// Sync token → fiche personnage et game_players pour les jetons PJ (nom, hp, maxHp)
+	if t.Kind == "PJ" && t.OwnerUserID != nil {
+		if req.Name != nil {
+			_, _ = s.db.Exec("UPDATE game_players SET character_name = ? WHERE game_id = ? AND user_id = ?", *req.Name, gameID, *t.OwnerUserID)
+			s.hub.Broadcast(gameID, "character.updated", map[string]interface{}{"userId": *t.OwnerUserID, "characterName": *req.Name})
+		}
+		var dataJSON []byte
+		err := s.db.QueryRow("SELECT data FROM game_character_sheets WHERE game_id = ? AND user_id = ?", gameID, *t.OwnerUserID).Scan(&dataJSON)
+		if err == nil && len(dataJSON) > 0 {
+			var data map[string]interface{}
+			if json.Unmarshal(dataJSON, &data) == nil {
+				changed := false
+				if req.Name != nil {
+					if identite, ok := data["identite"].(map[string]interface{}); ok {
+						identite["nom"] = *req.Name
+						changed = true
+					} else {
+						data["identite"] = map[string]interface{}{"nom": *req.Name}
+						changed = true
+					}
+				}
+				if req.Hp != nil || req.MaxHp != nil || req.Mana != nil || req.MaxMana != nil {
+					if stats, ok := data["statsCombat"].(map[string]interface{}); ok {
+						if req.Hp != nil {
+							stats["vie"] = strconv.Itoa(*req.Hp)
+							changed = true
+						}
+						if req.MaxHp != nil {
+							stats["vieMax"] = strconv.Itoa(*req.MaxHp)
+							changed = true
+						}
+						if req.Mana != nil {
+							stats["aether"] = strconv.Itoa(*req.Mana)
+							changed = true
+						}
+						if req.MaxMana != nil {
+							stats["aetherMax"] = strconv.Itoa(*req.MaxMana)
+							changed = true
+						}
+					} else {
+						stats := make(map[string]interface{})
+						if req.Hp != nil {
+							stats["vie"] = strconv.Itoa(*req.Hp)
+							changed = true
+						}
+						if req.MaxHp != nil {
+							stats["vieMax"] = strconv.Itoa(*req.MaxHp)
+							changed = true
+						}
+						if req.Mana != nil {
+							stats["aether"] = strconv.Itoa(*req.Mana)
+							changed = true
+						}
+						if req.MaxMana != nil {
+							stats["aetherMax"] = strconv.Itoa(*req.MaxMana)
+							changed = true
+						}
+						if changed {
+							data["statsCombat"] = stats
+						}
+					}
+				}
+				if changed {
+					newJSON, _ := json.Marshal(data)
+					_, _ = s.db.Exec("UPDATE game_character_sheets SET data = ?::jsonb WHERE game_id = ? AND user_id = ?", string(newJSON), gameID, *t.OwnerUserID)
+				}
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{"token": t})
 	s.hub.Broadcast(gameID, "token.updated", t)
 }

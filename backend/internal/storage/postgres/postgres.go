@@ -220,6 +220,8 @@ func AutoMigrate(db *sql.DB) error {
 		`ALTER TABLE tokens ADD COLUMN icon_pos_y INTEGER DEFAULT 50`,
 		`ALTER TABLE game_elements ADD COLUMN icon_scale REAL DEFAULT 1`,
 		`ALTER TABLE tokens ADD COLUMN icon_scale REAL DEFAULT 1`,
+		`ALTER TABLE tokens ADD COLUMN attack_range INTEGER`,
+		`ALTER TABLE tokens ADD COLUMN status_effects JSONB`,
 	}
 
 	for _, stmt := range orderedStmts {

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import type { StatusEffect } from './MapCanvas';
 
 export interface GameElementFull {
   id: number;
@@ -24,6 +25,15 @@ interface MonsterEditorModalProps {
   onSave?: (data: Partial<GameElementFull>) => void;
   mode: 'edit' | 'view';
   tokenData?: { hp: number; maxHp: number; mana: number; maxMana: number };
+  /** Pour les joueurs : le loot n'est visible qu'après la mort du monstre (kind === 'MORT') */
+  tokenKind?: string;
+  isGM?: boolean;
+  /** ID du jeton en jeu (pour éditer les effets de statut) */
+  tokenId?: number;
+  /** Effets de statut du jeton (poison, brûlure, etc.) */
+  statusEffects?: StatusEffect[];
+  /** Callback pour mettre à jour les effets de statut du jeton */
+  onStatusUpdate?: (statusEffects: StatusEffect[]) => void;
 }
 
 export function MonsterEditorModal({
@@ -32,6 +42,9 @@ export function MonsterEditorModal({
   onSave,
   mode,
   tokenData,
+  tokenId,
+  statusEffects = [],
+  onStatusUpdate,
 }: MonsterEditorModalProps) {
   const [name, setName] = useState(element.name);
   const [description, setDescription] = useState(element.description ?? '');
@@ -41,8 +54,19 @@ export function MonsterEditorModal({
   const [maxMana, setMaxMana] = useState<number>(element.maxMana ?? 0);
   const [iconPosX, setIconPosX] = useState(element.iconPosX ?? 50);
   const [iconPosY, setIconPosY] = useState(element.iconPosY ?? 50);
+  const [iconScale, setIconScale] = useState(element.iconScale ?? 1);
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [localStatusEffects, setLocalStatusEffects] = useState<StatusEffect[]>(
+    statusEffects
+  );
+  const [newStatusName, setNewStatusName] = useState('');
+  const [newStatusEffect, setNewStatusEffect] = useState('');
+  const [newStatusTurns, setNewStatusTurns] = useState(1);
+
+  useEffect(() => {
+    setLocalStatusEffects(statusEffects);
+  }, [statusEffects]);
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -124,6 +148,7 @@ export function MonsterEditorModal({
     maxMana,
     iconPosX,
     iconPosY,
+    iconScale,
     onSave,
     onClose,
   ]);
@@ -300,19 +325,159 @@ export function MonsterEditorModal({
             />
           </div>
 
-          {/* Loot */}
-          <div>
-            <label className="block text-sm text-fantasy-muted-soft mb-1">
-              Loot disponible
-            </label>
-            <textarea
-              value={loot}
-              onChange={(e) => setLoot(e.target.value)}
-              readOnly={!isEdit}
-              rows={2}
-              className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none resize-y disabled:opacity-70"
-            />
-          </div>
+          {/* Loot : visible uniquement pour le MJ, ou pour les joueurs après la mort du monstre */}
+          {(isGM || tokenKind === 'MORT') && (
+            <div>
+              <label className="block text-sm text-fantasy-muted-soft mb-1">
+                Loot disponible
+              </label>
+              <textarea
+                value={loot}
+                onChange={(e) => setLoot(e.target.value)}
+                readOnly={!isEdit}
+                rows={2}
+                className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none resize-y disabled:opacity-70"
+              />
+            </div>
+          )}
+
+          {/* Effets de statut : visible uniquement en vue jeton (tokenData présent) */}
+          {tokenData && (
+            <div>
+              <label className="block text-sm text-fantasy-muted-soft mb-2">
+                Effets de statut
+              </label>
+              {localStatusEffects.length === 0 ? (
+                <p className="text-sm text-fantasy-muted-soft italic">
+                  Aucun effet actif
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {localStatusEffects.map((s, i) => (
+                    <div
+                      key={i}
+                      className="rounded bg-fantasy-input-soft px-3 py-2 text-sm border border-fantasy-border-soft"
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium text-fantasy-text-soft">
+                            {s.name}
+                          </span>
+                          {s.effect && (
+                            <p className="text-fantasy-muted-soft text-xs mt-0.5">
+                              {s.effect}
+                            </p>
+                          )}
+                          <span className="text-fantasy-muted-soft text-xs">
+                            {s.turnsRemaining} tour{s.turnsRemaining !== 1 ? 's' : ''} restant{s.turnsRemaining !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {tokenId != null && onStatusUpdate && (
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = [...localStatusEffects];
+                                next[i] = {
+                                  ...next[i],
+                                  turnsRemaining: Math.max(
+                                    0,
+                                    next[i].turnsRemaining - 1
+                                  ),
+                                };
+                                if (next[i].turnsRemaining === 0) {
+                                  next.splice(i, 1);
+                                }
+                                setLocalStatusEffects(next);
+                                onStatusUpdate(next);
+                              }}
+                              className="px-2 py-0.5 rounded text-xs bg-fantasy-input-hover-soft hover:bg-fantasy-accent/30 text-fantasy-text-soft"
+                              title="Réduire d'un tour"
+                            >
+                              −1
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = localStatusEffects.filter(
+                                  (_, j) => j !== i
+                                );
+                                setLocalStatusEffects(next);
+                                onStatusUpdate(next);
+                              }}
+                              className="px-2 py-0.5 rounded text-xs bg-fantasy-danger/30 hover:bg-fantasy-danger/50 text-fantasy-error"
+                              title="Supprimer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {tokenId != null && onStatusUpdate && (
+                <div className="mt-3 p-3 rounded bg-fantasy-input-soft/50 border border-fantasy-border-soft space-y-2">
+                  <p className="text-xs text-fantasy-muted-soft">
+                    Ajouter un effet
+                  </p>
+                  <div className="grid grid-cols-1 gap-2">
+                    <input
+                      type="text"
+                      value={newStatusName}
+                      onChange={(e) => setNewStatusName(e.target.value)}
+                      placeholder="Nom (ex: Poison)"
+                      className="w-full rounded bg-fantasy-input-soft px-3 py-1.5 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={newStatusEffect}
+                      onChange={(e) => setNewStatusEffect(e.target.value)}
+                      placeholder="Effet (ex: -2 PV/tour)"
+                      className="w-full rounded bg-fantasy-input-soft px-3 py-1.5 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-fantasy-muted-soft">
+                        Tours :
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={newStatusTurns}
+                        onChange={(e) =>
+                          setNewStatusTurns(
+                            Math.max(1, parseInt(e.target.value, 10) || 1)
+                          )
+                        }
+                        className="w-16 rounded bg-fantasy-input-soft px-2 py-1.5 text-sm text-fantasy-text-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!newStatusName.trim()) return;
+                          const next: StatusEffect = {
+                            name: newStatusName.trim(),
+                            effect: newStatusEffect.trim(),
+                            turnsRemaining: newStatusTurns,
+                          };
+                          const updated = [...localStatusEffects, next];
+                          setLocalStatusEffects(updated);
+                          onStatusUpdate(updated);
+                          setNewStatusName('');
+                          setNewStatusEffect('');
+                          setNewStatusTurns(1);
+                        }}
+                        className="px-3 py-1.5 rounded text-sm bg-fantasy-accent hover:bg-fantasy-accent-hover text-fantasy-bg font-medium"
+                      >
+                        Ajouter
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {isEdit && (

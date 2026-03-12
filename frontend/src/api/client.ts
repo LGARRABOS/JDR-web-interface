@@ -155,6 +155,7 @@ export const TokensAPI = {
       maxHp?: number;
       mana?: number;
       maxMana?: number;
+      statusEffects?: Array<{ name: string; effect: string; turnsRemaining: number }>;
     }
   ) => api.patch(`/tokens/${id}`, data),
   delete: (id: number) => api.delete(`/tokens/${id}`),

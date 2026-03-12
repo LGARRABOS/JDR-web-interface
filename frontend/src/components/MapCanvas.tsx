@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+export interface StatusEffect {
+  name: string;
+  effect: string;
+  turnsRemaining: number;
+}
+
 export interface Token {
   id: number;
   mapId: number;
@@ -15,6 +21,7 @@ export interface Token {
   iconPosX?: number;
   iconPosY?: number;
   iconScale?: number;
+  attackRange?: number;
   visibleToPlayers: boolean;
   ownerUserId?: number;
   hp?: number;
@@ -22,6 +29,7 @@ export interface Token {
   mana?: number;
   maxMana?: number;
   elementId?: number;
+  statusEffects?: StatusEffect[];
 }
 
 export interface MapData {
@@ -77,6 +85,7 @@ interface MapCanvasProps {
   onTokenCreate?: (x: number, y: number) => void;
   onTokenSelect?: (token: Token | null) => void;
   onTokenDoubleClick?: (token: Token) => void;
+  selectedToken?: Token | null;
   diceRollOverlay?: React.ReactNode;
 }
 
@@ -101,6 +110,7 @@ export function MapCanvas({
   onTokenCreate,
   onTokenSelect,
   onTokenDoubleClick,
+  selectedToken = null,
   diceRollOverlay,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -452,6 +462,36 @@ export function MapCanvas({
               />
             </div>
           ))}
+          {selectedToken &&
+            selectedToken.kind === 'PJ' &&
+            (selectedToken.ownerUserId === currentUserId || isGM) &&
+            selectedToken.attackRange != null &&
+            selectedToken.attackRange > 0 &&
+            map && (
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  width: map.width,
+                  height: map.height,
+                  zIndex: 8,
+                }}
+              >
+                <svg
+                  width={map.width}
+                  height={map.height}
+                  className="absolute inset-0 w-full h-full"
+                >
+                  <circle
+                    cx={selectedToken.x}
+                    cy={selectedToken.y}
+                    r={selectedToken.attackRange * map.gridSize}
+                    fill="none"
+                    stroke="rgba(234, 179, 8, 0.5)"
+                    strokeWidth={2}
+                  />
+                </svg>
+              </div>
+            )}
           {isGM === false && fogVisionRadius > 0 && pjTokens.length > 0 && (
             <div
               className="absolute inset-0 pointer-events-none"
@@ -488,11 +528,15 @@ export function MapCanvas({
           {visibleTokens.map((t) => {
             const displayName =
               t.ownerUserId != null
-                ? connectedUsers.find((u) => u.userId === t.ownerUserId)
-                    ?.characterName ||
-                  connectedUsers.find((u) => u.userId === t.ownerUserId)
-                    ?.displayName ||
-                  t.name
+                ? (t.name && t.name.trim() !== ''
+                    ? t.name
+                    : connectedUsers.find(
+                          (u) => u.userId === t.ownerUserId
+                        )?.characterName ||
+                      connectedUsers.find(
+                        (u) => u.userId === t.ownerUserId
+                      )?.displayName ||
+                      t.name)
                 : t.name;
             return (
               <div
@@ -532,7 +576,13 @@ export function MapCanvas({
                     onTokenSelect?.(willClose ? null : t);
                   }
                 }}
-                title={displayName}
+                title={
+                  t.kind === 'PJ' &&
+                  t.ownerUserId === currentUserId &&
+                  (t.attackRange ?? 0) > 0
+                    ? `${displayName} — Cliquez pour afficher la portée d'attaque`
+                    : displayName
+                }
               >
                 {t.kind === 'MORT' ? (
                   <div

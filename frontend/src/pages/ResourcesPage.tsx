@@ -716,6 +716,7 @@ export function ResourcesPage() {
           onClose={() => setMonsterEditorElement(null)}
           onSave={handleMonsterEditorSave}
           mode="edit"
+          isGM={true}
         />
       )}
 

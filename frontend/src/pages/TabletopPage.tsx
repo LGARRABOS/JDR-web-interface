@@ -83,6 +83,8 @@ export function TabletopPage() {
   const [monsterViewElement, setMonsterViewElement] = useState<{
     element: GameElementFull;
     tokenData: { hp: number; maxHp: number; mana: number; maxMana: number };
+    tokenKind: string;
+    tokenId: number;
   } | null>(null);
   const [messages, setMessages] = useState<
     Array<{
@@ -285,6 +287,8 @@ export function TabletopPage() {
                   mana: t.mana ?? el.maxMana ?? 0,
                   maxMana: t.maxMana ?? el.maxMana ?? 0,
                 },
+                tokenKind: t.kind,
+                tokenId: t.id,
               });
             }
           })
@@ -292,6 +296,13 @@ export function TabletopPage() {
       }
     },
     [gameId]
+  );
+
+  const handleMonsterStatusUpdate = useCallback(
+    (tokenId: number, statusEffects: Array<{ name: string; effect: string; turnsRemaining: number }>) => {
+      TokensAPI.update(tokenId, { statusEffects });
+    },
+    []
   );
 
   useEffect(() => {
@@ -311,7 +322,11 @@ export function TabletopPage() {
     'token.updated': (p) => {
       const t = p as Token;
       if (t.mapId === currentMap?.id && draggingTokenIdRef.current !== t.id)
-        setTokens((prev) => prev.map((x) => (x.id === t.id ? t : x)));
+        setTokens((prev) => {
+          const idx = prev.findIndex((x) => x.id === t.id);
+          if (idx >= 0) return prev.map((x) => (x.id === t.id ? t : x));
+          return [...prev, t];
+        });
     },
     'token.deleted': (p) => {
       const { id } = p as { id: number };
@@ -388,6 +403,17 @@ export function TabletopPage() {
     'presence.left': (p) => {
       const { userId } = p as { userId: number };
       setConnectedUsers((prev) => prev.filter((x) => x.userId !== userId));
+    },
+    'character.updated': (p) => {
+      const { userId, characterName } = p as {
+        userId: number;
+        characterName?: string;
+      };
+      setConnectedUsers((prev) =>
+        prev.map((u) =>
+          u.userId === userId ? { ...u, characterName } : u
+        )
+      );
     },
     'presence.list': (p) => {
       const { users } = p as {
@@ -912,6 +938,12 @@ export function TabletopPage() {
             }
             onTokenSelect={setSelectedToken}
             onTokenDoubleClick={handleTokenDoubleClick}
+            selectedToken={
+              selectedToken
+                ? (tokens.find((t) => t.id === selectedToken.id) ??
+                  selectedToken)
+                : null
+            }
             fogVisionRadius={game?.fogVisionRadius}
             diceRollOverlay={
               game.isGemma ? (
@@ -1030,6 +1062,7 @@ export function TabletopPage() {
             isGM={isGM}
             isGemma={game.isGemma}
             players={gamePlayers}
+            onSheetSaved={loadTokens}
           />
           {isGM ? (
             <MusicPanel gameId={gameId} send={send} showUpload={false} />
@@ -1045,6 +1078,19 @@ export function TabletopPage() {
           onClose={() => setMonsterViewElement(null)}
           mode="view"
           tokenData={monsterViewElement.tokenData}
+          tokenKind={monsterViewElement.tokenKind}
+          isGM={isGM}
+          tokenId={monsterViewElement.tokenId}
+          statusEffects={
+            tokens.find((t) => t.id === monsterViewElement.tokenId)
+              ?.statusEffects ?? []
+          }
+          onStatusUpdate={
+            isGM
+              ? (se) =>
+                  handleMonsterStatusUpdate(monsterViewElement.tokenId, se)
+              : undefined
+          }
         />
       )}
     </div>

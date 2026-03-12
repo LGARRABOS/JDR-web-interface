@@ -8,6 +8,7 @@ export interface CharacterSheetData {
   tokenIconPosX?: number;
   tokenIconPosY?: number;
   tokenIconScale?: number;
+  tokenAttackRange?: number;
   identite?: {
     nom?: string;
     race?: string;
@@ -44,6 +45,8 @@ export interface CharacterSheetData {
   }>;
   armes?: Array<{
     nom?: string;
+    type?: string;
+    portee?: string;
     effet?: string;
     poids?: string;
     rarete?: string;
@@ -246,12 +249,14 @@ interface CharacterSheetFormProps {
   gameId: number;
   initialData?: CharacterSheetData | null;
   readOnly?: boolean;
+  onSaveSuccess?: () => void;
 }
 
 export function CharacterSheetForm({
   gameId,
   initialData,
   readOnly = false,
+  onSaveSuccess,
 }: CharacterSheetFormProps) {
   const [data, setData] = useState<CharacterSheetData>(
     initialData ?? emptySheet
@@ -267,13 +272,31 @@ export function CharacterSheetForm({
     setSaving(true);
     setSaved(false);
     try {
-      await CharacterSheetsAPI.patch(gameId, data as Record<string, unknown>);
+      // Auto tokenAttackRange depuis la première arme avec portée si non défini
+      let payload = data as Record<string, unknown>;
+      if (
+        (payload.tokenAttackRange == null || payload.tokenAttackRange === 0) &&
+        Array.isArray(payload.armes)
+      ) {
+        for (const a of payload.armes as Array<{ portee?: string | number }>) {
+          const p = a.portee;
+          if (p != null && p !== '') {
+            const v = typeof p === 'string' ? parseInt(p, 10) : p;
+            if (!Number.isNaN(v) && v > 0) {
+              payload = { ...payload, tokenAttackRange: v };
+              break;
+            }
+          }
+        }
+      }
+      await CharacterSheetsAPI.patch(gameId, payload);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      onSaveSuccess?.();
     } finally {
       setSaving(false);
     }
-  }, [gameId, data]);
+  }, [gameId, data, onSaveSuccess]);
 
   const id = data.identite ?? {};
   const stats = data.statsCombat ?? {};
@@ -329,6 +352,12 @@ export function CharacterSheetForm({
     setData((d) => ({ ...d, tokenIconPosX: x, tokenIconPosY: y }));
   const setTokenIconScale = (s: number) =>
     setData((d) => ({ ...d, tokenIconScale: Math.max(0.5, Math.min(2, s)) }));
+  const tokenAttackRange = data.tokenAttackRange ?? 1;
+  const setTokenAttackRange = (r: number) =>
+    setData((d) => ({
+      ...d,
+      tokenAttackRange: Math.max(0, Math.min(30, r)),
+    }));
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [draggingIcon, setDraggingIcon] = useState(false);
@@ -468,7 +497,7 @@ export function CharacterSheetForm({
                         +
                       </button>
                     </div>
-                    <div className="flex gap-2 items-center">
+                    <div className="flex gap-2 items-center flex-wrap">
                       <label className="text-xs text-fantasy-muted-soft">
                         Format jeton:
                       </label>
@@ -494,6 +523,20 @@ export function CharacterSheetForm({
                             Math.max(20, parseInt(e.target.value, 10) || 56)
                           )
                         }
+                      />
+                      <label className="text-xs text-fantasy-muted-soft ml-2">
+                        Portée attaque (cases):
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={30}
+                        className="w-12 rounded bg-fantasy-input-soft px-2 py-1 text-sm text-fantasy-text-soft border border-fantasy-border-soft"
+                        value={tokenAttackRange}
+                        onChange={(e) =>
+                          setTokenAttackRange(parseInt(e.target.value, 10) || 0)
+                        }
+                        title="Portée en cases pour le cercle sur la carte"
                       />
                     </div>
                     <div className="flex flex-col gap-1">
@@ -567,7 +610,8 @@ export function CharacterSheetForm({
             </div>
             <p className="text-xs text-fantasy-muted-soft mt-1">
               Format: {tokenWidth}×{tokenHeight} px · Zoom:{' '}
-              {Math.round(tokenIconScale * 100)}%
+              {Math.round(tokenIconScale * 100)}% · Portée: {tokenAttackRange}{' '}
+              cases
             </p>
           </div>
         )}
@@ -759,18 +803,141 @@ export function CharacterSheetForm({
       </Section>
 
       <Section title="Armes" icon="⚔️">
+        <p className="text-xs text-fantasy-muted-soft mb-2">
+          Type et portée déterminent le cercle d&apos;attaque sur la carte (clic
+          sur votre jeton).
+        </p>
         <DynamicList
           items={armes}
           onChange={setArmes}
           emptyItem={{
             nom: '',
+            type: '',
+            portee: '',
             effet: '',
             poids: '',
             rarete: '',
             prixVente: '',
           }}
-          fields={['nom', 'effet', 'poids', 'rarete', 'prixVente']}
+          fields={[
+            'nom',
+            'type',
+            'portee',
+            'effet',
+            'poids',
+            'rarete',
+            'prixVente',
+          ]}
           readOnly={readOnly}
+          renderField={(item, i, onChange) => (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div>
+                <label className={labelClass}>Nom</label>
+                <input
+                  type="text"
+                  value={item.nom ?? ''}
+                  onChange={(e) => onChange({ ...item, nom: e.target.value })}
+                  className={inputClass}
+                  placeholder="Nom"
+                  readOnly={readOnly}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Type</label>
+                <select
+                  value={item.type ?? ''}
+                  onChange={(e) => {
+                    const type = e.target.value;
+                    const defaults: Record<string, string> = {
+                      épée: '1',
+                      dague: '1',
+                      mêlée: '1',
+                      arc: '8',
+                      arbalète: '10',
+                      magie: '12',
+                      sort: '12',
+                    };
+                    onChange({
+                      ...item,
+                      type,
+                      portee: item.portee || defaults[type] || '',
+                    });
+                  }}
+                  className={inputClass}
+                  disabled={readOnly}
+                >
+                  <option value="">—</option>
+                  <option value="épée">Épée (1)</option>
+                  <option value="dague">Dague (1)</option>
+                  <option value="mêlée">Mêlée (1)</option>
+                  <option value="arc">Arc (8)</option>
+                  <option value="arbalète">Arbalète (10)</option>
+                  <option value="magie">Magie (12)</option>
+                  <option value="sort">Sort (12)</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Portée (cases)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={item.portee ?? ''}
+                  onChange={(e) =>
+                    onChange({ ...item, portee: e.target.value })
+                  }
+                  className={inputClass}
+                  placeholder="1"
+                  readOnly={readOnly}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelClass}>Effet</label>
+                <input
+                  type="text"
+                  value={item.effet ?? ''}
+                  onChange={(e) => onChange({ ...item, effet: e.target.value })}
+                  className={inputClass}
+                  placeholder="Effet"
+                  readOnly={readOnly}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Poids</label>
+                <input
+                  type="text"
+                  value={item.poids ?? ''}
+                  onChange={(e) => onChange({ ...item, poids: e.target.value })}
+                  className={inputClass}
+                  readOnly={readOnly}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Rareté</label>
+                <input
+                  type="text"
+                  value={item.rarete ?? ''}
+                  onChange={(e) =>
+                    onChange({ ...item, rarete: e.target.value })
+                  }
+                  className={inputClass}
+                  readOnly={readOnly}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Prix vente</label>
+                <input
+                  type="text"
+                  value={item.prixVente ?? ''}
+                  onChange={(e) =>
+                    onChange({ ...item, prixVente: e.target.value })
+                  }
+                  className={inputClass}
+                  readOnly={readOnly}
+                />
+              </div>
+            </div>
+          )}
         />
       </Section>
 
