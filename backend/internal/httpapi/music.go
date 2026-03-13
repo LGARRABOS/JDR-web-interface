@@ -132,12 +132,13 @@ func (s *Server) handleListMusic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Musique partagée : toutes les pistes des parties où ce MJ est présent
+	// Pistes de la partie : l'utilisateur doit être dans la partie (MJ ou joueur)
 	rows, err := s.db.Query(
 		`SELECT gm.id, gm.game_id, gm.filename FROM game_music gm
-		 INNER JOIN game_players gp ON gp.game_id = gm.game_id AND gp.user_id = ? AND gp.role = 'MJ'
+		 INNER JOIN game_players gp ON gp.game_id = gm.game_id AND gp.user_id = ?
+		 WHERE gm.game_id = ?
 		 ORDER BY gm.created_at`,
-		u.ID,
+		u.ID, gameID,
 	)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})

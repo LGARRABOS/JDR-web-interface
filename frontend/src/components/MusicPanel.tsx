@@ -7,16 +7,26 @@ interface Track {
   url: string;
 }
 
+export interface MusicPanelState {
+  trackId: number | null;
+  position: number;
+  playing: boolean;
+  volume: number;
+}
+
 interface MusicPanelProps {
   gameId: number;
   send: (action: string, payload?: Record<string, unknown>) => void;
   showUpload?: boolean;
+  /** Ref mis à jour avec l'état actuel pour que le MJ puisse répondre à music.state.request */
+  stateRef?: React.MutableRefObject<MusicPanelState | null>;
 }
 
 export function MusicPanel({
   gameId,
   send,
   showUpload = true,
+  stateRef,
 }: MusicPanelProps) {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
@@ -165,6 +175,17 @@ export function MusicPanel({
   }, [handleNext]);
 
   const isPlaying = playingTrackId != null;
+
+  useEffect(() => {
+    if (stateRef) {
+      stateRef.current = {
+        trackId: playingTrackId,
+        position,
+        playing: isPlaying,
+        volume,
+      };
+    }
+  }, [stateRef, playingTrackId, position, isPlaying, volume]);
 
   return (
     <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">

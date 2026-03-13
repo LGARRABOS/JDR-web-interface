@@ -22,6 +22,7 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [localVolume, setLocalVolume] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -44,7 +45,8 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    audio.volume = musicState.volume ?? 1;
+    const baseVolume = musicState.volume ?? 1;
+    audio.volume = Math.min(1, baseVolume * localVolume);
 
     if (musicState.playing) {
       if (
@@ -63,7 +65,7 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
         audio.currentTime = musicState.position;
       }
     }
-  }, [musicState, trackUrl]);
+  }, [musicState, trackUrl, localVolume]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -96,6 +98,21 @@ export function MusicPlayer({ gameId, musicState }: MusicPlayerProps) {
           ⏸ {track?.filename ?? 'En pause'}
         </p>
       )}
+      <div className="mt-2 flex items-center gap-2">
+        <span className="text-xs text-fantasy-muted-soft w-12 shrink-0">
+          Volume
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={localVolume}
+          onChange={(e) => setLocalVolume(parseFloat(e.target.value))}
+          className="flex-1 h-2 rounded bg-fantasy-input-soft accent-fantasy-accent"
+          title="Régler le volume"
+        />
+      </div>
       {track && duration > 0 && (
         <div className="mt-2 flex items-center gap-2">
           <span className="text-xs text-fantasy-muted-soft w-8 shrink-0">

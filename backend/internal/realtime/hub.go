@@ -212,6 +212,17 @@ func (c *Client) readPump() {
 			continue
 		}
 
+		// Demande d'état musique : un joueur demande l'état actuel, on diffuse au MJ uniquement
+		if req.Action == "music.state.request" && req.GameID > 0 {
+			if c.hub.userInfo != nil {
+				_, _, role := c.hub.userInfo(c.userID, req.GameID)
+				if role != "MJ" {
+					c.hub.BroadcastToRole(req.GameID, "MJ", "music.state.request", map[string]interface{}{})
+				}
+			}
+			continue
+		}
+
 		// Diffusion musicale : seul le MJ peut envoyer
 		if (req.Action == "music.play" || req.Action == "music.pause" || req.Action == "music.seek") && req.GameID > 0 {
 			if c.hub.userInfo != nil {

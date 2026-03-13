@@ -147,6 +147,12 @@ export function TabletopPage() {
   const sendRef = useRef<
     ((a: string, p?: Record<string, unknown>) => void) | null
   >(null);
+  const musicPanelStateRef = useRef<{
+    trackId: number | null;
+    position: number;
+    playing: boolean;
+    volume: number;
+  } | null>(null);
 
   const isGM = game?.role === 'MJ';
 
@@ -525,6 +531,25 @@ export function TabletopPage() {
         });
       }
     },
+    'music.state.request': () => {
+      const s = sendRef.current;
+      const state = musicPanelStateRef.current;
+      if (s && state && state.trackId != null) {
+        if (state.playing) {
+          s('music.play', {
+            trackId: state.trackId,
+            position: state.position,
+            volume: state.volume,
+          });
+        } else {
+          s('music.pause', {
+            trackId: state.trackId,
+            position: state.position,
+            volume: state.volume,
+          });
+        }
+      }
+    },
   });
 
   useEffect(() => {
@@ -533,10 +558,22 @@ export function TabletopPage() {
 
   useEffect(() => {
     if (connected && !isGM && send) {
-      const t = setTimeout(() => send('map.view.request'), 150);
-      return () => clearTimeout(t);
+      const t1 = setTimeout(() => send('map.view.request'), 150);
+      const t2 = setTimeout(() => send('music.state.request'), 300);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
   }, [connected, isGM, send]);
+
+  // Recharger les données quand un joueur se connecte pour être synchro avec le MJ
+  useEffect(() => {
+    if (connected && !isGM && currentMap) {
+      loadTokens();
+      loadMapElements();
+    }
+  }, [connected, isGM, currentMap?.id, loadTokens, loadMapElements]);
 
   const handleTokenUpdate = useCallback(
     async (
@@ -1070,7 +1107,12 @@ export function TabletopPage() {
             onSheetSaved={loadTokens}
           />
           {isGM ? (
-            <MusicPanel gameId={gameId} send={send} showUpload={false} />
+            <MusicPanel
+              gameId={gameId}
+              send={send}
+              showUpload={false}
+              stateRef={musicPanelStateRef}
+            />
           ) : (
             <MusicPlayer gameId={gameId} musicState={musicState} />
           )}

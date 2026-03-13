@@ -55,13 +55,14 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 					}
 					color := tokenColors[int(u.ID)%len(tokenColors)]
 					var id int64
-					err = s.db.QueryRow(`
+					// INSERT avec vérification d'existence (portable, évite les soucis ON CONFLICT partiel)
+					_, err = s.db.Exec(`
 						INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, x, y, visible_to_players)
-						VALUES (?, ?, ?, 'PJ', ?, ?, 100, 100, 1)
-						ON CONFLICT (map_id, owner_user_id) WHERE kind = 'PJ' AND owner_user_id IS NOT NULL DO NOTHING
-						RETURNING id
-					`, mapID, u.ID, u.ID, tokenName, color).Scan(&id)
+						SELECT ?, ?, ?, 'PJ', ?, ?, 100, 100, 1
+						WHERE NOT EXISTS (SELECT 1 FROM tokens WHERE map_id = ? AND owner_user_id = ? AND kind = 'PJ')
+					`, mapID, u.ID, u.ID, tokenName, color, mapID, u.ID)
 					if err == nil {
+						_ = s.db.QueryRow("SELECT id FROM tokens WHERE map_id = ? AND owner_user_id = ? AND kind = 'PJ'", mapID, u.ID).Scan(&id)
 						var t domain.Token
 						var ownerID sql.NullInt64
 						var iconURL sql.NullString
