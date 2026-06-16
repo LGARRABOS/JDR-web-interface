@@ -48,6 +48,69 @@ export interface MapView {
   offset: { x: number; y: number };
 }
 
+function getImageContentRect(
+  containerW: number,
+  containerH: number,
+  imgW: number,
+  imgH: number
+) {
+  if (imgW <= 0 || imgH <= 0) {
+    return { left: 0, top: 0, width: containerW, height: containerH };
+  }
+  const containerAspect = containerW / containerH;
+  const imageAspect = imgW / imgH;
+  if (imageAspect > containerAspect) {
+    const displayH = containerW / imageAspect;
+    return {
+      left: 0,
+      top: (containerH - displayH) / 2,
+      width: containerW,
+      height: displayH,
+    };
+  }
+  const displayW = containerH * imageAspect;
+  return {
+    left: (containerW - displayW) / 2,
+    top: 0,
+    width: displayW,
+    height: containerH,
+  };
+}
+
+function clientToMapCoords(
+  clientX: number,
+  clientY: number,
+  containerRect: DOMRect,
+  mapW: number,
+  mapH: number,
+  imgW: number,
+  imgH: number
+) {
+  const relX = clientX - containerRect.left;
+  const relY = clientY - containerRect.top;
+  const logicalX = (relX / containerRect.width) * mapW;
+  const logicalY = (relY / containerRect.height) * mapH;
+  const content = getImageContentRect(mapW, mapH, imgW, imgH);
+  const x = ((logicalX - content.left) / content.width) * mapW;
+  const y = ((logicalY - content.top) / content.height) * mapH;
+  return { x, y };
+}
+
+function mapCoordsToContainer(
+  x: number,
+  y: number,
+  mapW: number,
+  mapH: number,
+  imgW: number,
+  imgH: number
+) {
+  const content = getImageContentRect(mapW, mapH, imgW, imgH);
+  return {
+    left: content.left + (x / mapW) * content.width,
+    top: content.top + (y / mapH) * content.height,
+  };
+}
+
 export interface MapElement {
   id: number;
   mapId: number;
@@ -136,6 +199,32 @@ export function MapCanvas({
     null
   );
   const [inspectedTokenId, setInspectedTokenId] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [imageNaturalSize, setImageNaturalSize] = useState<{
+    w: number;
+    h: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!map?.imageUrl) {
+      setImageNaturalSize(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        setImageNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+      }
+    };
+    img.src = map.imageUrl;
+    return () => {
+      img.src = '';
+    };
+  }, [map?.id, map?.imageUrl]);
+
+  const imgW = imageNaturalSize?.w ?? map?.width ?? 1;
+  const imgH = imageNaturalSize?.h ?? map?.height ?? 1;
 
   const canMove = useCallback(
     (t: Token) => {
@@ -164,7 +253,7 @@ export function MapCanvas({
   }, [map, onMapViewChange]);
 
   useEffect(() => {
-    if (!map) return;
+    if (!map || !isGM) return;
     const runFit = () => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => fitScaleToViewport());
@@ -172,7 +261,7 @@ export function MapCanvas({
     };
     const t = setTimeout(runFit, 100);
     return () => clearTimeout(t);
-  }, [map, fitScaleToViewport]);
+  }, [map, fitScaleToViewport, isGM]);
 
   const updateView = useCallback(
     (updates: Partial<MapView>) => {
@@ -197,6 +286,7 @@ export function MapCanvas({
     if ((e.target as HTMLElement).closest('[data-token]')) return;
     if (e.button === 0) {
       didPanRef.current = false;
+      setIsPanning(true);
       panRef.current = {
         startX: e.clientX,
         startY: e.clientY,
@@ -228,11 +318,13 @@ export function MapCanvas({
       onMapPanEnd();
     }
     panRef.current = null;
+    setIsPanning(false);
   }, [onMapPanEnd]);
 
   const handleTokenMouseDown = (e: React.MouseEvent, token: Token) => {
     if (!canMove(token) || !onTokenMove) return;
     e.stopPropagation();
+    setIsDragging(true);
     onTokenDragStart?.(token.id);
     dragRef.current = {
       tokenId: token.id,
@@ -250,12 +342,30 @@ export function MapCanvas({
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
-      if (!dragRef.current || !onTokenMove) return;
+      if (!dragRef.current || !onTokenMove || !map || !mapContainerRef.current)
+        return;
       didDragRef.current = true;
-      const dx = (e.clientX - dragRef.current.startX) / scale;
-      const dy = (e.clientY - dragRef.current.startY) / scale;
-      const newX = dragRef.current.tokenX + dx;
-      const newY = dragRef.current.tokenY + dy;
+      const rect = mapContainerRef.current.getBoundingClientRect();
+      const start = clientToMapCoords(
+        dragRef.current.startX,
+        dragRef.current.startY,
+        rect,
+        map.width,
+        map.height,
+        imgW,
+        imgH
+      );
+      const current = clientToMapCoords(
+        e.clientX,
+        e.clientY,
+        rect,
+        map.width,
+        map.height,
+        imgW,
+        imgH
+      );
+      const newX = dragRef.current.tokenX + (current.x - start.x);
+      const newY = dragRef.current.tokenY + (current.y - start.y);
       dragRef.current.lastX = newX;
       dragRef.current.lastY = newY;
       pendingMoveRef.current = { x: newX, y: newY };
@@ -269,7 +379,7 @@ export function MapCanvas({
         });
       }
     },
-    [onTokenMove, scale]
+    [onTokenMove, map, imgW, imgH]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -286,6 +396,7 @@ export function MapCanvas({
       );
     }
     dragRef.current = null;
+    setIsDragging(false);
     // Reset didDragRef after a tick so click handler can check it
     setTimeout(() => {
       didDragRef.current = false;
@@ -322,15 +433,24 @@ export function MapCanvas({
     }
     if (placementClickRef.current) return;
     placementClickRef.current = true;
-    const canvasRect = canvasRef.current?.getBoundingClientRect();
-    if (!canvasRect || canvasRect.width <= 0 || canvasRect.height <= 0) {
+    const containerRect = mapContainerRef.current?.getBoundingClientRect();
+    if (
+      !containerRect ||
+      containerRect.width <= 0 ||
+      containerRect.height <= 0
+    ) {
       placementClickRef.current = false;
       return;
     }
-    const canvasCenterX = canvasRect.left + canvasRect.width / 2;
-    const canvasCenterY = canvasRect.top + canvasRect.height / 2;
-    const x = map.width / 2 + (e.clientX - canvasCenterX) / scale - offset.x;
-    const y = map.height / 2 + (e.clientY - canvasCenterY) / scale - offset.y;
+    const { x, y } = clientToMapCoords(
+      e.clientX,
+      e.clientY,
+      containerRect,
+      map.width,
+      map.height,
+      imgW,
+      imgH
+    );
     if (x >= 0 && y >= 0 && x <= map.width && y <= map.height) {
       onTokenCreate(x, y);
     }
@@ -370,9 +490,8 @@ export function MapCanvas({
       className="flex-1 overflow-hidden relative bg-fantasy-bg select-none"
       onWheel={handleWheel}
       style={{
-        cursor: dragRef.current
-          ? 'grabbing'
-          : panRef.current && isGM
+        cursor:
+          isDragging || isPanning
             ? 'grabbing'
             : isGM
               ? 'grab'
@@ -442,13 +561,22 @@ export function MapCanvas({
             className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             draggable={false}
           />
-          {mapElements.map((el) => (
+          {mapElements.map((el) => {
+            const pos = mapCoordsToContainer(
+              el.x,
+              el.y,
+              map.width,
+              map.height,
+              imgW,
+              imgH
+            );
+            return (
             <div
               key={el.id}
               className="absolute pointer-events-none"
               style={{
-                left: el.x,
-                top: el.y,
+                left: pos.left,
+                top: pos.top,
                 width: el.width,
                 height: el.height,
                 transform: 'translate(-50%, -50%)',
@@ -461,7 +589,8 @@ export function MapCanvas({
                 draggable={false}
               />
             </div>
-          ))}
+            );
+          })}
           {selectedToken &&
             selectedToken.kind === 'PJ' &&
             (selectedToken.ownerUserId === currentUserId || isGM) &&
@@ -536,14 +665,22 @@ export function MapCanvas({
                       ?.displayName ||
                     t.name
                 : t.name;
+            const tokenPos = mapCoordsToContainer(
+              t.x,
+              t.y,
+              map.width,
+              map.height,
+              imgW,
+              imgH
+            );
             return (
               <div
                 key={t.id}
                 data-token
                 className="absolute cursor-grab flex flex-col items-center select-none"
                 style={{
-                  left: t.x,
-                  top: t.y,
+                  left: tokenPos.left,
+                  top: tokenPos.top,
                   transform: 'translate(-50%, -50%)',
                   minWidth: t.width ?? 56,
                   minHeight: t.height ?? 56,
@@ -674,13 +811,21 @@ export function MapCanvas({
                       ?.displayName ||
                     t.name
                   : t.name;
+              const popupPos = mapCoordsToContainer(
+                t.x,
+                t.y,
+                map.width,
+                map.height,
+                imgW,
+                imgH
+              );
               return (
                 <div
                   className="absolute z-30 rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-2 shadow-lg text-sm min-w-[120px]"
                   onClick={(e) => e.stopPropagation()}
                   style={{
-                    left: t.x,
-                    top: t.y - (t.height ?? 56) / 2 - 4,
+                    left: popupPos.left,
+                    top: popupPos.top - (t.height ?? 56) / 2 - 4,
                     transform: 'translate(-50%, -100%)',
                   }}
                 >

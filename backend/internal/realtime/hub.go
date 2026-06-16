@@ -13,14 +13,6 @@ type contextKey string
 
 const UserIDKey contextKey = "userID"
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // En prod, vérifier l'origine
-	},
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
 // Client représente une connexion WebSocket.
 type Client struct {
 	hub    *Hub
@@ -34,14 +26,19 @@ type Client struct {
 // UserInfoFunc retourne les infos d'un utilisateur dans une partie (displayName, characterName, role).
 type UserInfoFunc func(userID, gameID int64) (displayName, characterName, role string)
 
+// GameMembershipFunc vérifie si un utilisateur est membre d'une partie.
+type GameMembershipFunc func(userID, gameID int64) bool
+
 // Hub gère les connexions WebSocket et les rooms par partie.
 type Hub struct {
-	clients    map[*Client]bool
-	broadcast  chan *BroadcastMsg
-	register   chan *Client
-	unregister chan *Client
-	userInfo   UserInfoFunc
-	mu         sync.RWMutex
+	clients         map[*Client]bool
+	broadcast       chan *BroadcastMsg
+	register        chan *Client
+	unregister      chan *Client
+	userInfo        UserInfoFunc
+	gameMembership  GameMembershipFunc
+	allowedOrigins  []string
+	mu              sync.RWMutex
 }
 
 // BroadcastMsg est un message à envoyer à une room.
@@ -52,20 +49,44 @@ type BroadcastMsg struct {
 	RoleFilter string      `json:"-"` // si non vide, envoyer uniquement aux clients avec ce rôle (interne, pas envoyé)
 }
 
-// NewHub crée un nouveau hub. userInfo peut être nil.
-func NewHub(userInfo UserInfoFunc) *Hub {
+// NewHub crée un nouveau hub. userInfo et gameMembership peuvent être nil.
+func NewHub(userInfo UserInfoFunc, gameMembership GameMembershipFunc, allowedOrigins []string) *Hub {
 	return &Hub{
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan *BroadcastMsg, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		userInfo:   userInfo,
+		clients:        make(map[*Client]bool),
+		broadcast:      make(chan *BroadcastMsg, 256),
+		register:       make(chan *Client),
+		unregister:     make(chan *Client),
+		userInfo:       userInfo,
+		gameMembership: gameMembership,
+		allowedOrigins: allowedOrigins,
+	}
+}
+
+func (h *Hub) checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	for _, allowed := range h.allowedOrigins {
+		if origin == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hub) upgrader() websocket.Upgrader {
+	return websocket.Upgrader{
+		CheckOrigin:     h.checkOrigin,
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
 	}
 }
 
 // ServeHTTP gère l'upgrade WebSocket.
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	up := h.upgrader()
+	conn, err := up.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("websocket upgrade: %v", err)
 		return
@@ -148,7 +169,7 @@ func (h *Hub) Run() {
 					select {
 					case client.send <- data:
 					default:
-						// buffer full, skip
+						log.Printf("hub client send buffer full, dropping message for user %d game %d", client.userID, msg.GameID)
 					}
 				}
 				client.mu.RUnlock()
@@ -251,6 +272,9 @@ func (c *Client) readPump() {
 		}
 
 		if req.Action == "subscribe" && req.GameID > 0 {
+			if c.hub.gameMembership != nil && !c.hub.gameMembership(c.userID, req.GameID) {
+				continue
+			}
 			c.mu.Lock()
 			wasSubscribed := c.games[req.GameID]
 			c.games[req.GameID] = true
@@ -288,10 +312,10 @@ func (h *Hub) broadcastPresenceJoined(client *Client, gameID int64) {
 		displayName = "Joueur"
 	}
 	payload := map[string]interface{}{
-		"userId":      client.userID,
-		"displayName": displayName,
+		"userId":        client.userID,
+		"displayName":   displayName,
 		"characterName": characterName,
-		"role":        role,
+		"role":          role,
 	}
 	h.Broadcast(gameID, "presence.joined", payload)
 }
@@ -318,10 +342,10 @@ func (h *Hub) sendPresenceList(client *Client, gameID int64) {
 				displayName = "Joueur"
 			}
 			list = append(list, map[string]interface{}{
-				"userId":       c.userID,
-				"displayName":  displayName,
+				"userId":        c.userID,
+				"displayName":   displayName,
 				"characterName": characterName,
-				"role":         role,
+				"role":          role,
 			})
 		}
 		c.mu.RUnlock()

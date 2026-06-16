@@ -35,6 +35,7 @@ export function MusicPanel({
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const seekUpdateRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -71,8 +72,13 @@ export function MusicPanel({
       if (!file) return;
       const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
       if (!['.mp3', '.ogg', '.wav', '.m4a'].includes(ext)) {
+        setUploadError(
+          'Format non supporté. Utilisez mp3, ogg, wav ou m4a.'
+        );
+        e.target.value = '';
         return;
       }
+      setUploadError(null);
       setUploading(true);
       try {
         await MusicAPI.upload(gameId, file);
@@ -132,13 +138,21 @@ export function MusicPanel({
     [sendMusic, playingTrackId, volume]
   );
 
-  const handleVolumeChange = useCallback((v: number) => {
-    setVolume(v);
-    const audio = audioRef.current;
-    if (audio) {
-      audio.volume = v;
-    }
-  }, []);
+  const handleVolumeChange = useCallback(
+    (v: number) => {
+      setVolume(v);
+      const audio = audioRef.current;
+      if (audio) {
+        audio.volume = v;
+      }
+      const tid = playingTrackId;
+      if (tid != null) {
+        const pos = audio ? audio.currentTime : position;
+        sendMusic('music.seek', tid, pos, v);
+      }
+    },
+    [sendMusic, playingTrackId, position]
+  );
 
   const currentIndex = tracks.findIndex((t) => t.id === playingTrackId);
   const handlePrev = useCallback(() => {
@@ -194,13 +208,18 @@ export function MusicPanel({
       </h3>
       <div className="space-y-2">
         {showUpload && (
-          <input
-            type="file"
-            accept=".mp3,.ogg,.wav,.m4a"
-            onChange={handleFileSelect}
-            disabled={uploading}
-            className="block w-full text-sm text-fantasy-muted-soft file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-fantasy-input-soft file:text-fantasy-text-soft"
-          />
+          <>
+            <input
+              type="file"
+              accept=".mp3,.ogg,.wav,.m4a"
+              onChange={handleFileSelect}
+              disabled={uploading}
+              className="block w-full text-sm text-fantasy-muted-soft file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-fantasy-input-soft file:text-fantasy-text-soft"
+            />
+            {uploadError && (
+              <p className="text-sm text-fantasy-error">{uploadError}</p>
+            )}
+          </>
         )}
         {loading ? (
           <p className="text-sm text-fantasy-muted-soft">Chargement...</p>

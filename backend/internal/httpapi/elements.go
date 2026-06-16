@@ -327,7 +327,7 @@ func (s *Server) handleUploadElement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storageName := strconv.FormatInt(time.Now().UnixNano(), 10) + "_" + header.Filename
+	storageName := strconv.FormatInt(time.Now().UnixNano(), 10) + "_" + filepath.Base(header.Filename)
 	storagePath := filepath.Join(dir, storageName)
 
 	dst, err := os.Create(storagePath)

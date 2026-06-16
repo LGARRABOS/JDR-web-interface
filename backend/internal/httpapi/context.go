@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strconv"
 
@@ -56,6 +57,65 @@ func getGameIDFromContext(r *http.Request) int64 {
 		return 0
 	}
 	return id
+}
+
+func (s *Server) getUserGameRole(gameID, userID int64) (string, bool) {
+	var role string
+	err := s.db.QueryRow(
+		"SELECT role FROM game_players WHERE game_id = ? AND user_id = ?",
+		gameID, userID,
+	).Scan(&role)
+	return role, err == nil
+}
+
+func (s *Server) isUserInGame(gameID, userID int64) bool {
+	var count int
+	err := s.db.QueryRow(
+		"SELECT 1 FROM game_players WHERE game_id = ? AND user_id = ?",
+		gameID, userID,
+	).Scan(&count)
+	return err == nil && count != 0
+}
+
+func (s *Server) getMapGameID(mapID int64) (int64, error) {
+	var gameID int64
+	err := s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
+	return gameID, err
+}
+
+func (s *Server) getMapAccess(mapID, userID int64) (gameID int64, role string, ok bool) {
+	gameID, err := s.getMapGameID(mapID)
+	if err != nil {
+		return 0, "", false
+	}
+	role, member := s.getUserGameRole(gameID, userID)
+	return gameID, role, member
+}
+
+func (s *Server) getTokenContext(tokenID int64) (mapID, gameID int64, kind string, ownerUserID *int64, err error) {
+	var owner sql.NullInt64
+	err = s.db.QueryRow(
+		"SELECT map_id, kind, owner_user_id FROM tokens WHERE id = ?",
+		tokenID,
+	).Scan(&mapID, &kind, &owner)
+	if err != nil {
+		return
+	}
+	gameID, err = s.getMapGameID(mapID)
+	if err != nil {
+		return
+	}
+	if owner.Valid {
+		id := owner.Int64
+		ownerUserID = &id
+	}
+	return
+}
+
+func (s *Server) isTokenMovementLocked(gameID int64) bool {
+	var locked int
+	_ = s.db.QueryRow("SELECT COALESCE(token_movement_locked, 0) FROM games WHERE id = ?", gameID).Scan(&locked)
+	return locked == 1
 }
 
 // requireMapFileAccess : accès si l'utilisateur a accès au gameId OU si la carte est affichée dans une de ses parties.

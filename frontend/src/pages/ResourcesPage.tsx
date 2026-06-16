@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { GamesAPI, MapsAPI, MusicAPI, ElementsAPI } from '../api/client';
+import { getErrorMessage } from '../utils/errorMessage';
 import type { MapData } from '../components/MapCanvas';
 import { MapEditor } from '../components/MapEditor';
 import { Modal, ModalButtons, ModalConfirm } from '../components/Modal';
@@ -72,8 +73,10 @@ function ElementUploadForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (tagInput.trim()) addTag(tagInput);
-    onSubmit(name.trim() || defaultName, category, tags);
+    const trimmed = tagInput.trim().toLowerCase();
+    const submitTags =
+      trimmed && !tags.includes(trimmed) ? [...tags, trimmed] : tags;
+    onSubmit(name.trim() || defaultName, category, submitTags);
   };
 
   return (
@@ -224,8 +227,10 @@ function MapUploadForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (tagInput.trim()) addTag(tagInput);
-    onSubmit(name.trim() || defaultName, tags);
+    const trimmed = tagInput.trim().toLowerCase();
+    const submitTags =
+      trimmed && !tags.includes(trimmed) ? [...tags, trimmed] : tags;
+    onSubmit(name.trim() || defaultName, submitTags);
   };
 
   return (
@@ -354,6 +359,7 @@ export function ResourcesPage() {
   const [deleteElementId, setDeleteElementId] = useState<number | null>(null);
   const [monsterEditorElement, setMonsterEditorElement] =
     useState<GameElementFull | null>(null);
+  const [monsterSaveError, setMonsterSaveError] = useState<string | null>(null);
   const [elementSearchQuery, setElementSearchQuery] = useState('');
   const [elementFilterCategory, setElementFilterCategory] = useState<
     'all' | 'monster' | 'decor'
@@ -550,18 +556,23 @@ export function ResourcesPage() {
   const handleMonsterEditorSave = useCallback(
     async (patch: Partial<GameElementFull>) => {
       if (!monsterEditorElement) return;
-      const { data } = await ElementsAPI.update(
-        gameId,
-        monsterEditorElement.id,
-        patch
-      );
-      const updated = (data as { element?: GameElementFull }).element;
-      if (updated) {
-        setElements((prev) =>
-          prev.map((e) => (e.id === updated.id ? updated : e))
+      setMonsterSaveError(null);
+      try {
+        const { data } = await ElementsAPI.update(
+          gameId,
+          monsterEditorElement.id,
+          patch
         );
+        const updated = (data as { element?: GameElementFull }).element;
+        if (updated) {
+          setElements((prev) =>
+            prev.map((e) => (e.id === updated.id ? updated : e))
+          );
+        }
+        setMonsterEditorElement(null);
+      } catch (err) {
+        setMonsterSaveError(getErrorMessage(err));
       }
-      setMonsterEditorElement(null);
     },
     [gameId, monsterEditorElement]
   );
@@ -710,10 +721,22 @@ export function ResourcesPage() {
         danger
       />
 
+      {monsterSaveError && (
+        <div
+          role="alert"
+          className="mx-4 mt-2 p-3 rounded bg-fantasy-danger/20 border border-fantasy-error text-fantasy-error text-sm"
+        >
+          {monsterSaveError}
+        </div>
+      )}
+
       {monsterEditorElement && (
         <MonsterEditorModal
           element={monsterEditorElement}
-          onClose={() => setMonsterEditorElement(null)}
+          onClose={() => {
+            setMonsterEditorElement(null);
+            setMonsterSaveError(null);
+          }}
           onSave={handleMonsterEditorSave}
           mode="edit"
           isGM={true}

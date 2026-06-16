@@ -36,7 +36,10 @@ func (s *Server) getSessionUser(r *http.Request) *domain.User {
 
 func (s *Server) setSessionUser(r *http.Request, w http.ResponseWriter, u *domain.User) {
 	sess, _ := s.getSession(r)
-	sess.Values["userID"] = u.ID
+	// Régénérer l'ID de session pour éviter la fixation de session
+	sess.ID = ""
+	sess.IsNew = true
+	sess.Values = map[interface{}]interface{}{"userID": u.ID}
 	_ = sess.Save(r, w)
 }
 

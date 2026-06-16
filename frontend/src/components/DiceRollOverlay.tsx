@@ -21,8 +21,13 @@ function getD20Color(result: number): string {
 }
 
 function getModifierFromExpression(expr: string): number {
-  const m = expr.trim().match(/d\d+([+-]\d+)$/i);
-  return m ? parseInt(m[1], 10) : 0;
+  const trimmed = expr.trim();
+  const diceMatch = trimmed.match(/^(\d+)d(\d+)/i);
+  if (!diceMatch) return 0;
+  const rest = trimmed.slice(diceMatch[0].length);
+  const modMatches = rest.match(/([+-]\d+)/g);
+  if (!modMatches) return 0;
+  return modMatches.reduce((sum, m) => sum + parseInt(m, 10), 0);
 }
 
 function getRollColor(expression: string, result: number): string {

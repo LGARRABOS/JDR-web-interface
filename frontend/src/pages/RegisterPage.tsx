@@ -8,8 +8,13 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [err, setErr] = useState('');
-  const { register, error: authError } = useAuth();
+  const { register, error: authError, clearError } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    clearError();
+    setErr('');
+  }, [clearError]);
 
   useEffect(() => {
     if (authError) setErr(authError);

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -57,6 +58,15 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Champs manquants"})
 		return
 	}
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	if !emailRegex.MatchString(email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Format d'email invalide"})
+		return
+	}
+	if len(req.Password) < 6 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Le mot de passe doit faire au moins 6 caractères"})
+		return
+	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -67,7 +77,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var id int64
 	err = s.db.QueryRow(
 		"INSERT INTO users (email, password_hash, display_name) VALUES (?, ?, ?) RETURNING id",
-		req.Email, string(hash), req.DisplayName,
+		email, string(hash), req.DisplayName,
 	).Scan(&id)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -78,7 +88,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := domain.User{ID: id, Email: req.Email, DisplayName: req.DisplayName}
+	user := domain.User{ID: id, Email: email, DisplayName: req.DisplayName}
 	s.setSessionUser(r, w, &user)
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"user": sanitizeUser(&user)})
 }
@@ -215,7 +225,9 @@ func (s *Server) handlePurgeAssets(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Non authentifié"})
 		return
 	}
-	s.purgeUserAssets(u.ID)
+	if err := s.purgeUserAssets(u.ID); err != nil {
+		log.Printf("purgeUserAssets user %d: %v", u.ID, err)
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "Assets purgés",
 	})
@@ -228,10 +240,11 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Purger les assets avant suppression du compte
-	s.purgeUserAssets(u.ID)
-
-	s.clearSession(w, r)
+	if err := s.purgeUserAssets(u.ID); err != nil {
+		log.Printf("purgeUserAssets user %d: %v", u.ID, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+		return
+	}
 
 	_, err := s.db.Exec("DELETE FROM users WHERE id = ?", u.ID)
 	if err != nil {
@@ -239,19 +252,33 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.clearSession(w, r)
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "Compte supprimé",
 	})
 }
 
-// purgeUserAssets supprime tous les assets d'un utilisateur (éléments, cartes, musique).
-func (s *Server) purgeUserAssets(userID int64) {
+// purgeUserAssets supprime les assets d'un utilisateur (éléments, cartes des parties possédées, musique).
+func (s *Server) purgeUserAssets(userID int64) error {
+	var firstErr error
+	recordErr := func(msg string, err error) {
+		if err != nil {
+			log.Printf("purgeUserAssets user %d: %s: %v", userID, msg, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+
 	// 1. Éléments
-	rows, _ := s.db.Query(
+	rows, err := s.db.Query(
 		"SELECT id, game_id, image_url FROM game_elements WHERE user_id = ?",
 		userID,
 	)
-	if rows != nil {
+	if err != nil {
+		recordErr("query elements", err)
+	} else {
 		for rows.Next() {
 			var id int64
 			var gameID int64
@@ -263,58 +290,72 @@ func (s *Server) purgeUserAssets(userID int64) {
 				filename := imageURL[idx+6:]
 				if filename != "" && !strings.Contains(filename, "..") {
 					storagePath := filepath.Join(uploadsElementsBase, strconv.FormatInt(gameID, 10), filename)
-					_ = os.Remove(storagePath)
+					recordErr("remove element file", os.Remove(storagePath))
 				}
 			}
 		}
 		rows.Close()
 	}
-	_, _ = s.db.Exec("DELETE FROM game_elements WHERE user_id = ?", userID)
+	if _, err := s.db.Exec("DELETE FROM game_elements WHERE user_id = ?", userID); err != nil {
+		recordErr("delete elements", err)
+	}
 
-	// 2. Cartes (parties où user est MJ)
-	mapRows, _ := s.db.Query(
+	// 2. Cartes des parties possédées uniquement (pas celles d'autres MJ)
+	mapRows, err := s.db.Query(
 		`SELECT m.id, m.game_id, m.image_url FROM maps m
-		 INNER JOIN game_players gp ON gp.game_id = m.game_id AND gp.user_id = ? AND gp.role = 'MJ'
+		 INNER JOIN games g ON g.id = m.game_id AND g.owner_id = ?
 		 ORDER BY m.id`,
 		userID,
 	)
-	if mapRows != nil {
+	if err != nil {
+		recordErr("query maps", err)
+	} else {
 		for mapRows.Next() {
 			var mapID, gameID int64
 			var imageURL string
 			if err := mapRows.Scan(&mapID, &gameID, &imageURL); err != nil {
 				continue
 			}
-			_, _ = s.db.Exec("UPDATE games SET current_map_id = NULL WHERE current_map_id = ?", mapID)
+			if _, err := s.db.Exec("UPDATE games SET current_map_id = NULL WHERE current_map_id = ?", mapID); err != nil {
+				recordErr("clear current_map_id", err)
+			}
 			if idx := strings.LastIndex(imageURL, "/file/"); idx >= 0 {
 				filename := imageURL[idx+6:]
 				if filename != "" && !strings.Contains(filename, "..") {
 					storagePath := filepath.Join(uploadsMapsBase, strconv.FormatInt(gameID, 10), filename)
-					_ = os.Remove(storagePath)
+					recordErr("remove map file", os.Remove(storagePath))
 				}
 			}
-			_, _ = s.db.Exec("DELETE FROM maps WHERE id = ?", mapID)
+			if _, err := s.db.Exec("DELETE FROM maps WHERE id = ?", mapID); err != nil {
+				recordErr("delete map", err)
+			}
 		}
 		mapRows.Close()
 	}
 
 	// 3. Musique
-	musicRows, _ := s.db.Query(
+	musicRows, err := s.db.Query(
 		"SELECT id, storage_path FROM game_music WHERE user_id = ?",
 		userID,
 	)
-	if musicRows != nil {
+	if err != nil {
+		recordErr("query music", err)
+	} else {
 		for musicRows.Next() {
 			var id int64
 			var storagePath string
 			if err := musicRows.Scan(&id, &storagePath); err != nil {
 				continue
 			}
-			_ = os.Remove(storagePath)
+			recordErr("remove music file", os.Remove(storagePath))
 		}
 		musicRows.Close()
 	}
-	_, _ = s.db.Exec("DELETE FROM game_music WHERE user_id = ?", userID)
+	if _, err := s.db.Exec("DELETE FROM game_music WHERE user_id = ?", userID); err != nil {
+		recordErr("delete music", err)
+	}
+
+	return firstErr
 }
 
 func sanitizeUser(u *domain.User) map[string]interface{} {

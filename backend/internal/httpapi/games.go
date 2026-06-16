@@ -1,9 +1,10 @@
 package httpapi
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"strconv"
 
@@ -109,10 +110,23 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 		isGemma = 1
 	}
 	var id int64
-	err := s.db.QueryRow(
-		"INSERT INTO games (name, invite_code, owner_id, is_gemma) VALUES (?, ?, ?, ?) RETURNING id",
-		req.Name, code, u.ID, isGemma,
-	).Scan(&id)
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			code = generateInviteCode()
+		}
+		err = s.db.QueryRow(
+			"INSERT INTO games (name, invite_code, owner_id, is_gemma) VALUES (?, ?, ?, ?) RETURNING id",
+			req.Name, code, u.ID, isGemma,
+		).Scan(&id)
+		if err == nil {
+			break
+		}
+		if !isUniqueViolation(err) {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+			return
+		}
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
@@ -486,8 +500,14 @@ func (s *Server) handleDeleteGame(w http.ResponseWriter, r *http.Request) {
 
 func generateInviteCode() string {
 	b := make([]byte, 6)
+	max := big.NewInt(int64(len(inviteCodeChars)))
 	for i := range b {
-		b[i] = inviteCodeChars[rand.Intn(len(inviteCodeChars))]
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			b[i] = inviteCodeChars[0]
+			continue
+		}
+		b[i] = inviteCodeChars[n.Int64()]
 	}
 	return string(b)
 }

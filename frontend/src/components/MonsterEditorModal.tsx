@@ -42,6 +42,8 @@ export function MonsterEditorModal({
   onSave,
   mode,
   tokenData,
+  tokenKind,
+  isGM,
   tokenId,
   statusEffects = [],
   onStatusUpdate,

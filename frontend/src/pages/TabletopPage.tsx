@@ -263,6 +263,11 @@ export function TabletopPage() {
   }, [maps, game?.currentMapId]);
 
   useEffect(() => {
+    setTokens([]);
+    setMapElements([]);
+  }, [currentMap?.id]);
+
+  useEffect(() => {
     loadTokens();
   }, [loadTokens]);
 
@@ -313,9 +318,14 @@ export function TabletopPage() {
         turnsRemaining: number;
       }>
     ) => {
-      TokensAPI.update(tokenId, { statusEffects });
+      setTokens((prev) =>
+        prev.map((t) => (t.id === tokenId ? { ...t, statusEffects } : t))
+      );
+      TokensAPI.update(tokenId, { statusEffects }).catch(() => {
+        loadTokens();
+      });
     },
-    []
+    [loadTokens]
   );
 
   useEffect(() => {
@@ -369,7 +379,9 @@ export function TabletopPage() {
         content: string;
         displayName?: string;
       };
-      setMessages((prev) => [...prev, m]);
+      setMessages((prev) =>
+        prev.some((x) => x.id === m.id) ? prev : [...prev, m]
+      );
     },
     'dice.rolled': (p) => {
       const r = p as {
@@ -423,7 +435,15 @@ export function TabletopPage() {
         characterName?: string;
       };
       setConnectedUsers((prev) =>
-        prev.map((u) => (u.userId === userId ? { ...u, characterName } : u))
+        prev.map((u) =>
+          u.userId === userId
+            ? {
+                ...u,
+                characterName,
+                ...(characterName ? { displayName: characterName } : {}),
+              }
+            : u
+        )
       );
     },
     'presence.list': (p) => {
@@ -495,6 +515,9 @@ export function TabletopPage() {
       const { mapId } = p as { mapId: number };
       setGame((g) => (g ? { ...g, currentMapId: mapId } : null));
       setMapView({ scale: 1, offset: { x: 0, y: 0 } });
+      if (!isGM) {
+        sendRef.current?.('map.view.request');
+      }
     },
     'map.created': (p) => {
       const m = p as MapData;
@@ -566,6 +589,12 @@ export function TabletopPage() {
       };
     }
   }, [connected, isGM, send]);
+
+  useEffect(() => {
+    if (connected && !isGM && currentMap && send) {
+      send('map.view.request');
+    }
+  }, [connected, isGM, currentMap?.id, send]);
 
   // Recharger les données quand un joueur se connecte pour être synchro avec le MJ
   useEffect(() => {
@@ -733,12 +762,39 @@ export function TabletopPage() {
   const handleSendMessage = useCallback(
     async (content: string) => {
       try {
-        await MessagesAPI.create(gameId, { content });
+        const { data } = await MessagesAPI.create(gameId, { content });
+        const created = (
+          data as {
+            message?: {
+              id: number;
+              userId: number;
+              role: string;
+              content: string;
+            };
+          }
+        )?.message;
+        if (created) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === created.id)) return prev;
+            return [
+              ...prev,
+              {
+                id: created.id,
+                userId: created.userId,
+                role: created.role,
+                content: created.content,
+                displayName: game?.characterName ?? user?.displayName,
+              },
+            ];
+          });
+        } else {
+          loadMessages();
+        }
       } catch {
         loadMessages();
       }
     },
-    [gameId, loadMessages]
+    [gameId, loadMessages, game?.characterName, user?.displayName]
   );
 
   const [rollError, setRollError] = useState<string | null>(null);
@@ -805,10 +861,23 @@ export function TabletopPage() {
     setGame((g) => (g ? { ...g, characterName: v } : null));
     try {
       await GamesAPI.updateMe(gameId, { characterName: v });
+      if (user) {
+        setConnectedUsers((prev) =>
+          prev.map((u) =>
+            u.userId === user.id
+              ? {
+                  ...u,
+                  characterName: v,
+                  displayName: v || u.displayName,
+                }
+              : u
+          )
+        );
+      }
     } catch {
       loadGame();
     }
-  }, [gameId, characterNameInput, loadGame]);
+  }, [gameId, characterNameInput, loadGame, user]);
 
   if (!game) {
     return (

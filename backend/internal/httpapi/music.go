@@ -76,7 +76,7 @@ func (s *Server) handleUploadMusic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storageName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), header.Filename)
+	storageName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(header.Filename))
 	storagePath := filepath.Join(dir, storageName)
 
 	dst, err := os.Create(storagePath)
@@ -187,11 +187,10 @@ func (s *Server) handleGetMusicFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var storagePath, filename string
-	var trackUserID sql.NullInt64
 	err = s.db.QueryRow(
-		"SELECT storage_path, filename, user_id FROM game_music WHERE id = ? AND game_id = ?",
+		"SELECT storage_path, filename FROM game_music WHERE id = ? AND game_id = ?",
 		trackID, gameID,
-	).Scan(&storagePath, &filename, &trackUserID)
+	).Scan(&storagePath, &filename)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Piste introuvable", http.StatusNotFound)
 		return
@@ -201,26 +200,10 @@ func (s *Server) handleGetMusicFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Accès : utilisateur a accès au game OU partage une partie avec le propriétaire (joueurs qui écoutent la musique du MJ)
-	hasAccess := false
+	// Accès : l'utilisateur doit être membre de la partie
 	var ok int
 	_ = s.db.QueryRow("SELECT 1 FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&ok)
-	if ok == 1 {
-		hasAccess = true
-	}
-	if !hasAccess && trackUserID.Valid {
-		// Utilisateur partage une partie avec le propriétaire de la piste
-		_ = s.db.QueryRow(
-			`SELECT 1 FROM game_players gp1
-			 INNER JOIN game_players gp2 ON gp1.game_id = gp2.game_id AND gp2.user_id = ?
-			 WHERE gp1.user_id = ?`,
-			u.ID, trackUserID.Int64,
-		).Scan(&ok)
-		if ok == 1 {
-			hasAccess = true
-		}
-	}
-	if !hasAccess {
+	if ok != 1 {
 		http.Error(w, "Accès refusé", http.StatusForbidden)
 		return
 	}

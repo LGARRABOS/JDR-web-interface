@@ -63,6 +63,8 @@ export function MapEditor({
   const [saveTags, setSaveTags] = useState<string[]>([]);
   const [saveTagInput, setSaveTagInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
@@ -151,6 +153,14 @@ export function MapEditor({
   const displayW = displaySize?.w ?? selectedMap?.width ?? 800;
   const displayH = displaySize?.h ?? selectedMap?.height ?? 600;
 
+  const showApiError = useCallback((err: unknown) => {
+    const msg =
+      (err as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message ?? "Erreur lors de l'opération";
+    setApiError(msg);
+    setTimeout(() => setApiError(null), 4000);
+  }, []);
+
   const updateScaleToFit = useCallback(() => {
     setScale(1);
     setOffset({ x: 0, y: 0 });
@@ -190,6 +200,7 @@ export function MapEditor({
           kind: 'PNJ',
           name: placementElement.name,
           iconUrl: placementElement.imageUrl,
+          elementId: placementElement.id,
           x,
           y,
           width: 50,
@@ -199,10 +210,12 @@ export function MapEditor({
           mana: 0,
           maxMana: 0,
           visibleToPlayers: true,
-        }).then(({ data }) => {
-          setTokens((prev) => [...prev, data.token]);
-          setPlacementElement(null);
-        });
+        })
+          .then(({ data }) => {
+            setTokens((prev) => [...prev, data.token]);
+            setPlacementElement(null);
+          })
+          .catch(showApiError);
       } else {
         MapElementsAPI.create(selectedMap.id, {
           imageUrl: placementElement.imageUrl,
@@ -210,10 +223,12 @@ export function MapEditor({
           y,
           width: 50,
           height: 50,
-        }).then(({ data }) => {
-          setMapElements((prev) => [...prev, data.element]);
-          setPlacementElement(null);
-        });
+        })
+          .then(({ data }) => {
+            setMapElements((prev) => [...prev, data.element]);
+            setPlacementElement(null);
+          })
+          .catch(showApiError);
       }
     } else {
       setSelectedToken(null);
@@ -233,21 +248,25 @@ export function MapEditor({
     setSelectedToken(null);
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = useCallback(() => {
     if (selectedToken) {
-      TokensAPI.delete(selectedToken.id).then(() => {
-        setTokens((prev) => prev.filter((t) => t.id !== selectedToken.id));
-        setSelectedToken(null);
-      });
+      TokensAPI.delete(selectedToken.id)
+        .then(() => {
+          setTokens((prev) => prev.filter((t) => t.id !== selectedToken.id));
+          setSelectedToken(null);
+        })
+        .catch(showApiError);
     } else if (selectedMapElement) {
-      MapElementsAPI.delete(selectedMapElement.id).then(() => {
-        setMapElements((prev) =>
-          prev.filter((el) => el.id !== selectedMapElement.id)
-        );
-        setSelectedMapElement(null);
-      });
+      MapElementsAPI.delete(selectedMapElement.id)
+        .then(() => {
+          setMapElements((prev) =>
+            prev.filter((el) => el.id !== selectedMapElement.id)
+          );
+          setSelectedMapElement(null);
+        })
+        .catch(showApiError);
     }
-  };
+  }, [selectedToken, selectedMapElement, showApiError]);
 
   const handleMapMouseDown = (e: React.MouseEvent) => {
     if (!selectedMap || (e.target as HTMLElement).closest('[data-token]'))
@@ -331,23 +350,27 @@ export function MapEditor({
     if (dragRef.current) {
       const { type, id, lastX, lastY } = dragRef.current;
       if (type === 'token') {
-        TokensAPI.update(id, { x: lastX, y: lastY });
+        TokensAPI.update(id, { x: lastX, y: lastY }).catch(showApiError);
       } else {
-        MapElementsAPI.update(id, { x: lastX, y: lastY });
+        MapElementsAPI.update(id, { x: lastX, y: lastY }).catch(showApiError);
       }
       dragRef.current = null;
     }
     if (resizeRef.current) {
       const { type, id, lastW, lastH } = resizeRef.current;
       if (type === 'token') {
-        TokensAPI.update(id, { width: lastW, height: lastH });
+        TokensAPI.update(id, { width: lastW, height: lastH }).catch(
+          showApiError
+        );
       } else {
-        MapElementsAPI.update(id, { width: lastW, height: lastH });
+        MapElementsAPI.update(id, { width: lastW, height: lastH }).catch(
+          showApiError
+        );
       }
       resizeRef.current = null;
     }
     panRef.current = null;
-  }, []);
+  }, [showApiError]);
 
   useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
@@ -360,13 +383,21 @@ export function MapEditor({
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        handleDeleteSelected();
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      ) {
+        return;
       }
+      handleDeleteSelected();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  });
+  }, [handleDeleteSelected]);
 
   const getTokenSize = (t: Token) => ({
     w: t.width ?? 56,
@@ -408,8 +439,6 @@ export function MapEditor({
   const removeSaveTag = (t: string) => {
     setSaveTags((prev) => prev.filter((x) => x !== t));
   };
-
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSaveSubmit = async () => {
     if (!selectedMap) return;
@@ -525,6 +554,9 @@ export function MapEditor({
                 <span className="text-sm text-fantasy-accent-hover">
                   Carte enregistrée
                 </span>
+              )}
+              {apiError && (
+                <span className="text-sm text-fantasy-error">{apiError}</span>
               )}
               <button
                 type="button"
@@ -820,7 +852,9 @@ export function MapEditor({
                             t.id === selectedToken.id ? { ...t, hp: v } : t
                           )
                         );
-                        TokensAPI.update(selectedToken.id, { hp: v });
+                        TokensAPI.update(selectedToken.id, { hp: v }).catch(
+                          showApiError
+                        );
                       }
                     }}
                     className="w-full rounded bg-fantasy-input-soft px-2 py-1 text-fantasy-text-soft"
@@ -842,7 +876,9 @@ export function MapEditor({
                             t.id === selectedToken.id ? { ...t, maxHp: v } : t
                           )
                         );
-                        TokensAPI.update(selectedToken.id, { maxHp: v });
+                        TokensAPI.update(selectedToken.id, { maxHp: v }).catch(
+                          showApiError
+                        );
                       }
                     }}
                     className="w-full rounded bg-fantasy-input-soft px-2 py-1 text-fantasy-text-soft"
@@ -864,7 +900,9 @@ export function MapEditor({
                             t.id === selectedToken.id ? { ...t, mana: v } : t
                           )
                         );
-                        TokensAPI.update(selectedToken.id, { mana: v });
+                        TokensAPI.update(selectedToken.id, { mana: v }).catch(
+                          showApiError
+                        );
                       }
                     }}
                     className="w-full rounded bg-fantasy-input-soft px-2 py-1 text-fantasy-text-soft"
@@ -886,7 +924,9 @@ export function MapEditor({
                             t.id === selectedToken.id ? { ...t, maxMana: v } : t
                           )
                         );
-                        TokensAPI.update(selectedToken.id, { maxMana: v });
+                        TokensAPI.update(selectedToken.id, { maxMana: v }).catch(
+                          showApiError
+                        );
                       }
                     }}
                     className="w-full rounded bg-fantasy-input-soft px-2 py-1 text-fantasy-text-soft"

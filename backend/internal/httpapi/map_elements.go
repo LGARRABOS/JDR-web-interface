@@ -13,6 +13,7 @@ import (
 func (s *Server) registerMapElementRoutes() {
 	s.mux.Route("/api/maps/{mapId}/elements", func(r chi.Router) {
 		r.Use(s.requireAuth)
+		r.Use(s.requireMapAccess)
 		r.Get("/", s.handleListMapElements)
 		r.Post("/", s.handleCreateMapElement)
 	})

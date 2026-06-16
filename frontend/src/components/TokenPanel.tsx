@@ -110,6 +110,17 @@ export function TokenPanel({
   const canEditToken = (t: Token) => isGM || t.ownerUserId === currentUserId;
 
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingUpdateRef = useRef<{
+    id: number;
+    data: {
+      hp?: number;
+      maxHp?: number;
+      mana?: number;
+      maxMana?: number;
+      width?: number;
+      height?: number;
+    };
+  } | null>(null);
 
   const scheduleTokenUpdate = useCallback(
     (
@@ -123,14 +134,30 @@ export function TokenPanel({
         height?: number;
       }
     ) => {
+      if (pendingUpdateRef.current?.id !== t.id) {
+        pendingUpdateRef.current = { id: t.id, data: { ...data } };
+      } else {
+        pendingUpdateRef.current.data = {
+          ...pendingUpdateRef.current.data,
+          ...data,
+        };
+      }
       if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
       updateTimeoutRef.current = setTimeout(() => {
         updateTimeoutRef.current = null;
-        onTokenUpdate(t.id, data);
+        const pending = pendingUpdateRef.current;
+        pendingUpdateRef.current = null;
+        if (pending) onTokenUpdate(pending.id, pending.data);
       }, 400);
     },
     [onTokenUpdate]
   );
+
+  useEffect(() => {
+    return () => {
+      if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedToken) {

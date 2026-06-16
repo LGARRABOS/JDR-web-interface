@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
+	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
@@ -32,7 +33,7 @@ func (s *Server) registerMapRoutes() {
 		r.Use(s.requireAuth)
 		r.Use(s.requireGameAccess)
 		r.Get("/", s.handleListMaps)
-		r.Post("/", s.handleCreateMap)
+		r.With(s.requireGM).Post("/", s.handleCreateMap)
 		r.Post("/upload", s.handleUploadMap)
 	})
 	s.mux.Route("/api/games/{gameId}/maps/file/{filename}", func(r chi.Router) {
@@ -49,9 +50,10 @@ func (s *Server) registerMapRoutes() {
 	})
 	s.mux.Route("/api/maps/{mapId}/fog", func(r chi.Router) {
 		r.Use(s.requireAuth)
+		r.Use(s.requireMapAccess)
 		r.Get("/", s.handleListFog)
-		r.Post("/reveal", s.handleRevealFog)
-		r.Post("/hide", s.handleHideFog)
+		r.With(s.requireGM).Post("/reveal", s.handleRevealFog)
+		r.With(s.requireGM).Post("/hide", s.handleHideFog)
 	})
 }
 
@@ -62,14 +64,12 @@ func (s *Server) handleListMaps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u := s.getSessionUser(r)
-	// Cartes partagées : toutes celles des parties où ce MJ est présent
 	rows, err := s.db.Query(
 		`SELECT m.id, m.game_id, m.name, m.image_url, m.width, m.height, m.grid_size, COALESCE(m.tags, '[]')
 		 FROM maps m
-		 INNER JOIN game_players gp ON gp.game_id = m.game_id AND gp.user_id = ? AND gp.role = 'MJ'
+		 WHERE m.game_id = ?
 		 ORDER BY m.id`,
-		u.ID,
+		gameID,
 	)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
@@ -203,13 +203,22 @@ func (s *Server) handleUploadMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, _, err := image.DecodeConfig(file); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Fichier image invalide"})
+		return
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+		return
+	}
+
 	dir := filepath.Join(uploadsMapsBase, strconv.FormatInt(gameID, 10))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
 
-	storageName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), header.Filename)
+	storageName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(header.Filename))
 	storagePath := filepath.Join(dir, storageName)
 
 	dst, err := os.Create(storagePath)

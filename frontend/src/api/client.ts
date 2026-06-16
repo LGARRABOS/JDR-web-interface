@@ -184,7 +184,7 @@ export const ElementsAPI = {
       iconScale?: number;
     }
   ) => api.patch(`/games/${gameId}/elements/${id}`, data),
-  upload: async (
+  upload: (
     gameId: number,
     file: File,
     name?: string,
@@ -196,21 +196,7 @@ export const ElementsAPI = {
     if (name) form.append('name', name);
     if (category) form.append('category', category);
     if (tags && tags.length > 0) form.append('tags', JSON.stringify(tags));
-    const res = await fetch(`/api/games/${gameId}/elements/upload`, {
-      method: 'POST',
-      body: form,
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw Object.assign(
-        new Error((err as { message?: string }).message ?? res.statusText),
-        {
-          response: { status: res.status, data: err },
-        }
-      );
-    }
-    return { data: await res.json() };
+    return api.post(`/games/${gameId}/elements/upload`, form);
   },
   delete: (gameId: number, id: number) =>
     api.delete(`/games/${gameId}/elements/${id}`),

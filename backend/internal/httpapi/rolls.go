@@ -3,6 +3,7 @@ package httpapi
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -12,6 +13,9 @@ import (
 
 	"jdr-backend/internal/domain"
 )
+
+const maxDiceCount = 100
+const maxDiceSides = 1000
 
 func (s *Server) registerRollRoutes() {
 	s.mux.Route("/api/games/{gameId}/roll", func(r chi.Router) {
@@ -106,11 +110,18 @@ func (s *Server) handleListRolls(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query(`
+	u := s.getSessionUser(r)
+	role, _ := s.getUserGameRole(gameID, u.ID)
+
+	query := `
 		SELECT id, game_id, user_id, expression, result, details, created_at
-		FROM dice_rolls WHERE game_id = ?
-		ORDER BY created_at DESC LIMIT 50
-	`, gameID)
+		FROM dice_rolls WHERE game_id = ?`
+	if role != "MJ" {
+		query += " AND hidden = 0"
+	}
+	query += " ORDER BY created_at DESC LIMIT 50"
+
+	rows, err := s.db.Query(query, gameID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
@@ -180,6 +191,12 @@ func parseDiceExpr(s string, n, m, mod *int) (int, error) {
 	}
 	if *m <= 0 {
 		*m = 20
+	}
+	if *n > maxDiceCount {
+		return 0, fmt.Errorf("nombre de dés max %d", maxDiceCount)
+	}
+	if *m > maxDiceSides {
+		return 0, fmt.Errorf("faces max %d", maxDiceSides)
 	}
 	return 0, nil
 }

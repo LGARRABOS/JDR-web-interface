@@ -27,6 +27,24 @@ export function useGameSocket(
   const connect = useCallback(() => {
     if (!gameId || gameId <= 0) return null;
 
+    const existing = wsRef.current;
+    if (existing) {
+      existing.onclose = null;
+      existing.onerror = null;
+      existing.onmessage = null;
+      if (
+        existing.readyState === WebSocket.OPEN ||
+        existing.readyState === WebSocket.CONNECTING
+      ) {
+        try {
+          existing.close();
+        } catch {
+          // ignore
+        }
+      }
+      wsRef.current = null;
+    }
+
     intentionalCloseRef.current = false;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;

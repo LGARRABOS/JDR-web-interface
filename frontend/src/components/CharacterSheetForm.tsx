@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CharacterSheetsAPI } from '../api/client';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export interface CharacterSheetData {
   tokenIconUrl?: string;
@@ -263,6 +264,7 @@ export function CharacterSheetForm({
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setData(initialData ?? emptySheet);
@@ -271,6 +273,7 @@ export function CharacterSheetForm({
   const handleSave = useCallback(async () => {
     setSaving(true);
     setSaved(false);
+    setSaveError(null);
     try {
       // Auto tokenAttackRange depuis la première arme avec portée si non défini
       let payload = data as Record<string, unknown>;
@@ -293,6 +296,8 @@ export function CharacterSheetForm({
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       onSaveSuccess?.();
+    } catch (err) {
+      setSaveError(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -1070,6 +1075,9 @@ export function CharacterSheetForm({
           </button>
           {saved && (
             <span className="text-sm text-fantasy-accent">Enregistré</span>
+          )}
+          {saveError && (
+            <span className="text-sm text-fantasy-error">{saveError}</span>
           )}
         </div>
       )}

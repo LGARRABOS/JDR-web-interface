@@ -14,6 +14,7 @@ import (
 func (s *Server) registerTokenRoutes() {
 	s.mux.Route("/api/maps/{mapId}/tokens", func(r chi.Router) {
 		r.Use(s.requireAuth)
+		r.Use(s.requireMapAccess)
 		r.Get("/", s.handleListTokens)
 		r.Post("/", s.handleCreateToken)
 	})
@@ -30,98 +31,115 @@ var tokenColors = []string{
 }
 
 func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
-	mapIDStr := chi.URLParam(r, "mapId")
-	mapID, err := strconv.ParseInt(mapIDStr, 10, 64)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
-		return
+	mapID := getMapIDFromContext(r)
+	if mapID == 0 {
+		mapIDStr := chi.URLParam(r, "mapId")
+		var err error
+		mapID, err = strconv.ParseInt(mapIDStr, 10, 64)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
+			return
+		}
 	}
 
+	gameID := getGameIDFromContext(r)
 	u := s.getSessionUser(r)
-	if u != nil {
-		var gameID int64
-		var role string
-		err = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
-		if err == nil {
-			var charName sql.NullString
-			err = s.db.QueryRow("SELECT role, character_name FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role, &charName)
-			if err == nil && role == "PLAYER" && u.ID > 0 {
-				var count int
-				_ = s.db.QueryRow("SELECT 1 FROM tokens WHERE map_id = ? AND owner_user_id = ?", mapID, u.ID).Scan(&count)
-				if count == 0 {
-					tokenName := u.DisplayName
-					if charName.Valid && charName.String != "" {
-						tokenName = charName.String
-					}
-					color := tokenColors[int(u.ID)%len(tokenColors)]
-					var id int64
-					// INSERT avec vérification d'existence (portable, évite les soucis ON CONFLICT partiel)
-					_, err = s.db.Exec(`
-						INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, x, y, visible_to_players)
-						SELECT ?, ?, ?, 'PJ', ?, ?, 100, 100, 1
-						WHERE NOT EXISTS (SELECT 1 FROM tokens WHERE map_id = ? AND owner_user_id = ? AND kind = 'PJ')
-					`, mapID, u.ID, u.ID, tokenName, color, mapID, u.ID)
-					if err == nil {
-						_ = s.db.QueryRow("SELECT id FROM tokens WHERE map_id = ? AND owner_user_id = ? AND kind = 'PJ'", mapID, u.ID).Scan(&id)
-						var t domain.Token
-						var ownerID sql.NullInt64
-						var iconURL sql.NullString
-						var visible int
-						var hp, maxHp, mana, maxMana sql.NullInt64
-						var width, height sql.NullInt64
-						var elemID sql.NullInt64
-						var iconPosX, iconPosY int
-						var iconScale float64
-						var attackRange sql.NullInt64
-						var statusEffectsJSON string
-						_ = s.db.QueryRow(`
-							SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), attack_range, element_id, COALESCE(status_effects::text, '[]')
-							FROM tokens WHERE id = ?
-						`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &iconScale, &attackRange, &elemID, &statusEffectsJSON)
-						_ = json.Unmarshal([]byte(statusEffectsJSON), &t.StatusEffects)
-						t.IconPosX = iconPosX
-						t.IconPosY = iconPosY
-						t.IconScale = iconScale
-						if attackRange.Valid {
-							ar := int(attackRange.Int64)
-							t.AttackRange = &ar
-						}
+	role := getGameRoleFromContext(r)
+	if gameID == 0 || role == "" {
+		var ok bool
+		gameID, role, ok = s.getMapAccess(mapID, u.ID)
+		if !ok {
+			writeJSON(w, http.StatusForbidden, map[string]string{"message": "Accès refusé"})
+			return
+		}
+	}
 
-						if elemID.Valid {
-							t.ElementID = &elemID.Int64
-						}
-						if width.Valid {
-							w := int(width.Int64)
-							t.Width = &w
-						}
-						if height.Valid {
-							h := int(height.Int64)
-							t.Height = &h
-						}
-						if hp.Valid {
-							h := int(hp.Int64)
-							t.Hp = &h
-						}
-						if maxHp.Valid {
-							m := int(maxHp.Int64)
-							t.MaxHp = &m
-						}
-						if mana.Valid {
-							m := int(mana.Int64)
-							t.Mana = &m
-						}
-						if maxMana.Valid {
-							m := int(maxMana.Int64)
-							t.MaxMana = &m
-						}
-						t.OwnerUserID = &u.ID
-						t.VisibleToPlayers = true
-						if iconURL.Valid {
-							t.IconURL = iconURL.String
-						}
-						s.hub.Broadcast(gameID, "token.created", t)
-					}
+	if role == "PLAYER" && u.ID > 0 {
+		var count int
+		_ = s.db.QueryRow("SELECT 1 FROM tokens WHERE map_id = ? AND owner_user_id = ?", mapID, u.ID).Scan(&count)
+		if count == 0 {
+			var charName sql.NullString
+			_ = s.db.QueryRow("SELECT character_name FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&charName)
+			tokenName := u.DisplayName
+			if charName.Valid && charName.String != "" {
+				tokenName = charName.String
+			}
+			color := tokenColors[int(u.ID)%len(tokenColors)]
+			var id int64
+			res, insertErr := s.db.Exec(`
+				INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, x, y, visible_to_players)
+				SELECT ?, ?, ?, 'PJ', ?, ?, 100, 100, 1
+				WHERE NOT EXISTS (SELECT 1 FROM tokens WHERE map_id = ? AND owner_user_id = ? AND kind = 'PJ')
+			`, mapID, u.ID, u.ID, tokenName, color, mapID, u.ID)
+			inserted := false
+			if insertErr != nil {
+				if !isUniqueViolation(insertErr) {
+					// erreur non récupérable, on continue sans auto-création
 				}
+			} else if rows, raErr := res.RowsAffected(); raErr == nil && rows > 0 {
+				inserted = true
+			}
+			if queryErr := s.db.QueryRow("SELECT id FROM tokens WHERE map_id = ? AND owner_user_id = ? AND kind = 'PJ'", mapID, u.ID).Scan(&id); queryErr != nil {
+				id = 0
+			}
+			if id > 0 && inserted {
+				var t domain.Token
+				var ownerID sql.NullInt64
+				var iconURL sql.NullString
+				var visible int
+				var hp, maxHp, mana, maxMana sql.NullInt64
+				var width, height sql.NullInt64
+				var elemID sql.NullInt64
+				var iconPosX, iconPosY int
+				var iconScale float64
+				var attackRange sql.NullInt64
+				var statusEffectsJSON string
+				_ = s.db.QueryRow(`
+					SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), attack_range, element_id, COALESCE(status_effects::text, '[]')
+					FROM tokens WHERE id = ?
+				`, id).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &iconScale, &attackRange, &elemID, &statusEffectsJSON)
+				_ = json.Unmarshal([]byte(statusEffectsJSON), &t.StatusEffects)
+				t.IconPosX = iconPosX
+				t.IconPosY = iconPosY
+				t.IconScale = iconScale
+				if attackRange.Valid {
+					ar := int(attackRange.Int64)
+					t.AttackRange = &ar
+				}
+
+				if elemID.Valid {
+					t.ElementID = &elemID.Int64
+				}
+				if width.Valid {
+					w := int(width.Int64)
+					t.Width = &w
+				}
+				if height.Valid {
+					h := int(height.Int64)
+					t.Height = &h
+				}
+				if hp.Valid {
+					h := int(hp.Int64)
+					t.Hp = &h
+				}
+				if maxHp.Valid {
+					m := int(maxHp.Int64)
+					t.MaxHp = &m
+				}
+				if mana.Valid {
+					m := int(mana.Int64)
+					t.Mana = &m
+				}
+				if maxMana.Valid {
+					m := int(maxMana.Int64)
+					t.MaxMana = &m
+				}
+				t.OwnerUserID = &u.ID
+				t.VisibleToPlayers = true
+				if iconURL.Valid {
+					t.IconURL = iconURL.String
+				}
+				s.hub.Broadcast(gameID, "token.created", t)
 			}
 		}
 	}
@@ -217,21 +235,41 @@ type createTokenReq struct {
 }
 
 func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
-	mapIDStr := chi.URLParam(r, "mapId")
-	mapID, err := strconv.ParseInt(mapIDStr, 10, 64)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
-		return
+	mapID := getMapIDFromContext(r)
+	gameID := getGameIDFromContext(r)
+	if mapID == 0 {
+		mapIDStr := chi.URLParam(r, "mapId")
+		var err error
+		mapID, err = strconv.ParseInt(mapIDStr, 10, 64)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
+			return
+		}
 	}
-
-	var gameID int64
-	err = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Carte introuvable"})
-		return
+	if gameID == 0 {
+		var err error
+		gameID, err = s.getMapGameID(mapID)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"message": "Carte introuvable"})
+			return
+		}
 	}
 
 	u := s.getSessionUser(r)
+	role := getGameRoleFromContext(r)
+	if role == "" {
+		var ok bool
+		_, role, ok = s.getMapAccess(mapID, u.ID)
+		if !ok {
+			writeJSON(w, http.StatusForbidden, map[string]string{"message": "Accès refusé"})
+			return
+		}
+	}
+	if role != "MJ" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Réservé au MJ"})
+		return
+	}
+
 	var req createTokenReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Requête invalide"})
@@ -262,7 +300,7 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id int64
-	err = s.db.QueryRow(`
+	err := s.db.QueryRow(`
 		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, icon_pos_x, icon_pos_y, icon_scale, element_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
 	`, mapID, u.ID, nullInt64(req.OwnerUserID), req.Kind, req.Name, req.Color, nullString(req.IconURL), req.X, req.Y, visible, nullInt(req.Hp), nullInt(req.MaxHp), nullInt(req.Mana), nullInt(req.MaxMana), nullInt(req.Width), nullInt(req.Height), iconPosX, iconPosY, iconScale, nullInt64(req.ElementID)).Scan(&id)
@@ -326,13 +364,18 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var mapID, gameID int64
-	err = s.db.QueryRow("SELECT map_id FROM tokens WHERE id = ?", id).Scan(&mapID)
+	u := s.getSessionUser(r)
+	_, gameID, kind, ownerUserID, err := s.getTokenContext(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Token introuvable"})
 		return
 	}
-	_ = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
+
+	role, member := s.getUserGameRole(gameID, u.ID)
+	if !member {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Accès refusé"})
+		return
+	}
 
 	var req updateTokenReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -340,9 +383,23 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var currentKind string
-	_ = s.db.QueryRow("SELECT kind FROM tokens WHERE id = ?", id).Scan(&currentKind)
+	movementLocked := s.isTokenMovementLocked(gameID)
+	if role != "MJ" {
+		if movementLocked {
+			writeJSON(w, http.StatusForbidden, map[string]string{"message": "Déplacement des jetons verrouillé"})
+			return
+		}
+		if kind != "PJ" || ownerUserID == nil || *ownerUserID != u.ID {
+			writeJSON(w, http.StatusForbidden, map[string]string{"message": "Accès refusé"})
+			return
+		}
+	}
+	if movementLocked && role != "MJ" && (req.X != nil || req.Y != nil) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Seul le MJ peut déplacer les jetons"})
+		return
+	}
 
+	currentKind := kind
 	convertToMort := req.Hp != nil && *req.Hp == 0 && currentKind == "PNJ"
 
 	updates := []string{}
@@ -574,13 +631,29 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var mapID, gameID int64
-	err = s.db.QueryRow("SELECT map_id FROM tokens WHERE id = ?", id).Scan(&mapID)
+	u := s.getSessionUser(r)
+	_, gameID, kind, ownerUserID, err := s.getTokenContext(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Token introuvable"})
 		return
 	}
-	_ = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
+
+	role, member := s.getUserGameRole(gameID, u.ID)
+	if !member {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Accès refusé"})
+		return
+	}
+
+	if role != "MJ" {
+		if s.isTokenMovementLocked(gameID) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"message": "Suppression des jetons verrouillée"})
+			return
+		}
+		if kind != "PJ" || ownerUserID == nil || *ownerUserID != u.ID {
+			writeJSON(w, http.StatusForbidden, map[string]string{"message": "Accès refusé"})
+			return
+		}
+	}
 
 	_, err = s.db.Exec("DELETE FROM tokens WHERE id = ?", id)
 	if err != nil {

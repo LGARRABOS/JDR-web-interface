@@ -148,12 +148,25 @@ func (s *Server) handleGetCharacterSheet(w http.ResponseWriter, r *http.Request)
 
 	var role string
 	_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role)
+	if role == "" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Accès refusé"})
+		return
+	}
 
 	targetUserID := u.ID
 	if userIdStr := r.URL.Query().Get("userId"); userIdStr != "" && role == "MJ" {
 		if uid, e := strconv.ParseInt(userIdStr, 10, 64); e == nil {
+			if !s.isUserInGame(gameID, uid) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"message": "Joueur introuvable dans cette partie"})
+				return
+			}
 			targetUserID = uid
 		}
+	}
+
+	if targetUserID != u.ID && role != "MJ" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Accès refusé"})
+		return
 	}
 
 	if isGemma == 1 {
@@ -457,15 +470,29 @@ func (s *Server) handleGetCharacterSheetFile(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	var role string
+	_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role)
+	if role == "" {
+		http.Error(w, "Accès refusé", http.StatusForbidden)
+		return
+	}
+
 	targetUserID := u.ID
 	if userIdStr := r.URL.Query().Get("userId"); userIdStr != "" {
-		var role string
-		_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role)
 		if role == "MJ" {
 			if uid, e := strconv.ParseInt(userIdStr, 10, 64); e == nil {
+				if !s.isUserInGame(gameID, uid) {
+					http.Error(w, "Joueur introuvable dans cette partie", http.StatusForbidden)
+					return
+				}
 				targetUserID = uid
 			}
 		}
+	}
+
+	if targetUserID != u.ID && role != "MJ" {
+		http.Error(w, "Accès refusé", http.StatusForbidden)
+		return
 	}
 
 	var storagePath, mimeType sql.NullString

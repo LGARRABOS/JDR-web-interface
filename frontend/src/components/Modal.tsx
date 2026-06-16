@@ -64,7 +64,7 @@ export function ModalButtons({ children }: ModalButtonsProps) {
 interface ModalConfirmProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   title: string;
   message: string;
   confirmLabel?: string;
@@ -82,9 +82,16 @@ export function ModalConfirm({
   cancelLabel = 'Annuler',
   danger = false,
 }: ModalConfirmProps) {
-  const handleConfirm = () => {
-    onConfirm();
-    onClose();
+  const handleConfirm = async () => {
+    try {
+      const result = onConfirm();
+      if (result instanceof Promise) {
+        await result;
+      }
+      onClose();
+    } catch {
+      // Garder la modale ouverte en cas d'échec async
+    }
   };
 
   return (

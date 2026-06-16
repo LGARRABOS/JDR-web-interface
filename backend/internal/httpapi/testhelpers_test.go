@@ -3,9 +3,11 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"jdr-backend/internal/storage"
@@ -35,9 +37,11 @@ func setupAuthAndGame(t *testing.T) *testSession {
 	t.Helper()
 	handler := setupTestServer(t)
 
+	email := strings.ToLower(fmt.Sprintf("mj-%s@test.com", strings.ReplaceAll(t.Name(), "/", "_")))
+
 	// Register
 	regBody := map[string]string{
-		"email":       "mj@test.com",
+		"email":       email,
 		"password":    "pass123",
 		"displayName": "MJ Test",
 	}
@@ -51,7 +55,7 @@ func setupAuthAndGame(t *testing.T) *testSession {
 	}
 
 	// Login
-	loginBody := map[string]string{"email": "mj@test.com", "password": "pass123"}
+	loginBody := map[string]string{"email": email, "password": "pass123"}
 	loginJSON, _ := json.Marshal(loginBody)
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginJSON))
 	loginReq.Header.Set("Content-Type", "application/json")

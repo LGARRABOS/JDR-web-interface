@@ -101,15 +101,15 @@ func (s *Server) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.db.Exec(
-		"INSERT INTO game_messages (game_id, user_id, role, content) VALUES (?, ?, ?, ?)",
+	var id int64
+	err := s.db.QueryRow(
+		"INSERT INTO game_messages (game_id, user_id, role, content) VALUES (?, ?, ?, ?) RETURNING id",
 		gameID, u.ID, role, req.Content,
-	)
+	).Scan(&id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	id, _ := res.LastInsertId()
 
 	m := &domain.GameMessage{
 		ID: id, GameID: gameID, UserID: u.ID, Role: role, Content: req.Content,

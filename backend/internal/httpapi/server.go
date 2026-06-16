@@ -2,6 +2,9 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"os"
 	"path"
@@ -25,29 +28,61 @@ type Server struct {
 
 // NewServer construit le routeur HTTP principal de l'API.
 // Si staticDir est non vide et existe, sert les fichiers statiques (frontend SPA) sur /.
-func NewServer(db storage.DB, staticDir string) (http.Handler, error) {
-	key := make([]byte, 32)
-	for i := range key {
-		key[i] = byte(i)
+func loadSessionKey() ([]byte, error) {
+	if secret := os.Getenv("SESSION_SECRET"); secret != "" {
+		sum := sha256.Sum256([]byte(secret))
+		return sum[:], nil
 	}
-	// En prod, utiliser une clé secrète réelle
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("generate session key: %w", err)
+	}
+	return key, nil
+}
+
+func isProduction() bool {
+	if strings.EqualFold(os.Getenv("ENV"), "production") {
+		return true
+	}
+	if v := os.Getenv("HTTPS"); v == "true" || v == "1" {
+		return true
+	}
+	return false
+}
+
+func NewServer(db storage.DB, staticDir string) (http.Handler, error) {
+	key, err := loadSessionKey()
+	if err != nil {
+		return nil, err
+	}
 	store := sessions.NewCookieStore(key)
 	store.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   86400 * 7, // 7 jours
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   false, // true en HTTPS
+		Secure:   isProduction(),
 	}
 
-	hub := realtime.NewHub(func(userID, gameID int64) (string, string, string) {
-		var displayName, characterName, role string
-		_ = db.QueryRow(
-			"SELECT u.display_name, COALESCE(gp.character_name, ''), COALESCE(gp.role, 'PLAYER') FROM users u LEFT JOIN game_players gp ON gp.user_id = u.id AND gp.game_id = ? WHERE u.id = ?",
-			gameID, userID,
-		).Scan(&displayName, &characterName, &role)
-		return displayName, characterName, role
-	})
+	hub := realtime.NewHub(
+		func(userID, gameID int64) (string, string, string) {
+			var displayName, characterName, role string
+			_ = db.QueryRow(
+				"SELECT u.display_name, COALESCE(gp.character_name, ''), COALESCE(gp.role, 'PLAYER') FROM users u LEFT JOIN game_players gp ON gp.user_id = u.id AND gp.game_id = ? WHERE u.id = ?",
+				gameID, userID,
+			).Scan(&displayName, &characterName, &role)
+			return displayName, characterName, role
+		},
+		func(userID, gameID int64) bool {
+			var count int
+			err := db.QueryRow(
+				"SELECT 1 FROM game_players WHERE game_id = ? AND user_id = ?",
+				gameID, userID,
+			).Scan(&count)
+			return err == nil && count != 0
+		},
+		allowedOrigins(),
+	)
 	go hub.Run()
 
 	s := &Server{
@@ -119,13 +154,15 @@ func spaFileServer(root string) http.Handler {
 
 func corsHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := "http://localhost:5173"
-		if o := os.Getenv("CORS_ORIGIN"); o != "" {
-			origin = o
-		} else if o := r.Header.Get("Origin"); o != "" {
-			origin = o
+		requestOrigin := r.Header.Get("Origin")
+		if requestOrigin != "" && isAllowedOrigin(requestOrigin) {
+			w.Header().Set("Access-Control-Allow-Origin", requestOrigin)
+		} else if requestOrigin == "" {
+			origins := allowedOrigins()
+			if len(origins) > 0 {
+				w.Header().Set("Access-Control-Allow-Origin", origins[0])
+			}
 		}
-		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == "OPTIONS" {

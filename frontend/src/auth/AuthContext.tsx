@@ -17,6 +17,7 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   error: string | null;
+  clearError: () => void;
   login: (email: string, password: string) => Promise<User>;
   register: (
     email: string,
@@ -33,6 +34,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -103,8 +108,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, error, login, register, logout, refresh }),
-    [user, loading, error, login, register, logout, refresh]
+    () => ({
+      user,
+      loading,
+      error,
+      clearError,
+      login,
+      register,
+      logout,
+      refresh,
+    }),
+    [user, loading, error, clearError, login, register, logout, refresh]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -7,8 +7,13 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
-  const { login, error: authError } = useAuth();
+  const { login, error: authError, clearError } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    clearError();
+    setErr('');
+  }, [clearError]);
 
   useEffect(() => {
     if (authError) setErr(authError);
