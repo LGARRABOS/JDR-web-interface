@@ -88,7 +88,6 @@ type createTokenReq struct {
 
 func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	mapID := getMapIDFromContext(r)
-	gameID := getGameIDFromContext(r)
 	if mapID == 0 {
 		mapIDStr := chi.URLParam(r, "mapId")
 		var err error
@@ -98,10 +97,8 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if gameID == 0 {
-		var err error
-		gameID, err = s.getMapGameID(mapID)
-		if err != nil {
+	if getGameIDFromContext(r) == 0 {
+		if _, err := s.getMapGameID(mapID); err != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"message": "Carte introuvable"})
 			return
 		}
