@@ -8,19 +8,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func (h *Hub) checkOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
-	for _, allowed := range h.cfg.AllowedOrigins {
-		if origin == allowed {
-			return true
-		}
-	}
-	return false
-}
-
 // ServeWS gère l'upgrade WebSocket pour un utilisateur déjà authentifié.
 // L'URL attendue est /api/ws?gameId=<id>.
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, userID int64) {
