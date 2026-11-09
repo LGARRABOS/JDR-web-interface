@@ -42,6 +42,7 @@ type gameSnapshot struct {
 	Maps     []*domain.Map            `json:"maps"`
 	Scene    *mapScene                `json:"scene"`
 	Messages []map[string]interface{} `json:"messages"`
+	Rolls    []map[string]interface{} `json:"rolls"`
 	Players  []snapshotPlayer         `json:"players"`
 }
 
@@ -106,6 +107,9 @@ func (s *Server) buildSnapshot(gameID int64, m realtime.Member) (any, error) {
 
 	if snap.Messages, err = s.listRecentMessages(gameID); err != nil {
 		return nil, fmt.Errorf("messages: %w", err)
+	}
+	if snap.Rolls, err = s.listRecentRolls(gameID, m.IsGM()); err != nil {
+		return nil, fmt.Errorf("rolls: %w", err)
 	}
 	if snap.Players, err = s.listSnapshotPlayers(gameID); err != nil {
 		return nil, fmt.Errorf("players: %w", err)
@@ -264,4 +268,47 @@ func (s *Server) listSnapshotPlayers(gameID int64) ([]snapshotPlayer, error) {
 		players = append(players, p)
 	}
 	return players, rows.Err()
+}
+
+// listRecentRolls retourne les 50 derniers jets, du plus ancien au plus récent.
+// Les jets cachés ne sont inclus que pour le MJ.
+func (s *Server) listRecentRolls(gameID int64, forGM bool) ([]map[string]interface{}, error) {
+	q := `
+		SELECT r.id, r.user_id, r.expression, r.result, COALESCE(r.details, ''), r.hidden, r.created_at,
+			COALESCE(NULLIF(gp.character_name, ''), u.display_name)
+		FROM dice_rolls r
+		JOIN users u ON u.id = r.user_id
+		LEFT JOIN game_players gp ON gp.game_id = r.game_id AND gp.user_id = r.user_id
+		WHERE r.game_id = ?`
+	if !forGM {
+		q += " AND r.hidden = 0"
+	}
+	rows, err := s.db.Query(q+" ORDER BY r.created_at DESC, r.id DESC LIMIT 50", gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	rolls := []map[string]interface{}{}
+	for rows.Next() {
+		var id, userID int64
+		var result, hidden int
+		var expression, details, createdAt, displayName string
+		if err := rows.Scan(&id, &userID, &expression, &result, &details, &hidden, &createdAt, &displayName); err != nil {
+			return nil, err
+		}
+		rolls = append(rolls, map[string]interface{}{
+			"id":          id,
+			"userId":      userID,
+			"expression":  expression,
+			"result":      result,
+			"details":     details,
+			"hidden":      hidden == 1,
+			"createdAt":   createdAt,
+			"displayName": displayName,
+		})
+	}
+	for i, j := 0, len(rolls)-1; i < j; i, j = i+1, j-1 {
+		rolls[i], rolls[j] = rolls[j], rolls[i]
+	}
+	return rolls, rows.Err()
 }

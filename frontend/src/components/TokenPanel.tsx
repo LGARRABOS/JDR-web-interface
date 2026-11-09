@@ -25,6 +25,8 @@ interface GameElement {
 }
 
 interface TokenPanelProps {
+  /** Affiché dans le panneau latéral de la table : pas de cadre propre. */
+  embedded?: boolean;
   isGM: boolean;
   currentUserId: number;
   elements?: GameElement[];
@@ -63,6 +65,7 @@ export function TokenPanel({
   onTokenUpdate,
   onTokenDelete,
   tokens,
+  embedded = false,
 }: TokenPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedElement, setSelectedElement] = useState<GameElement | null>(
@@ -218,7 +221,13 @@ export function TokenPanel({
   };
 
   return (
-    <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
+    <div
+      className={
+        embedded
+          ? ''
+          : 'rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4'
+      }
+    >
       <ModalConfirm
         open={deleteTokenId !== null}
         onClose={() => {

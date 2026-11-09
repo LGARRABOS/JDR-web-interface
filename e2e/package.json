@@ -1,0 +1,12 @@
+{
+  "name": "jdr-e2e",
+  "private": true,
+  "description": "Tests de bout en bout : un navigateur MJ et un navigateur joueur sur l'application complète.",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

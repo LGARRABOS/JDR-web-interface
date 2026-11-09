@@ -15,35 +15,18 @@ import {
   MonsterEditorModal,
   type GameElementFull,
 } from '../components/MonsterEditorModal';
-import { DicePanel } from '../components/DicePanel';
-import { ChatPanel } from '../components/ChatPanel';
-import { PresenceBar } from '../components/PresenceBar';
 import { CharacterSheetPanel } from '../components/CharacterSheetPanel';
-import { MusicPanel } from '../components/MusicPanel';
-import { MusicPlayer } from '../components/MusicPlayer';
 import { DiceRollOverlay } from '../components/DiceRollOverlay';
-import { Checkbox } from '../components/Checkbox';
-import { CopyableCode } from '../components/CopyableCode';
-import { ConnectionBanner } from '../components/tabletop/ConnectionBanner';
-import { MapSettingsPanel } from '../components/tabletop/MapSettingsPanel';
+import { TopBar } from '../components/tabletop/TopBar';
+import { GmToolbar } from '../components/tabletop/GmToolbar';
+import { SidePanel, type SidePanelTab } from '../components/tabletop/SidePanel';
+import { ChatFeed } from '../components/tabletop/ChatFeed';
+import { DiceBar } from '../components/tabletop/DiceBar';
+import { TokenQuickCard } from '../components/tabletop/TokenQuickCard';
+import { MiniPlayer, MusicTab } from '../components/tabletop/MusicControls';
+import { useAmbientMusic } from '../hooks/useAmbientMusic';
 import { useGameSession } from '../realtime/useGameSession';
 import { getErrorMessage } from '../utils/errorMessage';
-
-const GM_TIPS = [
-  'Utilisez le panneau "Ajouter un ennemi" : recherchez un ennemi dans vos ressources, définissez ses PV/mana, puis placez-le sur la carte.',
-  'Cliquez sur un jeton sur la carte ou dans la liste pour le sélectionner et modifier ses PV.',
-  'Utilisez la molette ou les boutons +/− pour zoomer sur la carte. Glissez pour la déplacer.',
-  'Gérez les cartes et la musique depuis la page Ressources.',
-  'Les jetons peuvent être déplacés par glisser-déposer. Cliquez sur ✕ pour en supprimer.',
-  "Le code d'invitation permet aux joueurs de rejoindre la partie.",
-  'Les joueurs connectés apparaissent dans la barre en haut de la colonne de droite.',
-  'Les dés et le chat sont partagés en temps réel avec tous les participants.',
-];
-
-function pickRandomTip(exclude?: string) {
-  const available = exclude ? GM_TIPS.filter((t) => t !== exclude) : GM_TIPS;
-  return available[Math.floor(Math.random() * available.length)] ?? GM_TIPS[0];
-}
 
 const DEFAULT_VIEW: MapView = { scale: 1, offset: { x: 0, y: 0 } };
 const VIEW_SEND_INTERVAL_MS = 50;
@@ -92,13 +75,12 @@ export function TabletopPage() {
     null
   );
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
-  const [selectedPlayerForTurn, setSelectedPlayerForTurn] = useState<
-    number | null
-  >(null);
   const [characterNameInput, setCharacterNameInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [rollError, setRollError] = useState<string | null>(null);
-  const [gmTip, setGmTip] = useState(pickRandomTip);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState('chat');
+  const [fitSignal, setFitSignal] = useState(0);
   const [monsterView, setMonsterView] = useState<{
     element: GameElementFull;
     tokenData: { hp: number; maxHp: number; mana: number; maxMana: number };
@@ -135,15 +117,6 @@ export function TabletopPage() {
   useEffect(() => {
     setCharacterNameInput(you?.characterName ?? '');
   }, [you?.characterName]);
-
-  useEffect(() => {
-    if (!isGM) return;
-    const interval = setInterval(
-      () => setGmTip((prev) => pickRandomTip(prev)),
-      15000
-    );
-    return () => clearInterval(interval);
-  }, [isGM]);
 
   useEffect(() => {
     if (!actionError) return;
@@ -418,6 +391,37 @@ export function TabletopPage() {
     [handleTokenUpdate]
   );
 
+  // --- Musique, chat non lu, onglets ------------------------------------
+
+  const music = useAmbientMusic({
+    gameId,
+    music: live.music,
+    serverOffsetMs: state.serverOffsetMs,
+    isGM,
+    send,
+  });
+
+  const feedCount = state.messages.length + state.rolls.length;
+  const [seenCount, setSeenCount] = useState(0);
+  const chatVisible = panelOpen && activeTab === 'chat';
+  useEffect(() => {
+    if (chatVisible || !state.ready) setSeenCount(feedCount);
+  }, [chatVisible, feedCount, state.ready]);
+  const unread = Math.max(0, feedCount - seenCount);
+
+  // Pour le MJ, le dernier jet affiché peut être un jet caché.
+  const latestRoll =
+    isGM &&
+    state.lastRollHidden &&
+    (state.lastRoll?.key ?? 0) < state.lastRollHidden.key
+      ? state.lastRollHidden
+      : state.lastRoll;
+
+  const openResources = useCallback(
+    () => navigate(`/table/${gameId}/resources`),
+    [navigate, gameId]
+  );
+
   // --- Rendu --------------------------------------------------------------
 
   if (!state.ready || !game) {
@@ -438,271 +442,236 @@ export function TabletopPage() {
     );
   }
 
-  return (
-    <div className="h-screen flex flex-col">
-      <header className="flex justify-between items-center px-4 py-2 bg-fantasy-surface border-b border-fantasy-border">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/games')}
-            className="text-fantasy-muted-soft hover:text-fantasy-text-soft"
-          >
-            ← Retour
-          </button>
-          <h1 className="font-bold font-heading">{game.name}</h1>
-          {isGM ? (
-            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-fantasy-accent/90 text-fantasy-bg">
-              Maître du Jeu
-            </span>
-          ) : (
-            <span className="px-2 py-0.5 rounded text-xs text-fantasy-muted-soft bg-fantasy-input-soft">
-              Joueur
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {isGM ? (
-            <select
-              value={currentMap?.id ?? ''}
-              onChange={(e) => handleSelectMap(parseInt(e.target.value, 10))}
-              className="rounded bg-fantasy-input-soft px-3 py-1 text-sm text-fantasy-text-soft"
-            >
-              {currentMap &&
-                !state.maps.some((m) => m.id === currentMap.id) && (
-                  <option value={currentMap.id}>{currentMap.name}</option>
-                )}
-              {state.maps.length === 0 && !currentMap ? (
-                <option value="">Aucune carte</option>
-              ) : (
-                state.maps.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))
+  const chatTab: SidePanelTab = {
+    id: 'chat',
+    label: 'Chat',
+    badge: unread,
+    fullHeight: true,
+    content: (
+      <ChatFeed
+        messages={state.messages}
+        rolls={state.rolls}
+        players={state.players}
+        onSend={handleSendMessage}
+      />
+    ),
+  };
+  const musicTab: SidePanelTab = {
+    id: 'music',
+    label: 'Musique',
+    content: (
+      <MusicTab m={music} onOpenResources={isGM ? openResources : undefined} />
+    ),
+  };
+  const tabs: SidePanelTab[] = isGM
+    ? [
+        chatTab,
+        {
+          id: 'tokens',
+          label: 'Jetons',
+          content: (
+            <TokenPanel
+              embedded
+              isGM={isGM}
+              currentUserId={user?.id ?? 0}
+              elements={elements}
+              onStartPlacement={setPlacementData}
+              placementActive={placementData != null}
+              onCancelPlacement={() => setPlacementData(null)}
+              selectedToken={selectedToken}
+              onTokenSelect={(t) => setSelectedTokenId(t?.id ?? null)}
+              onTokenDoubleClick={handleTokenDoubleClick}
+              onTokenUpdate={handleTokenUpdate}
+              onTokenDelete={handleTokenDelete}
+              tokens={tokens}
+            />
+          ),
+        },
+        {
+          id: 'sheets',
+          label: 'Fiches',
+          content: (
+            <CharacterSheetPanel
+              embedded
+              gameId={gameId}
+              isGM={isGM}
+              isGemma={game.isGemma}
+              players={gamePlayers}
+            />
+          ),
+        },
+        musicTab,
+      ]
+    : [
+        chatTab,
+        {
+          id: 'sheet',
+          label: 'Ma fiche',
+          content: (
+            <div className="flex flex-col gap-4">
+              {!game.isGemma && (
+                <label className="flex flex-col gap-1.5 text-sm text-fantasy-text-soft">
+                  Nom de personnage
+                  <input
+                    type="text"
+                    value={characterNameInput}
+                    onChange={(e) => setCharacterNameInput(e.target.value)}
+                    onBlur={handleCharacterNameBlur}
+                    onKeyDown={(e) =>
+                      e.key === 'Enter' && (e.target as HTMLInputElement).blur()
+                    }
+                    placeholder={user?.displayName ?? 'Mon personnage'}
+                    className="h-11 px-3 rounded-lg bg-fantasy-bg border border-fantasy-border-soft text-[15px] text-fantasy-text placeholder:text-fantasy-muted-soft focus:outline-none focus:border-fantasy-accent"
+                  />
+                </label>
               )}
-            </select>
-          ) : (
-            currentMap && (
-              <span className="text-sm text-fantasy-muted-soft">
-                {currentMap.name}
-              </span>
-            )
-          )}
-          {isGM && (
-            <button
-              onClick={() => navigate(`/table/${gameId}/resources`)}
-              className="px-3 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm font-medium text-fantasy-text-soft"
-            >
-              Ressources
-            </button>
-          )}
-        </div>
-      </header>
+              <CharacterSheetPanel
+                embedded
+                gameId={gameId}
+                isGM={false}
+                isGemma={game.isGemma}
+                players={gamePlayers}
+              />
+            </div>
+          ),
+        },
+        musicTab,
+      ];
 
-      <ConnectionBanner
-        status={state.connection}
+  return (
+    <div className="fixed inset-0 overflow-hidden bg-fantasy-bg text-fantasy-text">
+      <div className="absolute inset-0 flex">
+        <MapCanvas
+          map={currentMap}
+          tokens={tokens}
+          gameId={gameId}
+          mapElements={mapElements}
+          isGM={isGM}
+          currentUserId={user?.id ?? 0}
+          mapView={mapView}
+          tokensMovementLocked={game.tokenMovementLocked}
+          highlightedPlayerId={live.turnPlayerId}
+          connectedUserIds={state.presence.map((u) => u.userId)}
+          connectedUsers={state.presence}
+          onMapViewChange={handleMapViewChange}
+          hasSharedView={live.view != null}
+          fitSignal={fitSignal}
+          onMapPanEnd={isGM ? flushMapView : undefined}
+          onTokenMove={handleTokenMove}
+          onTokenDragStart={handleTokenDragStart}
+          onTokenDragEnd={handleTokenDragEnd}
+          onTokenCreate={isGM && placementData ? handleTokenCreate : undefined}
+          onTokenSelect={(t) => setSelectedTokenId(t?.id ?? null)}
+          onTokenDoubleClick={handleTokenDoubleClick}
+          selectedToken={selectedToken}
+          fogVisionRadius={game.fogVisionRadius}
+          renderTokenPopup={(t, name, close) => (
+            <TokenQuickCard
+              token={t}
+              displayName={name}
+              isGM={isGM}
+              canEdit={isGM || (t.kind === 'PJ' && t.ownerUserId === user?.id)}
+              onUpdate={handleTokenUpdate}
+              onDelete={handleTokenDelete}
+              onOpenSheet={handleTokenDoubleClick}
+              onClose={close}
+            />
+          )}
+          diceRollOverlay={
+            game.isGemma ? (
+              <DiceRollOverlay roll={state.lastRoll} durationMs={2500} inline />
+            ) : undefined
+          }
+        />
+      </div>
+
+      <TopBar
+        game={game}
+        isGM={isGM}
+        you={you}
+        maps={state.maps}
+        currentMap={currentMap}
+        players={state.players}
+        presence={state.presence}
+        connection={state.connection}
         failedAttempts={state.failedAttempts}
+        turnPlayerId={live.turnPlayerId}
+        onBack={() => navigate('/games')}
+        onSelectMap={handleSelectMap}
+        onOpenResources={openResources}
         onRetry={resync}
       />
 
       {actionError && (
         <div
           role="alert"
-          className="px-4 py-1.5 text-sm text-center bg-red-500/15 text-red-200 border-b border-red-500/30"
+          className="glass absolute top-20 left-1/2 -translate-x-1/2 z-40 rounded-xl px-4 py-2 text-sm text-red-300"
         >
           {actionError}
         </div>
       )}
 
-      {isGM && (
-        <div className="px-4 py-2 bg-fantasy-accent/10 border-b border-fantasy-accent/20 flex flex-wrap items-center gap-4 text-sm text-fantasy-muted">
-          <span className="flex items-center gap-2 flex-1 min-w-0">
-            <strong className="text-fantasy-text-soft">Mode MJ :</strong>
-            <span>{gmTip}</span>
-            <button
-              type="button"
-              onClick={() => setGmTip((prev) => pickRandomTip(prev))}
-              className="shrink-0 p-1 rounded hover:bg-fantasy-accent/20 text-fantasy-accent-hover"
-              title="Autre astuce"
-            >
-              ↻
-            </button>
-          </span>
-          {game.inviteCode && (
-            <CopyableCode
-              code={game.inviteCode}
-              label="Code d'invitation :"
-              className="flex items-center gap-2"
-            />
-          )}
-        </div>
-      )}
-
-      {game.isGemma && isGM && (
-        <div className="px-4 py-2 bg-fantasy-surface border-b border-fantasy-border-soft flex flex-wrap items-center gap-4 text-sm">
-          <strong className="text-fantasy-text-soft">GEMMA :</strong>
-          <Checkbox
-            checked={game.tokenMovementLocked}
-            onChange={() =>
-              updateSettings({ tokenMovementLocked: !game.tokenMovementLocked })
-            }
-            aria-label="Bloquer mouvement des jetons"
+      {placementData && (
+        <div className="glass absolute top-20 left-1/2 -translate-x-1/2 z-30 rounded-xl pl-4 pr-1.5 py-1.5 flex items-center gap-3 text-sm">
+          Cliquez sur la carte pour placer <strong>{placementData.name}</strong>
+          <button
+            type="button"
+            onClick={() => setPlacementData(null)}
+            className="h-8 px-3 rounded-lg bg-fantasy-input-soft hover:bg-fantasy-input-hover"
           >
-            <span className="text-fantasy-muted-soft">
-              Bloquer mouvement des jetons
-            </span>
-          </Checkbox>
-          <div className="flex items-center gap-2">
-            <span className="text-fantasy-muted-soft">Tour de :</span>
-            <select
-              value={selectedPlayerForTurn ?? ''}
-              onChange={(e) =>
-                setSelectedPlayerForTurn(
-                  e.target.value ? parseInt(e.target.value, 10) : null
-                )
-              }
-              className="rounded bg-fantasy-input-soft px-2 py-1 text-sm text-fantasy-text-soft"
-            >
-              <option value="">—</option>
-              {gamePlayers.map((p) => (
-                <option key={p.userId} value={p.userId}>
-                  {p.characterName || p.displayName}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() =>
-                handleTurnHighlight(
-                  selectedPlayerForTurn ?? gamePlayers[0]?.userId ?? null
-                )
-              }
-              className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm text-fantasy-text-soft"
-            >
-              Début du tour
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTurnHighlight(null)}
-              className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm text-fantasy-text-soft"
-            >
-              Fin de surbrillance
-            </button>
-          </div>
+            Annuler
+          </button>
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden relative">
-        <div className="flex-1 flex flex-col min-w-0">
-          <MapCanvas
-            map={currentMap}
-            tokens={tokens}
-            gameId={gameId}
-            mapElements={mapElements}
-            isGM={isGM}
-            currentUserId={user?.id ?? 0}
-            mapView={mapView}
-            tokensMovementLocked={game.tokenMovementLocked}
-            highlightedPlayerId={live.turnPlayerId}
-            connectedUserIds={state.presence.map((u) => u.userId)}
-            connectedUsers={state.presence}
-            onMapViewChange={handleMapViewChange}
-            hasSharedView={live.view != null}
-            onMapPanEnd={isGM ? flushMapView : undefined}
-            onTokenMove={handleTokenMove}
-            onTokenDragStart={handleTokenDragStart}
-            onTokenDragEnd={handleTokenDragEnd}
-            onTokenCreate={
-              isGM && placementData ? handleTokenCreate : undefined
-            }
-            onTokenSelect={(t) => setSelectedTokenId(t?.id ?? null)}
-            onTokenDoubleClick={handleTokenDoubleClick}
-            selectedToken={selectedToken}
-            fogVisionRadius={game.fogVisionRadius}
-            diceRollOverlay={
-              game.isGemma ? (
-                <DiceRollOverlay
-                  roll={state.lastRoll}
-                  durationMs={2500}
-                  inline
-                />
-              ) : undefined
-            }
-          />
-        </div>
-        <aside className="w-80 flex flex-col gap-4 p-4 bg-fantasy-surface/50 overflow-y-auto text-fantasy-text-soft">
-          <PresenceBar users={state.presence} />
-          <DicePanel
-            gameId={gameId}
-            onRoll={handleRoll}
-            rollError={rollError}
-            lastRoll={state.lastRoll}
-            lastRollHidden={state.lastRollHidden}
-            isGemma={game.isGemma}
-            isGM={isGM}
-          />
-          <ChatPanel messages={state.messages} onSend={handleSendMessage} />
-          {isGM && (
-            <MapSettingsPanel
-              fogVisionRadius={game.fogVisionRadius}
-              onChangeFogRadius={(fogVisionRadius) =>
-                updateSettings({ fogVisionRadius })
-              }
-            />
-          )}
-          <TokenPanel
-            isGM={isGM}
-            currentUserId={user?.id ?? 0}
-            elements={elements}
-            onStartPlacement={setPlacementData}
-            placementActive={placementData != null}
-            onCancelPlacement={() => setPlacementData(null)}
-            selectedToken={selectedToken}
-            onTokenSelect={(t) => setSelectedTokenId(t?.id ?? null)}
-            onTokenDoubleClick={handleTokenDoubleClick}
-            onTokenUpdate={handleTokenUpdate}
-            onTokenDelete={handleTokenDelete}
-            tokens={tokens}
-          />
-          {!isGM && !game.isGemma && (
-            <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
-              <label className="block text-sm font-medium mb-2 text-fantasy-text-soft">
-                Nom de personnage
-              </label>
-              <input
-                type="text"
-                value={characterNameInput}
-                onChange={(e) => setCharacterNameInput(e.target.value)}
-                onBlur={handleCharacterNameBlur}
-                onKeyDown={(e) =>
-                  e.key === 'Enter' && (e.target as HTMLInputElement).blur()
-                }
-                placeholder={user?.displayName ?? 'Mon personnage'}
-                className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft"
-              />
-            </div>
-          )}
-          <CharacterSheetPanel
-            gameId={gameId}
-            isGM={isGM}
-            isGemma={game.isGemma}
-            players={gamePlayers}
-          />
-          {isGM ? (
-            <MusicPanel
-              gameId={gameId}
-              music={live.music}
-              serverOffsetMs={state.serverOffsetMs}
-              send={send}
-            />
-          ) : (
-            <MusicPlayer
-              gameId={gameId}
-              music={live.music}
-              serverOffsetMs={state.serverOffsetMs}
-            />
-          )}
-        </aside>
+      {isGM && (
+        <GmToolbar
+          placementActive={placementData != null}
+          enemyPanelOpen={panelOpen && activeTab === 'tokens'}
+          onSelectTool={() => {
+            setPlacementData(null);
+            if (activeTab === 'tokens') setActiveTab('chat');
+          }}
+          onAddEnemy={() => {
+            setPanelOpen(true);
+            setActiveTab('tokens');
+          }}
+          fogVisionRadius={game.fogVisionRadius}
+          onChangeFog={(fogVisionRadius) => updateSettings({ fogVisionRadius })}
+          tokensLocked={game.tokenMovementLocked}
+          onToggleLock={() =>
+            updateSettings({ tokenMovementLocked: !game.tokenMovementLocked })
+          }
+          players={state.players}
+          turnPlayerId={live.turnPlayerId}
+          onTurn={handleTurnHighlight}
+          onRecenter={() => setFitSignal((n) => n + 1)}
+        />
+      )}
+
+      <SidePanel
+        tabs={tabs}
+        active={activeTab}
+        onChange={setActiveTab}
+        open={panelOpen}
+        onToggle={setPanelOpen}
+      />
+
+      <DiceBar
+        isGM={isGM}
+        onRoll={handleRoll}
+        error={rollError}
+        lastRoll={latestRoll}
+        panelOpen={panelOpen}
+      />
+
+      <div
+        className="absolute left-4 z-20"
+        style={{ bottom: isGM && currentMap ? 72 : 16 }}
+      >
+        <MiniPlayer m={music} />
       </div>
+      <audio ref={music.audioRef} className="hidden" preload="auto" />
 
       {monsterView && (
         <MonsterEditorModal

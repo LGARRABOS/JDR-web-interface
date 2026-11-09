@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -91,6 +92,7 @@ func (s *Server) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		"role":        role,
 		"content":     req.Content,
 		"displayName": displayName,
+		"createdAt":   time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	s.hub.Broadcast(gameID, "chat.message", payload)
 }

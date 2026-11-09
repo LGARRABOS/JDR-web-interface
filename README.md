@@ -42,12 +42,29 @@ Côté frontend, `src/realtime/` contient le protocole typé (`protocol.ts`), la
 
 Le protocole est défini à deux endroits qui doivent rester alignés : `backend/internal/realtime/protocol.go` et `frontend/src/realtime/protocol.ts`.
 
-## CI
+## Tests et CI
 
-Les pushes sur `main` et `master` déclenchent une pipeline GitHub Actions qui exécute :
+Chaque push et chaque pull request sur `main` lancent la CI (GitHub Actions) :
 
-- **Backend** : build, `go vet`, tests
-- **Frontend** : build, lint (ESLint), tests (Vitest)
+| Job | Vérifie |
+| --- | --- |
+| Backend | `gofmt`, build, `go vet`, tests avec PostgreSQL et détecteur de concurrence (`-race`), couverture, golangci-lint |
+| Frontend | types (`tsc`), ESLint, Prettier, tests unitaires (Vitest), build |
+| Bout en bout | l'application complète démarrée avec une vraie base ; Playwright ouvre un navigateur **MJ** et un navigateur **joueur** et vérifie la synchronisation (chat, dés, jetons cachés, tour de jeu, changement de carte, présence, rechargement) |
+| Scripts de déploiement | shellcheck |
+
+Le déploiement (workflow **Deploy**) ne se lance qu'après une CI entièrement verte.
+
+En local :
+
+```bash
+npm test                  # tests backend (PostgreSQL jdr_test requis) + frontend
+npm run lint              # go vet + tsc + ESLint
+
+# Bout en bout, application lancée avec `npm run dev` :
+cd e2e && npm install && npx playwright install chromium
+E2E_BASE_URL=http://localhost:5173 npx playwright test
+```
 
 ## Scripts
 

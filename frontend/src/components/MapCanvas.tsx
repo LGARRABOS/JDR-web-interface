@@ -95,6 +95,14 @@ interface MapCanvasProps {
   onMapViewChange?: (view: MapView) => void;
   /** true si une vue partagée existe déjà : pas de recadrage automatique. */
   hasSharedView?: boolean;
+  /** Incrémenter pour recadrer la carte sur la fenêtre (bouton « Recentrer »). */
+  fitSignal?: number;
+  /** Contenu de la fiche rapide affichée au-dessus du jeton sélectionné. */
+  renderTokenPopup?: (
+    token: Token,
+    displayName: string,
+    close: () => void
+  ) => React.ReactNode;
   onMapPanEnd?: () => void;
   onTokenMove?: (id: number, x: number, y: number) => void;
   onTokenDragStart?: (id: number) => void;
@@ -121,6 +129,8 @@ export function MapCanvas({
   connectedUsers = [],
   onMapViewChange,
   hasSharedView = false,
+  fitSignal = 0,
+  renderTokenPopup,
   onMapPanEnd,
   onTokenMove,
   onTokenDragStart,
@@ -224,6 +234,11 @@ export function MapCanvas({
     const t = setTimeout(runFit, 100);
     return () => clearTimeout(t);
   }, [mapId, fitScaleToViewport, isGM]);
+
+  useEffect(() => {
+    if (fitSignal > 0) fitScaleToViewport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitSignal]);
 
   const updateView = useCallback(
     (updates: Partial<MapView>) => {
@@ -457,38 +472,56 @@ export function MapCanvas({
       }}
     >
       {isGM && (
-        <div className="absolute bottom-4 right-4 z-10 flex flex-col gap-1 rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-1">
-          <button
-            type="button"
-            onClick={() => updateView({ scale: Math.min(3, scale * 1.2) })}
-            className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm font-bold text-fantasy-text-soft"
-            title="Zoom avant"
-          >
-            +
-          </button>
+        <div
+          className="glass absolute bottom-4 left-4 z-10 flex items-center gap-0.5 rounded-xl p-1"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={() => updateView({ scale: Math.max(0.25, scale / 1.2) })}
-            className="px-2 py-1 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-sm font-bold text-fantasy-text-soft"
-            title="Zoom arrière"
+            className="icon-btn !w-9 !h-9 text-lg"
+            aria-label="Dézoomer"
+            title="Dézoomer"
           >
             −
           </button>
           <button
             type="button"
-            onClick={() => fitScaleToViewport()}
-            className="px-2 py-0.5 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-xs text-fantasy-text-soft"
-            title="Ajuster à la fenêtre"
+            onClick={() => updateView({ scale: 1, offset: { x: 0, y: 0 } })}
+            className="min-w-[3.25rem] h-9 rounded-lg text-[13px] text-fantasy-text-soft tabular-nums hover:bg-fantasy-input-soft"
+            title="Taille réelle (1:1)"
           >
-            ⊡
+            {Math.round(scale * 100)} %
           </button>
           <button
             type="button"
-            onClick={() => updateView({ scale: 1, offset: { x: 0, y: 0 } })}
-            className="px-2 py-0.5 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-xs text-fantasy-text-soft"
-            title="Zoom 1:1"
+            onClick={() => updateView({ scale: Math.min(3, scale * 1.2) })}
+            className="icon-btn !w-9 !h-9 text-lg"
+            aria-label="Zoomer"
+            title="Zoomer"
           >
-            1:1
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => fitScaleToViewport()}
+            className="icon-btn !w-9 !h-9"
+            aria-label="Ajuster à la fenêtre"
+            title="Ajuster à la fenêtre"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 8V3h5M21 8V3h-5M3 16v5h5M21 16v5h-5" />
+            </svg>
           </button>
         </div>
       )}
@@ -777,6 +810,29 @@ export function MapCanvas({
                 imgW,
                 imgH
               );
+              if (renderTokenPopup) {
+                const close = () => {
+                  setInspectedTokenId(null);
+                  onTokenSelect?.(null);
+                };
+                return (
+                  <div
+                    className="absolute z-30"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onWheel={(e) => e.stopPropagation()}
+                    style={{
+                      left: popupPos.left,
+                      top: popupPos.top - (t.height ?? 56) / 2 - 10,
+                      // Taille constante quel que soit le zoom de la carte.
+                      transform: `translate(-50%, -100%) scale(${1 / scale})`,
+                      transformOrigin: 'bottom center',
+                    }}
+                  >
+                    {renderTokenPopup(t, popupName, close)}
+                  </div>
+                );
+              }
               return (
                 <div
                   className="absolute z-30 rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-2 shadow-lg text-sm min-w-[120px]"

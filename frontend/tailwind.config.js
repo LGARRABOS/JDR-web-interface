@@ -26,7 +26,8 @@ export default {
       },
       fontFamily: {
         heading: ['Cinzel', 'serif'],
-        body: ['Crimson Text', 'Georgia', 'serif'],
+        body: ['Alegreya Sans', 'system-ui', 'sans-serif'],
+        prose: ['Crimson Text', 'Georgia', 'serif'],
       },
     },
   },

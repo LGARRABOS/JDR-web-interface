@@ -6,6 +6,12 @@ import type { MapData } from '../components/MapCanvas';
 import { MapEditor } from '../components/MapEditor';
 import { Modal, ModalButtons, ModalConfirm } from '../components/Modal';
 import {
+  ChevronLeft,
+  MapIcon,
+  Music,
+  Trash,
+} from '../components/tabletop/icons';
+import {
   MonsterEditorModal,
   type GameElementFull,
 } from '../components/MonsterEditorModal';
@@ -35,7 +41,7 @@ interface GameElement {
   iconScale?: number;
 }
 
-type ResourcesTab = 'resources' | 'elements' | 'editor';
+type ResourcesTab = 'maps' | 'elements' | 'music' | 'editor';
 
 function ElementUploadForm({
   defaultName,
@@ -338,12 +344,15 @@ export function ResourcesPage() {
   const gameId = gameIdParam ? parseInt(gameIdParam, 10) : 0;
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<ResourcesTab>('resources');
+  const [activeTab, setActiveTab] = useState<ResourcesTab>('maps');
   const [game, setGame] = useState<{
     id: number;
     name: string;
     role: string;
+    currentMapId?: number;
   } | null>(null);
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [pageError, setPageError] = useState<string | null>(null);
   const [maps, setMaps] = useState<MapData[]>([]);
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [elements, setElements] = useState<GameElement[]>([]);
@@ -426,16 +435,24 @@ export function ResourcesPage() {
     loadElements();
   }, [loadElements]);
 
+  const acceptMapFile = useCallback((file: File | undefined) => {
+    if (!file) return;
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+    if (!['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
+      setPageError(
+        'Format non pris en charge : utilisez une image PNG, JPG ou GIF.'
+      );
+      return;
+    }
+    setPendingMapFile(file);
+  }, []);
+
   const handleMapFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
-      if (!['.png', '.jpg', '.jpeg', '.gif'].includes(ext)) return;
-      setPendingMapFile(file);
+      acceptMapFile(e.target.files?.[0]);
       e.target.value = '';
     },
-    []
+    [acceptMapFile]
   );
 
   const handleMapFormSubmit = useCallback(
@@ -456,24 +473,47 @@ export function ResourcesPage() {
     [gameId, loadMaps, pendingMapFile]
   );
 
-  const handleMusicUpload = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
+  const uploadMusicFile = useCallback(
+    async (file: File | undefined) => {
       if (!file) return;
       const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
-      if (!['.mp3', '.ogg', '.wav', '.m4a'].includes(ext)) return;
+      if (!['.mp3', '.ogg', '.wav', '.m4a'].includes(ext)) {
+        setPageError(
+          'Format non pris en charge : utilisez un fichier MP3, OGG, WAV ou M4A.'
+        );
+        return;
+      }
       setMusicUploading(true);
       try {
         await MusicAPI.upload(gameId, file);
-        loadTracks();
-      } catch {
-        loadTracks();
+      } catch (err) {
+        setPageError(getErrorMessage(err, 'Envoi de la musique impossible'));
       } finally {
+        loadTracks();
         setMusicUploading(false);
-        e.target.value = '';
       }
     },
     [gameId, loadTracks]
+  );
+
+  const handleMusicUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      uploadMusicFile(e.target.files?.[0]);
+      e.target.value = '';
+    },
+    [uploadMusicFile]
+  );
+
+  const handleShowMap = useCallback(
+    async (mapId: number) => {
+      try {
+        await GamesAPI.setCurrentMap(gameId, mapId);
+        setGame((g) => (g ? { ...g, currentMapId: mapId } : g));
+      } catch (err) {
+        setPageError(getErrorMessage(err, 'Impossible d’afficher cette carte'));
+      }
+    },
+    [gameId]
   );
 
   const handleDeleteMapConfirm = useCallback(async () => {
@@ -500,16 +540,24 @@ export function ResourcesPage() {
     }
   }, [gameId, loadTracks, deleteTrackId]);
 
+  const acceptElementFile = useCallback((file: File | undefined) => {
+    if (!file) return;
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+    if (!['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
+      setPageError(
+        'Format non pris en charge : utilisez une image PNG, JPG ou GIF.'
+      );
+      return;
+    }
+    setPendingElementFile(file);
+  }, []);
+
   const handleElementFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
-      if (!['.png', '.jpg', '.jpeg', '.gif'].includes(ext)) return;
-      setPendingElementFile(file);
+      acceptElementFile(e.target.files?.[0]);
       e.target.value = '';
     },
-    []
+    [acceptElementFile]
   );
 
   const handleElementFormSubmit = useCallback(
@@ -589,6 +637,12 @@ export function ResourcesPage() {
     }
   }, [gameId, loadElements, deleteElementId]);
 
+  useEffect(() => {
+    if (!pageError) return;
+    const t = setTimeout(() => setPageError(null), 6000);
+    return () => clearTimeout(t);
+  }, [pageError]);
+
   if (!game) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -611,52 +665,127 @@ export function ResourcesPage() {
     );
   }
 
+  const navItems: {
+    id: ResourcesTab;
+    label: string;
+    count?: number;
+    icon: React.ReactNode;
+  }[] = [
+    {
+      id: 'maps',
+      label: 'Cartes',
+      count: maps.length,
+      icon: <MapIcon size={18} />,
+    },
+    {
+      id: 'elements',
+      label: 'Monstres & décors',
+      count: elements.length,
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 2l3 6 6 1-4.5 4.5L18 20l-6-3-6 3 1.5-6.5L3 9l6-1z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'music',
+      label: 'Musique',
+      count: tracks.length,
+      icon: <Music size={18} />,
+    },
+    {
+      id: 'editor',
+      label: 'Éditeur de cartes',
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
+        </svg>
+      ),
+    },
+  ];
+
+  const mapQuery = mapSearchQuery.trim().toLowerCase();
+  const filteredMaps = maps.filter(
+    (m) =>
+      !mapQuery ||
+      m.name.toLowerCase().includes(mapQuery) ||
+      (m.tags ?? []).some((t) => t.toLowerCase().includes(mapQuery))
+  );
+  const filteredElements = elements.filter((el) => {
+    if (
+      elementFilterCategory !== 'all' &&
+      el.category !== elementFilterCategory
+    )
+      return false;
+    const q = elementSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      el.name.toLowerCase().includes(q) ||
+      (el.tags ?? []).some((t) => t.toLowerCase().includes(q))
+    );
+  });
+  const openMonsterEditor = (el: GameElement) =>
+    setMonsterEditorElement({
+      ...el,
+      description: el.description ?? '',
+      uniqueTrait: el.uniqueTrait ?? '',
+      loot: el.loot ?? '',
+      maxHp: el.maxHp ?? 10,
+      maxMana: el.maxMana ?? 0,
+      iconPosX: el.iconPosX ?? 50,
+      iconPosY: el.iconPosY ?? 50,
+      iconScale: el.iconScale ?? 1,
+    });
+
+  const inputClass =
+    'h-11 px-3.5 rounded-lg bg-fantasy-bg border border-fantasy-border-soft text-[15px] text-fantasy-text placeholder:text-fantasy-muted-soft focus:outline-none focus:border-fantasy-accent';
+  const primaryButton =
+    'inline-flex items-center gap-2 h-11 px-4 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold hover:bg-fantasy-accent-hover disabled:opacity-50';
+  const cardButton =
+    'h-9 rounded-lg bg-fantasy-surface text-sm text-fantasy-text hover:bg-fantasy-surface-hover';
+
   return (
-    <div className="h-screen flex flex-col bg-fantasy-bg text-fantasy-text-soft overflow-hidden">
-      <header className="shrink-0 flex justify-between items-center px-4 py-3 bg-fantasy-surface border-b border-fantasy-border-soft">
+    <div className="h-screen flex flex-col bg-fantasy-bg text-fantasy-text overflow-hidden">
+      <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-fantasy-surface">
         <div className="flex items-center gap-4">
           <button
+            type="button"
             onClick={() => navigate(`/table/${gameId}`)}
-            className="text-fantasy-muted-soft hover:text-fantasy-bg"
+            className="inline-flex items-center gap-1.5 h-10 pl-2 pr-3 rounded-lg bg-fantasy-surface hover:bg-fantasy-surface-hover text-[15px]"
           >
-            ← Table de jeu
+            <ChevronLeft size={18} />
+            Table de jeu
           </button>
-          <h1 className="font-bold text-lg">Ressources — {game.name}</h1>
+          <div className="leading-tight">
+            <h1 className="font-heading font-bold text-[22px]">Ressources</h1>
+            <span className="text-[13px] text-fantasy-muted">{game.name}</span>
+          </div>
         </div>
+        <span className="text-[13px] text-fantasy-muted">
+          Partagées entre toutes vos parties
+        </span>
       </header>
-
-      <nav className="shrink-0 flex gap-1 px-4 py-2 bg-fantasy-surface/50 border-b border-fantasy-border-soft">
-        <button
-          onClick={() => setActiveTab('resources')}
-          className={`px-4 py-2 rounded text-sm font-medium ${
-            activeTab === 'resources'
-              ? 'bg-fantasy-accent/80 text-fantasy-bg'
-              : 'bg-fantasy-input-soft/50 text-fantasy-muted-soft hover:text-fantasy-bg'
-          }`}
-        >
-          Ressources
-        </button>
-        <button
-          onClick={() => setActiveTab('elements')}
-          className={`px-4 py-2 rounded text-sm font-medium ${
-            activeTab === 'elements'
-              ? 'bg-fantasy-accent/80 text-fantasy-bg'
-              : 'bg-fantasy-input-soft/50 text-fantasy-muted-soft hover:text-fantasy-bg'
-          }`}
-        >
-          Bibliothèque d&apos;éléments
-        </button>
-        <button
-          onClick={() => setActiveTab('editor')}
-          className={`px-4 py-2 rounded text-sm font-medium ${
-            activeTab === 'editor'
-              ? 'bg-fantasy-accent/80 text-fantasy-bg'
-              : 'bg-fantasy-input-soft/50 text-fantasy-muted-soft hover:text-fantasy-bg'
-          }`}
-        >
-          Modifier les cartes
-        </button>
-      </nav>
 
       <Modal
         open={!!pendingMapFile}
@@ -743,249 +872,475 @@ export function ResourcesPage() {
         />
       )}
 
-      <main className="flex-1 min-h-0 overflow-auto p-6">
+      {pageError && (
         <div
-          className={`mx-auto ${activeTab === 'editor' ? 'max-w-[none] w-full h-full' : 'max-w-4xl'}`}
+          role="alert"
+          className="glass fixed top-4 left-1/2 -translate-x-1/2 z-50 rounded-xl px-4 py-2 text-sm text-red-300"
         >
-          {activeTab === 'editor' && (
-            <div className="h-[calc(100vh-12rem)] min-h-[400px]">
-              <MapEditor
-                gameId={gameId}
-                maps={maps}
-                elements={elements}
-                onMapsChange={loadMaps}
-                onElementsChange={loadElements}
-              />
-            </div>
-          )}
+          {pageError}
+        </div>
+      )}
 
-          {activeTab === 'elements' && (
-            <section className="rounded-lg bg-fantasy-surface/80 p-6">
-              <h2 className="text-xl font-semibold mb-4 text-fantasy-text-soft">
-                Bibliothèque d&apos;éléments
-              </h2>
-              <p className="text-fantasy-muted-soft text-sm mb-4">
-                Uploadez des images de monstres ou de décor pour les placer sur
-                vos cartes.
-              </p>
-              <div className="flex flex-wrap gap-4 mb-4">
-                <input
-                  ref={elementFileRef}
-                  type="file"
-                  accept=".png,.jpg,.jpeg,.gif"
-                  className="hidden"
-                  onChange={handleElementFileSelect}
-                />
+      <div className="flex-1 min-h-0 overflow-auto">
+        <div
+          className={`flex flex-wrap gap-6 p-6 mx-auto ${
+            activeTab === 'editor' ? 'max-w-none h-full' : 'max-w-[1360px]'
+          }`}
+        >
+          <nav
+            aria-label="Catégories"
+            className="flex-[1_1_220px] max-w-[260px] flex flex-col gap-1"
+          >
+            {navItems.map((item) => {
+              const active = activeTab === item.id;
+              return (
                 <button
-                  onClick={() => elementFileRef.current?.click()}
-                  disabled={elementUploading}
-                  className="px-4 py-2 rounded bg-fantasy-accent/80 hover:bg-fantasy-accent-hover font-medium disabled:opacity-50"
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveTab(item.id)}
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex items-center gap-2.5 h-11 px-3 rounded-lg text-left text-[15px] ${
+                    active
+                      ? 'bg-fantasy-surface text-fantasy-text font-bold'
+                      : 'text-fantasy-text-soft hover:bg-fantasy-surface hover:text-fantasy-text'
+                  }`}
                 >
-                  {elementUploading ? 'Upload...' : '+ Ajouter un élément'}
+                  <span className={active ? 'text-fantasy-accent' : ''}>
+                    {item.icon}
+                  </span>
+                  <span className="flex-1">{item.label}</span>
+                  {item.count != null && (
+                    <span className="text-[13px] text-fantasy-muted font-normal">
+                      {item.count}
+                    </span>
+                  )}
                 </button>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                <input
-                  type="text"
-                  value={elementSearchQuery}
-                  onChange={(e) => setElementSearchQuery(e.target.value)}
-                  placeholder="Rechercher par nom ou tag..."
-                  className="flex-1 rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none"
-                />
-                <select
-                  value={elementFilterCategory}
-                  onChange={(e) =>
-                    setElementFilterCategory(
-                      e.target.value as 'all' | 'monster' | 'decor'
-                    )
-                  }
-                  className="rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft border border-fantasy-border-soft"
-                >
-                  <option value="all">Tous</option>
-                  <option value="monster">Monstres</option>
-                  <option value="decor">Décor</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {elements
-                  .filter((el) => {
-                    if (
-                      elementFilterCategory !== 'all' &&
-                      el.category !== elementFilterCategory
-                    )
-                      return false;
-                    const q = elementSearchQuery.trim().toLowerCase();
-                    if (!q) return true;
-                    const matchName = el.name.toLowerCase().includes(q);
-                    const matchTags = (el.tags ?? []).some((t) =>
-                      t.toLowerCase().includes(q)
-                    );
-                    return matchName || matchTags;
-                  })
-                  .map((el) => (
-                    <div
-                      key={el.id}
-                      className="rounded-lg bg-fantasy-input-soft/50 overflow-hidden border border-fantasy-border-soft"
+              );
+            })}
+          </nav>
+
+          <main
+            className={`flex-[999_1_560px] min-w-0 flex flex-col gap-5 ${activeTab === 'editor' ? 'min-h-[500px]' : ''}`}
+          >
+            {activeTab === 'maps' && (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="font-heading font-semibold text-xl">Cartes</h2>
+                  <div className="flex flex-wrap gap-2.5">
+                    <label htmlFor="map-search" className="sr-only">
+                      Rechercher une carte
+                    </label>
+                    <input
+                      id="map-search"
+                      value={mapSearchQuery}
+                      onChange={(e) => setMapSearchQuery(e.target.value)}
+                      placeholder="Rechercher par nom ou tag…"
+                      className={`${inputClass} w-64 max-w-full`}
+                    />
+                    <input
+                      ref={mapFileRef}
+                      type="file"
+                      accept=".png,.jpg,.jpeg,.gif,.webp"
+                      className="hidden"
+                      onChange={handleMapFileSelect}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => mapFileRef.current?.click()}
+                      disabled={mapUploading}
+                      className={primaryButton}
                     >
-                      <div className="aspect-square bg-fantasy-surface relative">
+                      {mapUploading ? 'Envoi…' : '+ Ajouter une carte'}
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+                  {filteredMaps.map((m) => {
+                    const displayed = game.currentMapId === m.id;
+                    return (
+                      <article
+                        key={m.id}
+                        className="rounded-2xl bg-[#1e1914] border border-fantasy-surface overflow-hidden flex flex-col"
+                      >
+                        <div className="relative aspect-[16/10] bg-fantasy-surface">
+                          <img
+                            src={m.imageUrl}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                          {displayed && (
+                            <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full bg-fantasy-accent text-fantasy-bg text-xs font-bold">
+                              Affichée
+                            </span>
+                          )}
+                        </div>
+                        <div className="p-3.5 pt-3 flex flex-col gap-2.5">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <h3 className="font-bold truncate" title={m.name}>
+                              {m.name}
+                            </h3>
+                            <span className="text-xs text-fantasy-muted shrink-0">
+                              {m.width} × {m.height}
+                            </span>
+                          </div>
+                          {(m.tags ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {(m.tags ?? []).map((t) => (
+                                <span
+                                  key={t}
+                                  className="px-2 py-0.5 rounded-full bg-fantasy-surface text-fantasy-text-soft text-xs"
+                                >
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleShowMap(m.id)}
+                              disabled={displayed}
+                              className={`${cardButton} flex-1 disabled:opacity-60 disabled:cursor-default`}
+                            >
+                              {displayed
+                                ? 'Sur la table'
+                                : 'Afficher sur la table'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('editor')}
+                              className={`${cardButton} w-9 flex items-center justify-center`}
+                              aria-label={`Modifier ${m.name}`}
+                              title="Modifier dans l'éditeur"
+                            >
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteMapId(m.id)}
+                              className="h-9 w-9 rounded-lg bg-red-400/10 text-red-300 hover:bg-red-400/20 flex items-center justify-center"
+                              aria-label={`Supprimer ${m.name}`}
+                              title="Supprimer"
+                            >
+                              <Trash size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                  <DropZone
+                    accept=".png,.jpg,.jpeg,.gif,.webp"
+                    title="Glissez une image ici"
+                    hint="PNG, JPG ou GIF"
+                    minHeight="min-h-[260px]"
+                    onFile={acceptMapFile}
+                  />
+                </div>
+                {maps.length > 0 && filteredMaps.length === 0 && (
+                  <p className="text-sm text-fantasy-muted">
+                    Aucune carte ne correspond à « {mapSearchQuery} ».
+                  </p>
+                )}
+              </>
+            )}
+
+            {activeTab === 'elements' && (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-heading font-semibold text-xl">
+                      Monstres &amp; décors
+                    </h2>
+                    <p className="text-sm text-fantasy-muted">
+                      Des images à placer sur vos cartes. Les monstres ont une
+                      fiche (PV, mana, butin…).
+                    </p>
+                  </div>
+                  <div>
+                    <input
+                      ref={elementFileRef}
+                      type="file"
+                      accept=".png,.jpg,.jpeg,.gif,.webp"
+                      className="hidden"
+                      onChange={handleElementFileSelect}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => elementFileRef.current?.click()}
+                      disabled={elementUploading}
+                      className={primaryButton}
+                    >
+                      {elementUploading ? 'Envoi…' : '+ Ajouter un élément'}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2.5">
+                  <label htmlFor="element-search" className="sr-only">
+                    Rechercher un élément
+                  </label>
+                  <input
+                    id="element-search"
+                    value={elementSearchQuery}
+                    onChange={(e) => setElementSearchQuery(e.target.value)}
+                    placeholder="Rechercher par nom ou tag…"
+                    className={`${inputClass} flex-1 min-w-[200px]`}
+                  />
+                  <div
+                    role="group"
+                    aria-label="Catégorie"
+                    className="flex gap-1 p-1 rounded-lg bg-fantasy-surface"
+                  >
+                    {(
+                      [
+                        ['all', 'Tous'],
+                        ['monster', 'Monstres'],
+                        ['decor', 'Décors'],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={elementFilterCategory === value}
+                        onClick={() => setElementFilterCategory(value)}
+                        className={`h-9 px-3 rounded-md text-sm ${
+                          elementFilterCategory === value
+                            ? 'bg-fantasy-accent text-fantasy-bg font-bold'
+                            : 'text-fantasy-text-soft hover:text-fantasy-text'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-4">
+                  {filteredElements.map((el) => (
+                    <article
+                      key={el.id}
+                      className="rounded-2xl bg-[#1e1914] border border-fantasy-surface overflow-hidden flex flex-col"
+                    >
+                      <div className="relative aspect-square bg-fantasy-surface">
                         <img
                           src={el.imageUrl}
-                          alt={el.name}
-                          className="w-full h-full object-contain"
+                          alt=""
+                          className="w-full h-full object-contain p-2"
+                          loading="lazy"
                         />
-                      </div>
-                      <div className="p-2 flex items-center justify-between gap-2">
-                        <span className="text-sm truncate" title={el.name}>
-                          {el.name}
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-fantasy-bg/80 text-[11px] text-fantasy-text-soft">
+                          {el.category === 'monster' ? 'Monstre' : 'Décor'}
                         </span>
-                        <div className="flex items-center gap-1 shrink-0">
+                      </div>
+                      <div className="p-3 flex flex-col gap-2">
+                        <h3
+                          className="font-bold text-[15px] truncate"
+                          title={el.name}
+                        >
+                          {el.name}
+                        </h3>
+                        <div className="flex gap-1.5">
                           {el.category === 'monster' && (
                             <button
-                              onClick={() =>
-                                setMonsterEditorElement({
-                                  ...el,
-                                  description: el.description ?? '',
-                                  uniqueTrait: el.uniqueTrait ?? '',
-                                  loot: el.loot ?? '',
-                                  maxHp: el.maxHp ?? 10,
-                                  maxMana: el.maxMana ?? 0,
-                                  iconPosX: el.iconPosX ?? 50,
-                                  iconPosY: el.iconPosY ?? 50,
-                                  iconScale: el.iconScale ?? 1,
-                                })
-                              }
-                              className="text-fantasy-accent hover:text-fantasy-accent-hover text-xs px-2 py-0.5 rounded"
-                              title="Modifier"
+                              type="button"
+                              onClick={() => openMonsterEditor(el)}
+                              className={`${cardButton} flex-1`}
                             >
-                              Modifier
+                              Fiche
                             </button>
                           )}
                           <button
+                            type="button"
                             onClick={() => setDeleteElementId(el.id)}
-                            className="text-fantasy-error hover:text-fantasy-error text-xs px-2 py-0.5 rounded"
+                            className={`h-9 rounded-lg bg-red-400/10 text-red-300 hover:bg-red-400/20 flex items-center justify-center ${
+                              el.category === 'monster'
+                                ? 'w-9'
+                                : 'flex-1 gap-1.5 text-sm'
+                            }`}
+                            aria-label={`Supprimer ${el.name}`}
                             title="Supprimer"
                           >
-                            ✕
+                            <Trash size={15} />
+                            {el.category !== 'monster' && 'Supprimer'}
                           </button>
                         </div>
                       </div>
-                    </div>
+                    </article>
                   ))}
-              </div>
-              {elements.length === 0 && (
-                <p className="text-fantasy-muted-soft text-sm">
-                  Aucun élément. Uploadez des images (png, jpg, gif) de monstres
-                  ou de décor.
-                </p>
-              )}
-            </section>
-          )}
-
-          {activeTab === 'resources' && (
-            <>
-              {/* Cartes */}
-              <section className="rounded-lg bg-fantasy-surface/80 p-6">
-                <h2 className="text-xl font-semibold mb-4 text-fantasy-text-soft">
-                  Cartes
-                </h2>
-                <div className="flex flex-wrap gap-4 mb-4">
-                  <input
-                    ref={mapFileRef}
-                    type="file"
-                    accept=".png,.jpg,.jpeg,.gif"
-                    className="hidden"
-                    onChange={handleMapFileSelect}
+                  <DropZone
+                    accept=".png,.jpg,.jpeg,.gif,.webp"
+                    title="Glissez une image ici"
+                    hint="Monstre ou décor"
+                    minHeight="min-h-[220px]"
+                    onFile={acceptElementFile}
                   />
-                  <button
-                    onClick={() => mapFileRef.current?.click()}
-                    disabled={mapUploading}
-                    className="px-4 py-2 rounded bg-fantasy-accent/80 hover:bg-fantasy-accent-hover font-medium disabled:opacity-50"
-                  >
-                    {mapUploading ? 'Upload...' : '+ Ajouter une carte'}
-                  </button>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {maps.map((m) => (
-                    <div
-                      key={m.id}
-                      className="rounded-lg bg-fantasy-input-soft/50 overflow-hidden border border-fantasy-border-soft"
+              </>
+            )}
+
+            {activeTab === 'music' && (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-heading font-semibold text-xl">
+                      Musique d&apos;ambiance
+                    </h2>
+                    <p className="text-sm text-fantasy-muted">
+                      Lancez-la depuis la table (onglet Musique) : tous les
+                      joueurs l&apos;entendent en même temps.
+                    </p>
+                  </div>
+                  <div>
+                    <input
+                      ref={musicFileRef}
+                      type="file"
+                      accept=".mp3,.ogg,.wav,.m4a"
+                      className="hidden"
+                      onChange={handleMusicUpload}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => musicFileRef.current?.click()}
+                      disabled={musicUploading}
+                      className={primaryButton}
                     >
-                      <div className="aspect-video bg-fantasy-surface relative">
-                        <img
-                          src={m.imageUrl}
-                          alt={m.name}
-                          className="w-full h-full object-cover"
+                      {musicUploading ? 'Envoi…' : '+ Ajouter une piste'}
+                    </button>
+                  </div>
+                </div>
+                {tracks.length > 0 && (
+                  <ul className="rounded-2xl border border-fantasy-surface divide-y divide-fantasy-surface overflow-hidden">
+                    {tracks.map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex items-center gap-3 px-4 py-2.5 bg-[#1e1914]"
+                      >
+                        <span className="text-fantasy-accent">
+                          <Music size={18} />
+                        </span>
+                        <span className="flex-1 min-w-0 truncate text-[15px]">
+                          {t.filename.replace(/\.[a-z0-9]+$/i, '')}
+                        </span>
+                        <audio
+                          src={t.url}
+                          controls
+                          preload="none"
+                          className="h-9 max-w-[260px]"
+                          aria-label={`Écouter ${t.filename}`}
                         />
-                      </div>
-                      <div className="p-2 flex items-center justify-between gap-2">
-                        <span className="text-sm truncate">{m.name}</span>
                         <button
-                          onClick={() => setDeleteMapId(m.id)}
-                          className="text-fantasy-error hover:text-fantasy-error text-xs px-2 py-0.5 rounded"
+                          type="button"
+                          onClick={() => setDeleteTrackId(t.id)}
+                          className="h-9 w-9 shrink-0 rounded-lg bg-red-400/10 text-red-300 hover:bg-red-400/20 flex items-center justify-center"
+                          aria-label={`Supprimer ${t.filename}`}
                           title="Supprimer"
                         >
-                          ✕
+                          <Trash size={15} />
                         </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {maps.length === 0 && (
-                  <p className="text-fantasy-muted-soft text-sm">
-                    Aucune carte. Uploadez une image (png, jpg, gif).
-                  </p>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </section>
+                <DropZone
+                  accept=".mp3,.ogg,.wav,.m4a"
+                  title="Glissez un fichier audio ici"
+                  hint="MP3, OGG, WAV ou M4A"
+                  minHeight="min-h-[140px]"
+                  onFile={uploadMusicFile}
+                />
+              </>
+            )}
 
-              {/* Musique */}
-              <section className="rounded-lg bg-fantasy-surface/80 p-6">
-                <h2 className="text-xl font-semibold mb-4 text-fantasy-text-soft">
-                  Musique d&apos;ambiance
-                </h2>
-                <div className="flex flex-wrap gap-4 mb-4">
-                  <input
-                    ref={musicFileRef}
-                    type="file"
-                    accept=".mp3,.ogg,.wav,.m4a"
-                    className="hidden"
-                    onChange={handleMusicUpload}
-                  />
-                  <button
-                    onClick={() => musicFileRef.current?.click()}
-                    disabled={musicUploading}
-                    className="px-4 py-2 rounded bg-fantasy-accent/80 hover:bg-fantasy-accent-hover font-medium disabled:opacity-50"
-                  >
-                    {musicUploading ? 'Upload...' : '+ Ajouter une piste'}
-                  </button>
-                </div>
-                <ul className="space-y-2">
-                  {tracks.map((t) => (
-                    <li
-                      key={t.id}
-                      className="flex items-center justify-between py-2 px-3 rounded bg-fantasy-input-soft/50"
-                    >
-                      <span className="text-sm truncate">{t.filename}</span>
-                      <button
-                        onClick={() => setDeleteTrackId(t.id)}
-                        className="text-fantasy-error hover:text-fantasy-error text-xs px-2 py-0.5 rounded shrink-0"
-                        title="Supprimer"
-                      >
-                        Supprimer
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                {tracks.length === 0 && (
-                  <p className="text-fantasy-muted-soft text-sm">
-                    Aucune piste. Uploadez un fichier audio (mp3, ogg, wav,
-                    m4a).
-                  </p>
-                )}
-              </section>
-            </>
-          )}
+            {activeTab === 'editor' && (
+              <div className="h-[calc(100vh-10rem)] min-h-[480px]">
+                <MapEditor
+                  gameId={gameId}
+                  maps={maps}
+                  elements={elements}
+                  onMapsChange={loadMaps}
+                  onElementsChange={loadElements}
+                />
+              </div>
+            )}
+          </main>
         </div>
-      </main>
+      </div>
     </div>
+  );
+}
+
+/** Zone de dépôt de fichier (clic ou glisser-déposer). */
+function DropZone({
+  accept,
+  title,
+  hint,
+  minHeight,
+  onFile,
+}: {
+  accept: string;
+  title: string;
+  hint: string;
+  minHeight: string;
+  onFile: (file: File | undefined) => void;
+}) {
+  const [over, setOver] = useState(false);
+  return (
+    <label
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        onFile(e.dataTransfer.files?.[0]);
+      }}
+      className={`${minHeight} rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 p-5 text-center cursor-pointer transition-colors ${
+        over
+          ? 'border-fantasy-accent bg-fantasy-accent/5'
+          : 'border-fantasy-border-soft hover:border-fantasy-border'
+      }`}
+    >
+      <svg
+        width="30"
+        height="30"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#c9a227"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M12 16V4M7 9l5-5 5 5" />
+        <path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" />
+      </svg>
+      <span className="text-[15px] text-fantasy-text">{title}</span>
+      <span className="text-[13px] text-fantasy-muted">
+        {hint} · ou cliquez pour choisir
+      </span>
+      <input
+        type="file"
+        accept={accept}
+        className="sr-only"
+        onChange={(e) => {
+          onFile(e.target.files?.[0]);
+          e.target.value = '';
+        }}
+      />
+    </label>
   );
 }

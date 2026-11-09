@@ -265,4 +265,31 @@ describe('applyEvent', () => {
     const s2 = applyEvent(s1, roll);
     expect(s2.lastRoll?.key).toBe(s1.lastRoll?.key);
   });
+
+  it("garde l'historique des jets, jets cachés compris", () => {
+    let s = applyEvent(
+      ready(),
+      env({
+        type: 'dice.rolled',
+        payload: { id: 10, userId: 2, expression: '1d20', result: 15 },
+      })
+    );
+    s = applyEvent(
+      s,
+      env({
+        type: 'dice.rolled.hidden',
+        payload: { id: 11, userId: 1, expression: '1d8', result: 3 },
+      })
+    );
+    s = applyEvent(
+      s,
+      env({
+        type: 'dice.rolled',
+        payload: { id: 10, userId: 2, expression: '1d20', result: 15 },
+      })
+    );
+    expect(s.rolls.map((r) => r.id)).toEqual([10, 11]);
+    expect(s.rolls[1].hidden).toBe(true);
+    expect(s.lastRollHidden?.id).toBe(11);
+  });
 });

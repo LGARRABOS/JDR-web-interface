@@ -75,6 +75,8 @@ export interface DiceRoll {
   result: number;
   details?: string;
   displayName?: string;
+  hidden?: boolean;
+  createdAt?: string;
 }
 
 export interface GameSnapshot {
@@ -82,6 +84,7 @@ export interface GameSnapshot {
   maps: MapData[];
   scene: Scene | null;
   messages: ChatMessage[];
+  rolls?: DiceRoll[];
   players: Member[];
 }
 

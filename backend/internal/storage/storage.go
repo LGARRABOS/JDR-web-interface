@@ -66,6 +66,10 @@ func OpenTestDB(t testing.TB) DB {
 	}
 	appDB, rawDB, err := Open(url)
 	if err != nil {
+		// En CI la base est obligatoire : un test ignoré passerait pour un test réussi.
+		if os.Getenv("CI") != "" {
+			t.Fatalf("PostgreSQL requis pour les tests: %v", err)
+		}
 		t.Skipf("PostgreSQL requis pour les tests: %v (créez la base: createdb jdr_test)", err)
 	}
 	t.Cleanup(func() { _ = rawDB.Close() })

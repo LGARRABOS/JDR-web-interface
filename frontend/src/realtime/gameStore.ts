@@ -13,6 +13,7 @@ import {
 } from './protocol';
 
 const MAX_MESSAGES = 200;
+const MAX_ROLLS = 100;
 
 export interface RollDisplay extends DiceRoll {
   /** Change à chaque lancer, pour relancer l'animation même si le résultat est identique. */
@@ -30,6 +31,8 @@ export interface GameState {
   /** Carte affichée avec ses jetons et décors. */
   scene: Scene | null;
   messages: ChatMessage[];
+  /** Historique des jets (du plus ancien au plus récent). */
+  rolls: DiceRoll[];
   players: Member[];
   presence: Member[];
   live: LiveState;
@@ -50,6 +53,7 @@ export const initialGameState: GameState = {
   maps: [],
   scene: null,
   messages: [],
+  rolls: [],
   players: [],
   presence: [],
   live: EMPTY_LIVE,
@@ -67,6 +71,14 @@ function upsertById<T extends { id: number }>(list: T[], item: T): T[] {
   const next = list.slice();
   next[idx] = item;
   return next;
+}
+
+function addRoll(list: DiceRoll[], roll: DiceRoll): DiceRoll[] {
+  if (list.some((r) => r.id === roll.id)) return list;
+  return [
+    ...list,
+    { ...roll, createdAt: roll.createdAt ?? new Date().toISOString() },
+  ].slice(-MAX_ROLLS);
 }
 
 function removeById<T extends { id: number }>(list: T[], id: number): T[] {
@@ -129,6 +141,7 @@ export function applyEvent(
             }
           : null,
         messages: (snap.messages ?? []).slice(-MAX_MESSAGES),
+        rolls: (snap.rolls ?? []).slice(-MAX_ROLLS),
         players: snap.players ?? [],
         presence: presence ?? [],
         live: {
@@ -265,18 +278,29 @@ export function applyEvent(
     case 'chat.message': {
       const m = env.payload;
       if (state.messages.some((x) => x.id === m.id)) return state;
+      // Sans heure, le message serait rangé en tête du fil.
+      const withTime = m.createdAt
+        ? m
+        : { ...m, createdAt: new Date(receivedAt).toISOString() };
       return {
         ...state,
-        messages: [...state.messages, m].slice(-MAX_MESSAGES),
+        messages: [...state.messages, withTime].slice(-MAX_MESSAGES),
       };
     }
 
     case 'dice.rolled':
-      if (state.lastRoll?.id === env.payload.id) return state;
-      return { ...state, lastRoll: { ...env.payload, key: ++rollKey } };
-    case 'dice.rolled.hidden':
-      if (state.lastRollHidden?.id === env.payload.id) return state;
-      return { ...state, lastRollHidden: { ...env.payload, key: ++rollKey } };
+    case 'dice.rolled.hidden': {
+      const hidden = env.type === 'dice.rolled.hidden';
+      const roll: DiceRoll = { ...env.payload, hidden };
+      const rolls = addRoll(state.rolls, roll);
+      const last = hidden ? state.lastRollHidden : state.lastRoll;
+      if (last?.id === roll.id)
+        return rolls === state.rolls ? state : { ...state, rolls };
+      const display = { ...roll, key: ++rollKey };
+      return hidden
+        ? { ...state, rolls, lastRollHidden: display }
+        : { ...state, rolls, lastRoll: display };
+    }
 
     default: {
       const unknown: never = env;
@@ -352,11 +376,17 @@ export class GameStore {
 
   /** Affiche un lancer fait par soi-même (réponse HTTP), sans attendre le serveur. */
   showOwnRoll(roll: DiceRoll, hidden: boolean) {
-    const display = { ...roll, key: ++rollKey };
+    const entry: DiceRoll = {
+      ...roll,
+      hidden,
+      createdAt: roll.createdAt ?? new Date().toISOString(),
+    };
+    const rolls = addRoll(this.state.rolls, entry);
+    const display = { ...entry, key: ++rollKey };
     this.set(
       hidden
-        ? { ...this.state, lastRollHidden: display }
-        : { ...this.state, lastRoll: display }
+        ? { ...this.state, rolls, lastRollHidden: display }
+        : { ...this.state, rolls, lastRoll: display }
     );
   }
 

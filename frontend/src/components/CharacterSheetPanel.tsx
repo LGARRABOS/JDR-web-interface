@@ -17,6 +17,8 @@ interface CharacterSheetPanelProps {
   isGemma?: boolean;
   players?: Player[];
   onSheetSaved?: () => void;
+  /** Affiché dans le panneau latéral de la table : pas de cadre ni de titre. */
+  embedded?: boolean;
 }
 
 export function CharacterSheetPanel({
@@ -25,6 +27,7 @@ export function CharacterSheetPanel({
   isGemma = false,
   players = [],
   onSheetSaved,
+  embedded = false,
 }: CharacterSheetPanelProps) {
   const [sheet, setSheet] = useState<{
     filename?: string;
@@ -230,10 +233,18 @@ export function CharacterSheetPanel({
   }
 
   return (
-    <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
-      <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">
-        Fiche personnage
-      </h3>
+    <div
+      className={
+        embedded
+          ? ''
+          : 'rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4'
+      }
+    >
+      {!embedded && (
+        <h3 className="text-sm font-semibold font-heading mb-3 text-fantasy-text-soft">
+          Fiche personnage
+        </h3>
+      )}
       {isGM ? (
         <div className="space-y-2">
           <label className="block text-xs text-fantasy-muted-soft">

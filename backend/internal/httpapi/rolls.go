@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -95,6 +96,8 @@ func (s *Server) handleRoll(w http.ResponseWriter, r *http.Request) {
 		"id": id, "gameId": gameID, "userId": u.ID,
 		"expression": req.Expression, "result": result, "details": details,
 		"displayName": displayName,
+		"hidden":      req.Hidden,
+		"createdAt":   time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	if req.Hidden {
 		s.hub.BroadcastToRole(gameID, "MJ", "dice.rolled.hidden", payload)
