@@ -28,14 +28,17 @@ fi
 echo "Proxmox VE détecté: $(pveversion)"
 echo ""
 
-# Détection du prochain CTID disponible (100-999 pour LXC)
-DEFAULT_CTID="100"
-for id in $(seq 100 999); do
-    if ! pct status "${id}" &>/dev/null; then
-        DEFAULT_CTID="${id}"
-        break
-    fi
-done
+# Prochain ID libre (VM et conteneurs confondus)
+DEFAULT_CTID=$(pvesh get /cluster/nextid 2>/dev/null || echo "")
+if [ -z "${DEFAULT_CTID}" ]; then
+    DEFAULT_CTID="100"
+    for id in $(seq 100 999); do
+        if ! pct status "${id}" &>/dev/null && ! qm status "${id}" &>/dev/null; then
+            DEFAULT_CTID="${id}"
+            break
+        fi
+    done
+fi
 
 # Stockage rootfs : local-lvm ou local-zfs (disques CT)
 # Stockage templates : "local" a vztmpl par défaut ; local-lvm souvent sans vztmpl
@@ -59,8 +62,14 @@ done
 read -r -p "ID du conteneur [${DEFAULT_CTID}]: " CTID
 CTID=${CTID:-$DEFAULT_CTID}
 
-read -r -p "Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
-HOSTNAME=${HOSTNAME:-$DEFAULT_HOSTNAME}
+while true; do
+    read -r -p "Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
+    HOSTNAME=${HOSTNAME:-$DEFAULT_HOSTNAME}
+    if [[ "${HOSTNAME}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]; then
+        break
+    fi
+    echo "  Nom invalide : lettres, chiffres et tirets uniquement (pas de _ ni d'espace)."
+done
 
 read -r -p "RAM (Mo) [${DEFAULT_MEMORY}]: " MEMORY
 MEMORY=${MEMORY:-$DEFAULT_MEMORY}
@@ -74,31 +83,38 @@ ROOTFS_STORAGE=${ROOTFS_STORAGE:-$DEFAULT_ROOTFS}
 read -r -p "Stockage templates [${DEFAULT_TEMPLATE}]: " TEMPLATE_STORAGE
 TEMPLATE_STORAGE=${TEMPLATE_STORAGE:-$DEFAULT_TEMPLATE}
 
-read -r -p "Bridge réseau [${DEFAULT_BRIDGE}]: " BRIDGE
-BRIDGE=${BRIDGE:-$DEFAULT_BRIDGE}
+while true; do
+    read -r -p "Bridge réseau (ex. vmbr0, pas une IP) [${DEFAULT_BRIDGE}]: " BRIDGE
+    BRIDGE=${BRIDGE:-$DEFAULT_BRIDGE}
+    if [ -d "/sys/class/net/${BRIDGE}/bridge" ]; then
+        break
+    fi
+    echo "  « ${BRIDGE} » n'est pas un bridge. Disponibles : $(ls /sys/class/net | grep -E '^vmbr' | tr '\n' ' ')"
+done
 
 echo ""
-read -r -p "IP statique (vide = DHCP) [DHCP]: " STATIC_IP
+read -r -p "IP statique sans /24, ex. 192.168.1.50 (vide = DHCP) [DHCP]: " STATIC_IP
 echo ""
 echo "Déploiement automatique : collez la clé SSH publique du runner CI"
 echo "(affichée à la fin de install-runner.sh). Laissez vide pour compiler dans le conteneur."
 read -r -p "Clé publique du runner []: " DEPLOY_PUBKEY
 echo ""
 
-# Vérifier que le CT n'existe pas déjà
-if pct status "${CTID}" &>/dev/null; then
-    echo "Erreur: Le conteneur ${CTID} existe déjà."
+# Vérifier que l'ID n'est pas déjà utilisé (conteneur ou VM)
+if pct status "${CTID}" &>/dev/null || qm status "${CTID}" &>/dev/null; then
+    echo "Erreur: L'ID ${CTID} est déjà utilisé par un conteneur ou une VM."
     exit 1
 fi
 
 # Télécharger le template Debian si nécessaire (12, 13 ou 11)
 echo "==> Vérification du template Debian..."
-TEMPLATE_PATH=$(pveam list "${TEMPLATE_STORAGE}" 2>/dev/null | grep -E 'debian-(11|12|13)-standard' | head -1 | awk '{print $1}')
+# Version de Debian la plus récente disponible localement (12 ou 13)
+TEMPLATE_PATH=$(pveam list "${TEMPLATE_STORAGE}" 2>/dev/null | grep -E 'debian-(12|13)-standard' | awk '{print $1}' | sort -V | tail -1)
 if [ -z "${TEMPLATE_PATH}" ]; then
     echo "    Téléchargement du template..."
     pveam update
     # Extraction : regex ou colonne 2 (format: section template_name size)
-    TEMPLATE=$(pveam available 2>/dev/null | grep -oE 'debian-[0-9]+-standard_[^[:space:]]+\.tar\.(zst|gz|xz)' | head -1)
+    TEMPLATE=$(pveam available 2>/dev/null | grep -oE 'debian-(12|13)-standard_[^[:space:]]+\.tar\.(zst|gz|xz)' | sort -V | tail -1)
     [ -z "${TEMPLATE}" ] && TEMPLATE=$(pveam available 2>/dev/null | grep debian | head -1 | awk '{print $2}')
     if [ -z "${TEMPLATE}" ]; then
         echo "Erreur: Aucun template Debian trouvé. Sortie de 'pveam available':"
@@ -126,7 +142,7 @@ fi
 echo "==> Création du conteneur ${CTID}..."
 NET_CFG="name=eth0,bridge=${BRIDGE}"
 if [ -n "${STATIC_IP}" ]; then
-    read -r -p "Passerelle (gw): " GATEWAY
+    read -r -p "Passerelle (IP de la box, ex. 192.168.1.1): " GATEWAY
     NET_CFG="${NET_CFG},ip=${STATIC_IP}/24,gw=${GATEWAY}"
 else
     NET_CFG="${NET_CFG},ip=dhcp"
