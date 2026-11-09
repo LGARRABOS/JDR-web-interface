@@ -1,3 +1,4 @@
+import { ThemePicker } from './ThemePicker';
 import { useState, useEffect } from 'react';
 import { AuthAPI } from '../api/client';
 import type { User } from '../auth/AuthContext';
@@ -161,6 +162,15 @@ export function ProfileModal({
           />
           <p className="text-xs text-fantasy-muted-soft mt-1">
             Minimum 6 caractères
+          </p>
+        </div>
+        <div>
+          <p className="block text-sm font-medium text-fantasy-text-soft mb-2">
+            Palette de couleurs
+          </p>
+          <ThemePicker />
+          <p className="text-xs text-fantasy-muted-soft mt-1.5">
+            Appliquée tout de suite, sur cet appareil.
           </p>
         </div>
         {error && <p className="text-sm text-fantasy-error">{error}</p>}

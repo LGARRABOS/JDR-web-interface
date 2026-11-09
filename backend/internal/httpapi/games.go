@@ -37,10 +37,15 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Une seule requête : rôle, carte affichée (nom + image) et nombre de joueurs.
 	rows, err := s.db.Query(`
-		SELECT g.id, g.name, g.invite_code, g.owner_id, COALESCE(g.is_gemma, 0), gp.character_name
+		SELECT g.id, g.name, g.invite_code, g.owner_id, COALESCE(g.is_gemma, 0),
+			COALESCE(gp.character_name, ''), gp.role,
+			COALESCE(m.name, ''), COALESCE(m.image_url, ''),
+			(SELECT COUNT(*) FROM game_players p WHERE p.game_id = g.id AND p.role = 'PLAYER')
 		FROM games g
 		INNER JOIN game_players gp ON gp.game_id = g.id AND gp.user_id = ?
+		LEFT JOIN maps m ON m.id = g.current_map_id
 		ORDER BY g.id DESC
 	`, u.ID)
 	if err != nil {
@@ -49,34 +54,28 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var games []map[string]interface{}
+	games := []map[string]interface{}{}
 	for rows.Next() {
 		var g domain.Game
-		var isGemma int
-		var charName sql.NullString
-		if err := rows.Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &charName); err != nil {
+		var isGemma, playerCount int
+		var charName, role, mapName, mapImage string
+		if err := rows.Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &charName, &role, &mapName, &mapImage, &playerCount); err != nil {
 			continue
 		}
-		var role string
 		if g.OwnerID == u.ID {
 			role = "MJ"
-		} else {
-			var r string
-			_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", g.ID, u.ID).Scan(&r)
-			role = r
-		}
-		cn := ""
-		if charName.Valid {
-			cn = charName.String
 		}
 		games = append(games, map[string]interface{}{
-			"id":            g.ID,
-			"name":          g.Name,
-			"inviteCode":    g.InviteCode,
-			"ownerId":       g.OwnerID,
-			"role":          role,
-			"isGemma":       isGemma == 1,
-			"characterName": cn,
+			"id":                 g.ID,
+			"name":               g.Name,
+			"inviteCode":         g.InviteCode,
+			"ownerId":            g.OwnerID,
+			"role":               role,
+			"isGemma":            isGemma == 1,
+			"characterName":      charName,
+			"currentMapName":     mapName,
+			"currentMapImageUrl": mapImage,
+			"playerCount":        playerCount,
 		})
 	}
 

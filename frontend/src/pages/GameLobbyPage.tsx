@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { GamesAPI } from '../api/client';
 import { getErrorMessage } from '../utils/errorMessage';
 import { ModalConfirm } from '../components/Modal';
-import { Checkbox } from '../components/Checkbox';
-import { CopyableCode } from '../components/CopyableCode';
 import { ProfileModal } from '../components/ProfileModal';
+import { Check, ChevronDown, Copy, Trash } from '../components/tabletop/icons';
+import { initials } from '../components/tabletop/presence';
+import { D20Logo } from './AuthPage';
 
 interface Game {
   id: number;
@@ -15,6 +16,108 @@ interface Game {
   ownerId: number;
   role: string;
   isGemma?: boolean;
+  characterName?: string;
+  currentMapName?: string;
+  currentMapImageUrl?: string;
+  playerCount?: number;
+}
+
+function gameSubtitle(g: Game) {
+  const parts: string[] = [];
+  if (g.role === 'MJ') {
+    parts.push(
+      g.playerCount
+        ? `${g.playerCount} joueur${g.playerCount > 1 ? 's' : ''}`
+        : 'Aucun joueur'
+    );
+  } else if (g.characterName) {
+    parts.push(`Personnage : ${g.characterName}`);
+  }
+  if (g.currentMapName) parts.push(g.currentMapName);
+  return parts.join(' · ') || 'Pas encore de carte';
+}
+
+/** Menu du compte (profil, guide, déconnexion) en haut à droite. */
+function AccountMenu({
+  name,
+  onProfile,
+  onLogout,
+}: {
+  name: string;
+  onProfile: () => void;
+  onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const item =
+    'w-full h-10 px-3 rounded-lg text-left text-[15px] hover:bg-fantasy-surface-hover';
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="flex items-center gap-2.5 h-11 pl-1.5 pr-3.5 rounded-xl bg-fantasy-surface border border-fantasy-border text-[15px] hover:bg-fantasy-surface-hover"
+      >
+        <span className="w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-bold bg-fantasy-accent text-fantasy-bg">
+          {initials(name)}
+        </span>
+        <span className="max-w-[10rem] truncate">{name}</span>
+        <ChevronDown size={16} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-2 z-30 w-56 p-1.5 rounded-xl bg-fantasy-surface border border-fantasy-border shadow-2xl"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className={item}
+            onClick={() => {
+              setOpen(false);
+              onProfile();
+            }}
+          >
+            Profil et apparence
+          </button>
+          <Link
+            role="menuitem"
+            to="/games/wiki"
+            className={`${item} flex items-center`}
+          >
+            Guide du jeu
+          </Link>
+          <div className="h-px my-1 bg-fantasy-border-soft" />
+          <button
+            type="button"
+            role="menuitem"
+            className={`${item} text-fantasy-error`}
+            onClick={onLogout}
+          >
+            Se déconnecter
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function GameLobbyPage() {
@@ -28,13 +131,15 @@ export function GameLobbyPage() {
   const [joinCode, setJoinCode] = useState('');
   const [err, setErr] = useState('');
   const [deleteGameId, setDeleteGameId] = useState<number | null>(null);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [busy, setBusy] = useState<'create' | 'join' | null>(null);
 
   const loadGames = async () => {
     try {
       const { data } = await GamesAPI.list();
       setGames(data.games ?? []);
-    } catch {
-      setGames([]);
+    } catch (e) {
+      setErr(getErrorMessage(e, 'Impossible de charger vos parties'));
     } finally {
       setLoading(false);
     }
@@ -44,36 +149,28 @@ export function GameLobbyPage() {
     loadGames();
   }, []);
 
+  useEffect(() => {
+    if (!err) return;
+    const t = setTimeout(() => setErr(''), 6000);
+    return () => clearTimeout(t);
+  }, [err]);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
+    setBusy('create');
     try {
       const { data } = await GamesAPI.create({
-        name: createName || undefined,
+        name: createName.trim() || undefined,
         isGemma,
       });
       setCreateName('');
-      loadGames();
       if (data.game?.id) navigate(`/table/${data.game.id}`);
+      else loadGames();
     } catch (e: unknown) {
-      setErr(getErrorMessage(e));
-    }
-  };
-
-  const handleDeleteClick = (gameId: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDeleteGameId(gameId);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteGameId) return;
-    try {
-      await GamesAPI.delete(deleteGameId);
-      loadGames();
-    } catch (e: unknown) {
-      setErr(getErrorMessage(e));
+      setErr(getErrorMessage(e, 'Création impossible'));
     } finally {
-      setDeleteGameId(null);
+      setBusy(null);
     }
   };
 
@@ -81,18 +178,47 @@ export function GameLobbyPage() {
     e.preventDefault();
     setErr('');
     if (!joinCode.trim()) return;
+    setBusy('join');
     try {
       const { data } = await GamesAPI.join({ inviteCode: joinCode.trim() });
       setJoinCode('');
-      loadGames();
       if (data.gameId) navigate(`/table/${data.gameId}`);
+      else loadGames();
     } catch (e: unknown) {
-      setErr(getErrorMessage(e));
+      setErr(getErrorMessage(e, 'Code invalide'));
+    } finally {
+      setBusy(null);
     }
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteGameId) return;
+    try {
+      await GamesAPI.delete(deleteGameId);
+      setGames((prev) => prev.filter((g) => g.id !== deleteGameId));
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e, 'Suppression impossible'));
+    } finally {
+      setDeleteGameId(null);
+    }
+  };
+
+  const copyCode = async (g: Game) => {
+    try {
+      await navigator.clipboard.writeText(g.inviteCode);
+      setCopiedId(g.id);
+      setTimeout(() => setCopiedId((id) => (id === g.id ? null : id)), 1500);
+    } catch {
+      // presse-papiers indisponible : le code reste affiché
+    }
+  };
+
+  const inputClass =
+    'h-12 px-3.5 rounded-lg bg-fantasy-bg border border-fantasy-border text-base text-fantasy-text placeholder:text-fantasy-muted-soft focus:outline-none focus:border-fantasy-accent';
+  const card = 'rounded-2xl bg-fantasy-surface border border-fantasy-border';
+
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen bg-fantasy-bg text-fantasy-text">
       <ModalConfirm
         open={deleteGameId !== null}
         onClose={() => setDeleteGameId(null)}
@@ -109,161 +235,225 @@ export function GameLobbyPage() {
         onSuccess={refresh}
         onAccountDeleted={() => logout().then(() => navigate('/login'))}
       />
+
+      <header className="border-b border-fantasy-surface">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+          <Link to="/games" className="flex items-center gap-2.5">
+            <D20Logo size={28} />
+            <span className="font-heading font-bold text-lg tracking-wide">
+              Table JDR
+            </span>
+          </Link>
+          <AccountMenu
+            name={user?.displayName ?? 'Mon compte'}
+            onProfile={() => setProfileModalOpen(true)}
+            onLogout={() => logout().then(() => navigate('/login'))}
+          />
+        </div>
+      </header>
+
       {err && (
         <div
           role="alert"
-          className="mb-6 p-3 rounded bg-fantasy-danger/20 border border-fantasy-error text-fantasy-error text-sm"
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 rounded-xl px-4 py-2.5 text-sm bg-fantasy-surface border border-fantasy-danger/50 text-fantasy-error shadow-xl"
         >
           {err}
         </div>
       )}
-      <header className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold font-heading text-fantasy-text-soft">
-          Table JDR
-        </h1>
-        <div className="flex items-center gap-6">
-          <Link
-            to="/games/wiki"
-            className="text-sm text-fantasy-muted-soft hover:text-fantasy-accent transition-colors"
-          >
-            Wiki
-          </Link>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setProfileModalOpen(true)}
-              className="text-sm text-fantasy-muted-soft hover:text-fantasy-accent transition-colors"
-              title="Modifier mon profil"
-            >
-              {user?.displayName}
-            </button>
-            <button
-              onClick={() => logout().then(() => navigate('/login'))}
-              className="text-sm text-fantasy-muted-soft hover:text-fantasy-error transition-colors"
-            >
-              Déconnexion
-            </button>
-          </div>
-        </div>
-      </header>
 
-      <div className="max-w-2xl mx-auto space-y-8">
-        <section className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-6">
-          <h2 className="text-lg font-semibold font-heading mb-2 text-fantasy-text-soft">
-            Créer une partie
-          </h2>
-          <p className="text-sm text-fantasy-muted-soft mb-4">
-            Vous serez automatiquement le Maître du Jeu (MJ) de la partie.
-          </p>
-          <form onSubmit={handleCreate} className="space-y-3">
-            <div className="flex gap-2">
+      <main className="max-w-6xl mx-auto px-6 pt-8 pb-14 flex flex-col gap-8">
+        <div className="flex flex-wrap gap-4">
+          <form
+            onSubmit={handleCreate}
+            className={`${card} flex-[1_1_420px] p-5 flex flex-col gap-3.5`}
+          >
+            <div>
+              <h2 className="font-heading font-semibold text-lg">
+                Créer une partie
+              </h2>
+              <p className="text-sm text-fantasy-muted">
+                Vous en serez le Maître du Jeu.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              <label htmlFor="create-name" className="sr-only">
+                Nom de la partie
+              </label>
               <input
-                type="text"
+                id="create-name"
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
                 placeholder="Nom de la partie"
-                className="flex-1 rounded bg-fantasy-input-soft px-4 py-2 text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft"
+                className={`${inputClass} flex-[1_1_220px]`}
               />
               <button
                 type="submit"
-                className="px-6 py-2 rounded bg-fantasy-accent hover:bg-fantasy-accent-hover text-fantasy-bg"
+                disabled={busy !== null}
+                className="h-12 px-5 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold hover:bg-fantasy-accent-hover disabled:opacity-60"
               >
                 Créer
               </button>
             </div>
-            <Checkbox
-              checked={isGemma}
-              onChange={setIsGemma}
-              className="text-sm text-fantasy-muted"
-            >
-              Partie dans l&apos;univers GEMMA
-            </Checkbox>
+            <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isGemma}
+                onChange={(e) => setIsGemma(e.target.checked)}
+                className="w-[18px] h-[18px] accent-fantasy-accent"
+              />
+              Univers GEMMA (règles et fiches dédiées, non modifiable ensuite)
+            </label>
           </form>
-        </section>
 
-        <section className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-6">
-          <h2 className="text-lg font-semibold font-heading mb-4 text-fantasy-text-soft">
-            Rejoindre une partie
-          </h2>
-          <form onSubmit={handleJoin} className="flex gap-2">
-            <input
-              type="text"
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="Code d'invitation"
-              className="flex-1 rounded bg-fantasy-input-soft px-4 py-2 text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft uppercase"
-            />
-            <button
-              type="submit"
-              className="px-6 py-2 rounded bg-fantasy-accent hover:bg-fantasy-accent-hover text-fantasy-bg"
-            >
-              Rejoindre
-            </button>
+          <form
+            onSubmit={handleJoin}
+            className={`${card} flex-[1_1_320px] p-5 flex flex-col gap-3.5`}
+          >
+            <div>
+              <h2 className="font-heading font-semibold text-lg">
+                Rejoindre une partie
+              </h2>
+              <p className="text-sm text-fantasy-muted">
+                Avec le code donné par votre MJ.
+              </p>
+            </div>
+            <div className="flex gap-2.5">
+              <label htmlFor="join-code" className="sr-only">
+                Code d&apos;invitation
+              </label>
+              <input
+                id="join-code"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="Code"
+                autoComplete="off"
+                className={`${inputClass} flex-1 min-w-0 tracking-[0.12em] uppercase`}
+              />
+              <button
+                type="submit"
+                disabled={busy !== null || !joinCode.trim()}
+                className="h-12 px-5 rounded-lg border border-fantasy-accent text-fantasy-accent font-bold hover:bg-fantasy-accent/10 disabled:opacity-50"
+              >
+                Rejoindre
+              </button>
+            </div>
           </form>
-        </section>
+        </div>
 
-        <section className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-6">
-          <h2 className="text-lg font-semibold font-heading mb-4 text-fantasy-text-soft">
-            Mes parties
-          </h2>
+        <section className="flex flex-col gap-4">
+          <h1 className="font-heading font-bold text-2xl">Mes parties</h1>
           {loading ? (
-            <p className="text-fantasy-muted-soft">Chargement...</p>
+            <p className="text-fantasy-muted">Chargement…</p>
           ) : games.length === 0 ? (
-            <p className="text-fantasy-muted-soft">
-              Aucune partie. Créez-en une ou rejoignez avec un code.
-            </p>
+            <div className={`${card} p-8 text-center text-fantasy-muted`}>
+              Vous n&apos;avez pas encore de partie. Créez-en une, ou rejoignez
+              celle de votre MJ avec son code.
+            </div>
           ) : (
-            <ul className="space-y-2">
-              {games.map((g) => (
-                <li
-                  key={g.id}
-                  className="flex justify-between items-center p-3 rounded bg-fantasy-input-soft/50 hover:bg-fantasy-input-hover-soft border border-fantasy-border-soft"
-                >
-                  <div>
-                    <span className="font-medium text-fantasy-text-soft">
-                      {g.name}
-                    </span>
-                    {g.role === 'MJ' ? (
-                      <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-medium bg-fantasy-accent/80 text-fantasy-bg">
-                        MJ
-                      </span>
-                    ) : (
-                      <span className="ml-2 text-xs text-fantasy-muted-soft">
-                        Joueur
-                      </span>
-                    )}
-                    <span className="ml-2 text-xs text-fantasy-muted-soft inline-flex">
-                      <CopyableCode code={g.inviteCode} label="Code:" />
-                    </span>
-                    {g.isGemma && (
-                      <span className="ml-2 px-1.5 py-0.5 rounded text-xs bg-fantasy-accent/50 text-fantasy-bg">
-                        GEMMA
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => navigate(`/table/${g.id}`)}
-                      className="px-4 py-1 rounded bg-fantasy-accent/80 hover:bg-fantasy-accent-hover text-fantasy-bg text-sm"
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+              {games.map((g) => {
+                const isGM = g.role === 'MJ';
+                return (
+                  <li
+                    key={g.id}
+                    className={`${card} overflow-hidden flex flex-col`}
+                  >
+                    <div
+                      className="relative aspect-video flex items-center justify-center bg-fantasy-surface-hover"
+                      style={
+                        g.currentMapImageUrl
+                          ? undefined
+                          : {
+                              background:
+                                'linear-gradient(135deg, rgb(var(--c-input-hover)), rgb(var(--c-bg)))',
+                            }
+                      }
                     >
-                      Ouvrir
-                    </button>
-                    {g.role === 'MJ' && (
-                      <button
-                        onClick={(e) => handleDeleteClick(g.id, e)}
-                        className="px-4 py-1 rounded bg-fantasy-danger hover:bg-fantasy-error text-sm text-white"
-                        title="Supprimer la partie"
-                      >
-                        Supprimer
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
+                      {g.currentMapImageUrl ? (
+                        <img
+                          src={g.currentMapImageUrl}
+                          alt=""
+                          loading="lazy"
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="opacity-40">
+                          <D20Logo size={44} />
+                        </span>
+                      )}
+                      <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            isGM
+                              ? 'bg-fantasy-accent text-fantasy-bg'
+                              : 'bg-fantasy-bg/80 text-fantasy-secondary'
+                          }`}
+                        >
+                          {isGM ? 'MJ' : 'Joueur'}
+                        </span>
+                        {g.isGemma && (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs bg-black/60 text-white">
+                            GEMMA
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-4 flex flex-col gap-3">
+                      <div className="min-w-0">
+                        <h3
+                          className="font-heading font-semibold text-[17px] truncate"
+                          title={g.name}
+                        >
+                          {g.name}
+                        </h3>
+                        <p className="text-sm text-fantasy-muted truncate">
+                          {gameSubtitle(g)}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/table/${g.id}`)}
+                          className="flex-1 h-11 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold hover:bg-fantasy-accent-hover"
+                        >
+                          Entrer
+                        </button>
+                        {isGM && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => copyCode(g)}
+                              title="Copier le code d'invitation"
+                              aria-label={`Copier le code d'invitation ${g.inviteCode}`}
+                              className="h-11 px-3 rounded-lg border border-fantasy-border text-sm tracking-wider text-fantasy-muted hover:text-fantasy-text flex items-center gap-1.5"
+                            >
+                              {copiedId === g.id ? (
+                                <Check size={14} />
+                              ) : (
+                                <Copy size={14} />
+                              )}
+                              {copiedId === g.id ? 'Copié' : g.inviteCode}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteGameId(g.id)}
+                              title="Supprimer la partie"
+                              aria-label={`Supprimer la partie ${g.name}`}
+                              className="w-11 h-11 rounded-lg border border-fantasy-border text-fantasy-muted hover:text-fantasy-error hover:border-fantasy-danger/60 flex items-center justify-center"
+                            >
+                              <Trash size={16} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
-      </div>
+      </main>
     </div>
   );
 }

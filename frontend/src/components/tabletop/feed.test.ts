@@ -49,9 +49,9 @@ describe('rollAccent', () => {
   it('met en avant les 20 et les 1 naturels sur un d20', () => {
     expect(
       rollAccent(roll(1, { expression: '1d20+3', details: '20 + 3' }))
-    ).toBe('#e6c46a');
+    ).toBe('crit');
     expect(rollAccent(roll(1, { expression: 'd20', details: '1' }))).toBe(
-      '#e08a8a'
+      'fumble'
     );
     expect(
       rollAccent(roll(1, { expression: '1d20', details: '12' }))

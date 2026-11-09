@@ -4,6 +4,13 @@ import { colorForUser } from './presence';
 import { Send } from './icons';
 import { buildFeed, rollAccent, rollDetail, type FeedItem } from './feed';
 
+const ACCENT_COLOR = {
+  crit: 'rgb(var(--c-accent-hover))',
+  fumble: 'rgb(var(--c-error))',
+  hidden: 'rgb(var(--c-text-soft))',
+  normal: 'rgb(var(--c-accent-hover))',
+} as const;
+
 function formatClock(ms: number) {
   return new Date(ms).toLocaleTimeString('fr-FR', {
     hour: '2-digit',
@@ -42,7 +49,7 @@ export function ChatFeed({ messages, rolls, players, onSend }: ChatFeedProps) {
   };
 
   const nameColor = (userId: number, role: string) =>
-    role === 'MJ' ? '#c9a227' : colorForUser(userId, players).ring;
+    role === 'MJ' ? 'rgb(var(--c-accent))' : colorForUser(userId, players).ring;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -98,10 +105,12 @@ export function ChatFeed({ messages, rolls, players, onSend }: ChatFeedProps) {
                   <span
                     className="w-12 h-12 shrink-0 rounded-lg bg-fantasy-bg flex items-center justify-center font-heading font-bold text-[22px] tabular-nums"
                     style={{
-                      border: `1px solid ${item.roll.hidden ? '#4a4036' : '#c9a227'}`,
+                      border: `1px solid ${item.roll.hidden ? 'rgb(var(--c-border))' : 'rgb(var(--c-accent))'}`,
                       color:
-                        rollAccent(item.roll) ??
-                        (item.roll.hidden ? '#c9bda8' : '#e6c46a'),
+                        ACCENT_COLOR[
+                          rollAccent(item.roll) ??
+                            (item.roll.hidden ? 'hidden' : 'normal')
+                        ],
                     }}
                   >
                     {item.roll.result}

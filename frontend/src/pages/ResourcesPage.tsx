@@ -960,7 +960,7 @@ export function ResourcesPage() {
                     return (
                       <article
                         key={m.id}
-                        className="rounded-2xl bg-[#1e1914] border border-fantasy-surface overflow-hidden flex flex-col"
+                        className="rounded-2xl bg-fantasy-surface border border-fantasy-border-soft overflow-hidden flex flex-col"
                       >
                         <div className="relative aspect-[16/10] bg-fantasy-surface">
                           <img
@@ -1131,7 +1131,7 @@ export function ResourcesPage() {
                   {filteredElements.map((el) => (
                     <article
                       key={el.id}
-                      className="rounded-2xl bg-[#1e1914] border border-fantasy-surface overflow-hidden flex flex-col"
+                      className="rounded-2xl bg-fantasy-surface border border-fantasy-border-soft overflow-hidden flex flex-col"
                     >
                       <div className="relative aspect-square bg-fantasy-surface">
                         <img
@@ -1225,7 +1225,7 @@ export function ResourcesPage() {
                     {tracks.map((t) => (
                       <li
                         key={t.id}
-                        className="flex items-center gap-3 px-4 py-2.5 bg-[#1e1914]"
+                        className="flex items-center gap-3 px-4 py-2.5 bg-fantasy-surface"
                       >
                         <span className="text-fantasy-accent">
                           <Music size={18} />
@@ -1319,7 +1319,8 @@ function DropZone({
         height="30"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#c9a227"
+        stroke="currentColor"
+        className="text-fantasy-accent"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"

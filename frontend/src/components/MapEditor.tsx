@@ -639,7 +639,7 @@ export function MapEditor({
                             transform: 'translate(-50%, -50%)',
                             border:
                               selectedMapElement?.id === el.id
-                                ? '2px solid #f59e0b'
+                                ? '2px solid rgb(var(--c-accent))'
                                 : 'none',
                           }}
                           onClick={(e) => handleMapElementClick(e, el)}
@@ -703,7 +703,7 @@ export function MapEditor({
                               transform: 'translate(-50%, -50%)',
                               border:
                                 selectedToken?.id === t.id
-                                  ? '2px solid #f59e0b'
+                                  ? '2px solid rgb(var(--c-accent))'
                                   : 'none',
                             }}
                             onClick={(e) => handleTokenClick(e, t)}

@@ -2,28 +2,106 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Palettes de couleurs. Chaque thème définit des canaux RVB (« r g b ») pour
+ * que Tailwind puisse appliquer l'opacité (ex. bg-fantasy-accent/80).
+ * Le thème actif est l'attribut data-theme de <html> (voir src/theme/themes.ts).
+ */
+:root,
+:root[data-theme='braise'] {
+  --c-bg: 18 15 12;
+  --c-surface: 29 24 19;
+  --c-surface-hover: 42 35 27;
+  --c-input: 42 35 27;
+  --c-input-hover: 52 43 34;
+  --c-border: 58 48 39;
+  --c-border-soft: 42 35 27;
+  --c-text: 241 233 220;
+  --c-text-soft: 214 203 185;
+  --c-muted: 171 155 131;
+  --c-muted-soft: 148 133 111;
+  --c-accent: 212 168 58;
+  --c-accent-hover: 228 188 88;
+  --c-secondary: 224 138 109;
+  --c-error: 226 124 108;
+  --c-danger: 200 85 61;
+  --c-success: 127 183 126;
+  --c-input-soft: 35 29 23;
+  --c-input-hover-soft: 42 35 27;
+  --c-glass: 24 20 16;
+  color-scheme: dark;
+}
+
+:root[data-theme='arcane'] {
+  --c-bg: 14 16 24;
+  --c-surface: 23 26 38;
+  --c-surface-hover: 34 38 57;
+  --c-input: 34 38 57;
+  --c-input-hover: 44 49 72;
+  --c-border: 48 53 75;
+  --c-border-soft: 34 38 57;
+  --c-text: 235 232 244;
+  --c-text-soft: 206 203 224;
+  --c-muted: 160 159 189;
+  --c-muted-soft: 136 135 167;
+  --c-accent: 220 182 92;
+  --c-accent-hover: 234 200 120;
+  --c-secondary: 169 155 255;
+  --c-error: 232 122 114;
+  --c-danger: 217 100 90;
+  --c-success: 108 196 161;
+  --c-input-soft: 28 31 46;
+  --c-input-hover-soft: 34 38 57;
+  --c-glass: 20 22 33;
+}
+
+:root[data-theme='foret'] {
+  --c-bg: 13 18 16;
+  --c-surface: 21 28 24;
+  --c-surface-hover: 32 42 37;
+  --c-input: 32 42 37;
+  --c-input-hover: 41 53 47;
+  --c-border: 47 60 53;
+  --c-border-soft: 32 42 37;
+  --c-text: 233 238 229;
+  --c-text-soft: 204 213 201;
+  --c-muted: 152 168 158;
+  --c-muted-soft: 128 145 135;
+  --c-accent: 205 166 94;
+  --c-accent-hover: 221 186 122;
+  --c-secondary: 124 199 164;
+  --c-error: 226 130 110;
+  --c-danger: 201 101 79;
+  --c-success: 124 199 164;
+  --c-input-soft: 26 34 30;
+  --c-input-hover-soft: 32 42 37;
+  --c-glass: 18 24 21;
+}
+
+/* Alias utilisés par le CSS ci-dessous. */
 :root {
-  --color-fantasy-bg: #1a1612;
-  --color-fantasy-surface: #2d2620;
-  --color-fantasy-surface-hover: #3d3528;
-  --color-fantasy-input: #3d3528;
-  --color-fantasy-input-hover: #4a4036;
-  --color-fantasy-border: #4a4036;
-  --color-fantasy-text: #e8e0d4;
-  --color-fantasy-muted: #a8987a;
-  --color-fantasy-accent: #c9a227;
-  --color-fantasy-accent-hover: #d4a84b;
-  --color-fantasy-error: #c75c5c;
-  --color-fantasy-danger: #a63d3d;
-  --color-fantasy-text-soft: #c9bda8;
-  --color-fantasy-muted-soft: #8f7f68;
-  --color-fantasy-input-soft: #352d24;
-  --color-fantasy-input-hover-soft: #3d3528;
-  --color-fantasy-border-soft: #3d3528;
+  --color-fantasy-bg: rgb(var(--c-bg));
+  --color-fantasy-surface: rgb(var(--c-surface));
+  --color-fantasy-surface-hover: rgb(var(--c-surface-hover));
+  --color-fantasy-input: rgb(var(--c-input));
+  --color-fantasy-input-hover: rgb(var(--c-input-hover));
+  --color-fantasy-border: rgb(var(--c-border));
+  --color-fantasy-text: rgb(var(--c-text));
+  --color-fantasy-muted: rgb(var(--c-muted));
+  --color-fantasy-accent: rgb(var(--c-accent));
+  --color-fantasy-accent-hover: rgb(var(--c-accent-hover));
+  --color-fantasy-error: rgb(var(--c-error));
+  --color-fantasy-danger: rgb(var(--c-danger));
+  --color-fantasy-text-soft: rgb(var(--c-text-soft));
+  --color-fantasy-muted-soft: rgb(var(--c-muted-soft));
+  --color-fantasy-input-soft: rgb(var(--c-input-soft));
+  --color-fantasy-input-hover-soft: rgb(var(--c-input-hover-soft));
+  --color-fantasy-border-soft: rgb(var(--c-border-soft));
 }
 
 body {
   margin: 0;
+  transition: background-color 200ms;
   font-family: 'Alegreya Sans', system-ui, sans-serif;
   background: var(--color-fantasy-bg);
   color: var(--color-fantasy-text);
@@ -95,7 +173,7 @@ input[type='number'] {
 
 /* --- Table de jeu : panneaux flottants au-dessus de la carte --- */
 .glass {
-  background: rgba(26, 22, 18, 0.9);
+  background: rgb(var(--c-glass) / 0.9);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--color-fantasy-border-soft);

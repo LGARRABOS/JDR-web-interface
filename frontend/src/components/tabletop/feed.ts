@@ -37,14 +37,14 @@ export function rollDetail(roll: DiceRoll) {
 }
 
 /**
- * Couleur du résultat d'un d20 unique : or sur un 20 naturel, rouge sur un 1.
+ * Réussite ou échec critique sur un d20 unique (20 ou 1 naturel).
  * Retourne undefined pour les autres jets.
  */
-export function rollAccent(roll: DiceRoll) {
+export function rollAccent(roll: DiceRoll): 'crit' | 'fumble' | undefined {
   if (!/^1?d20(?![\d])/i.test(roll.expression.trim()) || !roll.details)
     return undefined;
   const natural = parseInt(roll.details, 10);
-  if (natural === 20) return '#e6c46a';
-  if (natural === 1) return '#e08a8a';
+  if (natural === 20) return 'crit';
+  if (natural === 1) return 'fumble';
   return undefined;
 }

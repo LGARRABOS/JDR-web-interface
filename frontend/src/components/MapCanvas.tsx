@@ -606,7 +606,7 @@ export function MapCanvas({
                     cy={selectedToken.y}
                     r={selectedToken.attackRange * map.gridSize}
                     fill="none"
-                    stroke="rgba(234, 179, 8, 0.5)"
+                    style={{ stroke: 'rgb(var(--c-accent) / 0.6)' }}
                     strokeWidth={2}
                   />
                 </svg>
@@ -639,7 +639,7 @@ export function MapCanvas({
                 <rect
                   width={map.width}
                   height={map.height}
-                  fill="#2d2a26"
+                  style={{ fill: 'rgb(var(--c-bg))' }}
                   mask={`url(#${fogMaskId})`}
                 />
               </svg>
@@ -729,11 +729,11 @@ export function MapCanvas({
                     style={{
                       width: t.width ?? 56,
                       height: t.height ?? 56,
-                      border: `2px solid ${canMove(t) ? '#f59e0b' : 'transparent'}`,
+                      border: `2px solid ${canMove(t) ? 'rgb(var(--c-accent))' : 'transparent'}`,
                       boxShadow:
                         highlightedPlayerId != null &&
                         t.ownerUserId === highlightedPlayerId
-                          ? '0 0 12px 4px rgba(234, 179, 8, 0.8)'
+                          ? '0 0 12px 4px rgb(var(--c-accent) / 0.8)'
                           : undefined,
                     }}
                   >
@@ -763,11 +763,13 @@ export function MapCanvas({
                     className="w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center overflow-hidden px-1.5 text-[10px] font-bold text-white pointer-events-none"
                     style={{
                       backgroundColor: t.color,
-                      borderColor: canMove(t) ? '#f59e0b' : 'transparent',
+                      borderColor: canMove(t)
+                        ? 'rgb(var(--c-accent))'
+                        : 'transparent',
                       boxShadow:
                         highlightedPlayerId != null &&
                         t.ownerUserId === highlightedPlayerId
-                          ? '0 0 12px 4px rgba(234, 179, 8, 0.8)'
+                          ? '0 0 12px 4px rgb(var(--c-accent) / 0.8)'
                           : undefined,
                     }}
                   >

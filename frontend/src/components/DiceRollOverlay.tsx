@@ -35,7 +35,7 @@ function getRollColor(expression: string, result: number): string {
   if (lower.includes('d20')) {
     return getD20Color(result);
   }
-  return 'rgb(201, 162, 39)'; // fantasy-accent
+  return 'rgb(var(--c-accent))';
 }
 
 export function DiceRollOverlay({
@@ -73,11 +73,11 @@ export function DiceRollOverlay({
         className="relative rounded-2xl px-12 py-8 shadow-[0_8px_32px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,0,0,0.2)] overflow-hidden"
         style={{
           background:
-            'linear-gradient(145deg, rgba(45,38,32,0.98) 0%, rgba(26,22,18,0.98) 100%)',
+            'linear-gradient(145deg, rgb(var(--c-surface) / 0.98) 0%, rgb(var(--c-bg) / 0.98) 100%)',
           borderLeft: `4px solid ${accentColor}`,
           borderRight: `4px solid ${accentColor}`,
-          borderTop: '1px solid rgba(201,162,39,0.3)',
-          borderBottom: '1px solid rgba(201,162,39,0.3)',
+          borderTop: '1px solid rgb(var(--c-accent) / 0.3)',
+          borderBottom: '1px solid rgb(var(--c-accent) / 0.3)',
         }}
       >
         <p className="text-fantasy-muted-soft text-sm mb-3 text-center">

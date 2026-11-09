@@ -143,7 +143,7 @@ export function TopBar({
               p.role === 'MJ' ? `${displayNameOf(p)} (MJ)` : displayNameOf(p);
             const color =
               p.role === 'MJ'
-                ? { bg: '#8a6d1f' }
+                ? { bg: 'rgb(var(--c-accent))' }
                 : colorForUser(p.userId, players);
             return (
               <li
@@ -152,7 +152,11 @@ export function TopBar({
                 className={`w-8 h-8 rounded-full border-2 border-fantasy-bg flex items-center justify-center text-[13px] font-bold ${
                   i > 0 ? '-ml-2' : ''
                 } ${online ? 'text-fantasy-text' : 'text-fantasy-muted opacity-50'}`}
-                style={{ backgroundColor: online ? color.bg : '#4a4036' }}
+                style={{
+                  backgroundColor: online ? color.bg : 'rgb(var(--c-input))',
+                  color:
+                    online && p.role === 'MJ' ? 'rgb(var(--c-bg))' : undefined,
+                }}
               >
                 {p.role === 'MJ' ? 'MJ' : initials(displayNameOf(p))}
                 <span className="sr-only">

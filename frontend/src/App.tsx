@@ -1,7 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { HomePage } from './pages/HomePage';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
+import { AuthPage } from './pages/AuthPage';
 import { GameLobbyPage } from './pages/GameLobbyPage';
 import { TabletopPage } from './pages/TabletopPage';
 import { ResourcesPage } from './pages/ResourcesPage';
@@ -44,12 +42,19 @@ export const App = () => {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route
+          path="/"
+          element={
+            <AuthRedirect>
+              <AuthPage />
+            </AuthRedirect>
+          }
+        />
         <Route
           path="/login"
           element={
             <AuthRedirect>
-              <LoginPage />
+              <AuthPage initialMode="login" />
             </AuthRedirect>
           }
         />
@@ -57,7 +62,7 @@ export const App = () => {
           path="/register"
           element={
             <AuthRedirect>
-              <RegisterPage />
+              <AuthPage initialMode="register" />
             </AuthRedirect>
           }
         />
