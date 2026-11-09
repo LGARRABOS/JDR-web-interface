@@ -89,7 +89,7 @@ while true; do
     if [ -d "/sys/class/net/${BRIDGE}/bridge" ]; then
         break
     fi
-    echo "  « ${BRIDGE} » n'est pas un bridge. Disponibles : $(ls /sys/class/net | grep -E '^vmbr' | tr '\n' ' ')"
+    echo "  « ${BRIDGE} » n'est pas un bridge. Disponibles : $(cd /sys/class/net && echo vmbr*)"
 done
 
 echo ""

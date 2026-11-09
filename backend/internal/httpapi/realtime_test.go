@@ -22,7 +22,15 @@ type wsEnvelope struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
-func dialGame(t *testing.T, srv *httptest.Server, cookies []*http.Cookie, gameID int64) *websocket.Conn {
+// wsClient lit les messages en continu dans un canal : on peut ainsi attendre
+// un message avec un délai sans casser la connexion (avec gorilla/websocket,
+// un délai de lecture dépassé rend la connexion inutilisable).
+type wsClient struct {
+	conn *websocket.Conn
+	msgs chan wsEnvelope
+}
+
+func dialGame(t *testing.T, srv *httptest.Server, cookies []*http.Cookie, gameID int64) *wsClient {
 	t.Helper()
 	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/ws?gameId=" + strconv.FormatInt(gameID, 10)
 	header := http.Header{}
@@ -37,36 +45,58 @@ func dialGame(t *testing.T, srv *httptest.Server, cookies []*http.Cookie, gameID
 		}
 		t.Fatalf("dial ws: %v (status %d)", err, status)
 	}
+	c := &wsClient{conn: conn, msgs: make(chan wsEnvelope, 256)}
+	go func() {
+		defer close(c.msgs)
+		for {
+			var env wsEnvelope
+			if err := conn.ReadJSON(&env); err != nil {
+				return
+			}
+			c.msgs <- env
+		}
+	}()
 	t.Cleanup(func() { _ = conn.Close() })
-	return conn
+	return c
 }
 
-// readUntil lit les messages jusqu'à trouver le type demandé.
-func readUntil(t *testing.T, conn *websocket.Conn, typ string) wsEnvelope {
+func (c *wsClient) WriteJSON(v any) error { return c.conn.WriteJSON(v) }
+func (c *wsClient) Close() error          { return c.conn.Close() }
+
+// readUntil attend un message du type donné (les autres sont ignorés).
+func readUntil(t *testing.T, c *wsClient, typ string) wsEnvelope {
 	t.Helper()
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	timeout := time.After(3 * time.Second)
 	for {
-		var env wsEnvelope
-		if err := conn.ReadJSON(&env); err != nil {
-			t.Fatalf("lecture %q : %v", typ, err)
-		}
-		if env.Type == typ {
-			return env
+		select {
+		case env, ok := <-c.msgs:
+			if !ok {
+				t.Fatalf("connexion fermée avant le message %q", typ)
+			}
+			if env.Type == typ {
+				return env
+			}
+		case <-timeout:
+			t.Fatalf("message %q non reçu", typ)
 		}
 	}
 }
 
-// expectNone vérifie qu'aucun message du type donné contenant `needle` n'arrive pendant un court délai.
-func expectNone(t *testing.T, conn *websocket.Conn, typ, needle string, within time.Duration) {
+// expectNone vérifie qu'aucun message du type donné contenant `needle` n'arrive pendant `within`.
+func expectNone(t *testing.T, c *wsClient, typ, needle string, within time.Duration) {
 	t.Helper()
-	_ = conn.SetReadDeadline(time.Now().Add(within))
+	timeout := time.After(within)
 	for {
-		var env wsEnvelope
-		if err := conn.ReadJSON(&env); err != nil {
-			return // délai écoulé
-		}
-		if env.Type == typ && strings.Contains(string(env.Payload), needle) {
-			t.Fatalf("message %q inattendu : %s", typ, env.Payload)
+		select {
+		case env, ok := <-c.msgs:
+			if !ok {
+				return
+			}
+			if env.Type == typ && strings.Contains(string(env.Payload), needle) {
+				t.Fatalf("message %q inattendu : %s", typ, env.Payload)
+			}
+		case <-timeout:
+			return
 		}
 	}
 }
