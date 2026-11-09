@@ -1,52 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-export interface StatusEffect {
-  name: string;
-  effect: string;
-  turnsRemaining: number;
-}
+import type {
+  MapData,
+  MapElement,
+  MapView,
+  StatusEffect,
+  Token,
+} from '../types/game';
 
-export interface Token {
-  id: number;
-  mapId: number;
-  kind: string;
-  name: string;
-  color: string;
-  iconUrl?: string;
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
-  iconPosX?: number;
-  iconPosY?: number;
-  iconScale?: number;
-  attackRange?: number;
-  visibleToPlayers: boolean;
-  ownerUserId?: number;
-  hp?: number;
-  maxHp?: number;
-  mana?: number;
-  maxMana?: number;
-  elementId?: number;
-  statusEffects?: StatusEffect[];
-}
-
-export interface MapData {
-  id: number;
-  gameId: number;
-  name: string;
-  imageUrl: string;
-  width: number;
-  height: number;
-  gridSize: number;
-  tags?: string[];
-}
-
-export interface MapView {
-  scale: number;
-  offset: { x: number; y: number };
-}
+export type { MapData, MapElement, MapView, StatusEffect, Token };
 
 function getImageContentRect(
   containerW: number,
@@ -111,17 +74,6 @@ function mapCoordsToContainer(
   };
 }
 
-export interface MapElement {
-  id: number;
-  mapId: number;
-  imageUrl: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  createdAt?: string;
-}
-
 interface MapCanvasProps {
   map: MapData | null;
   tokens: Token[];
@@ -141,6 +93,8 @@ interface MapCanvasProps {
     characterName?: string;
   }>;
   onMapViewChange?: (view: MapView) => void;
+  /** true si une vue partagée existe déjà : pas de recadrage automatique. */
+  hasSharedView?: boolean;
   onMapPanEnd?: () => void;
   onTokenMove?: (id: number, x: number, y: number) => void;
   onTokenDragStart?: (id: number) => void;
@@ -166,6 +120,7 @@ export function MapCanvas({
   connectedUserIds = [],
   connectedUsers = [],
   onMapViewChange,
+  hasSharedView = false,
   onMapPanEnd,
   onTokenMove,
   onTokenDragStart,
@@ -239,21 +194,28 @@ export function MapCanvas({
   const pjTokens = tokens.filter((t) => t.kind === 'PJ');
   const fogMaskId = `fog-mask-${map?.id ?? 0}`;
 
+  const mapId = map?.id;
+  const mapWidth = map?.width ?? 0;
+  const mapHeight = map?.height ?? 0;
   const fitScaleToViewport = useCallback(() => {
-    if (!map || !onMapViewChange || !canvasRef.current) return;
+    if (!mapId || !onMapViewChange || !canvasRef.current) return;
     const vw = canvasRef.current.clientWidth;
     const vh = canvasRef.current.clientHeight;
-    if (vw > 0 && vh > 0 && map.width > 0 && map.height > 0) {
-      const fitScale = Math.min(vw / map.width, vh / map.height) * 0.95;
+    if (vw > 0 && vh > 0 && mapWidth > 0 && mapHeight > 0) {
+      const fitScale = Math.min(vw / mapWidth, vh / mapHeight) * 0.95;
       onMapViewChange({
         scale: Math.max(0.25, Math.min(3, fitScale)),
         offset: { x: 0, y: 0 },
       });
     }
-  }, [map, onMapViewChange]);
+  }, [mapId, mapWidth, mapHeight, onMapViewChange]);
 
+  // Recadrage automatique (MJ) quand une nouvelle carte est affichée, sauf si
+  // une vue partagée existe déjà (ex. le MJ recharge la page en pleine partie).
+  const hasSharedViewRef = useRef(hasSharedView);
+  hasSharedViewRef.current = hasSharedView;
   useEffect(() => {
-    if (!map || !isGM) return;
+    if (!mapId || !isGM || hasSharedViewRef.current) return;
     const runFit = () => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => fitScaleToViewport());
@@ -261,7 +223,7 @@ export function MapCanvas({
     };
     const t = setTimeout(runFit, 100);
     return () => clearTimeout(t);
-  }, [map, fitScaleToViewport, isGM]);
+  }, [mapId, fitScaleToViewport, isGM]);
 
   const updateView = useCallback(
     (updates: Partial<MapView>) => {
@@ -491,11 +453,7 @@ export function MapCanvas({
       onWheel={handleWheel}
       style={{
         cursor:
-          isDragging || isPanning
-            ? 'grabbing'
-            : isGM
-              ? 'grab'
-              : 'default',
+          isDragging || isPanning ? 'grabbing' : isGM ? 'grab' : 'default',
       }}
     >
       {isGM && (
@@ -571,24 +529,24 @@ export function MapCanvas({
               imgH
             );
             return (
-            <div
-              key={el.id}
-              className="absolute pointer-events-none"
-              style={{
-                left: pos.left,
-                top: pos.top,
-                width: el.width,
-                height: el.height,
-                transform: 'translate(-50%, -50%)',
-              }}
-            >
-              <img
-                src={el.imageUrl}
-                alt=""
-                className="w-full h-full object-contain select-none"
-                draggable={false}
-              />
-            </div>
+              <div
+                key={el.id}
+                className="absolute pointer-events-none"
+                style={{
+                  left: pos.left,
+                  top: pos.top,
+                  width: el.width,
+                  height: el.height,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              >
+                <img
+                  src={el.imageUrl}
+                  alt=""
+                  className="w-full h-full object-contain select-none"
+                  draggable={false}
+                />
+              </div>
             );
           })}
           {selectedToken &&

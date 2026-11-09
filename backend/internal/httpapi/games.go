@@ -73,9 +73,9 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 			"id":            g.ID,
 			"name":          g.Name,
 			"inviteCode":    g.InviteCode,
-			"ownerId":      g.OwnerID,
-			"role":         role,
-			"isGemma":      isGemma == 1,
+			"ownerId":       g.OwnerID,
+			"role":          role,
+			"isGemma":       isGemma == 1,
 			"characterName": cn,
 		})
 	}
@@ -139,9 +139,9 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 			"id":         id,
 			"name":       req.Name,
 			"inviteCode": code,
-			"ownerId":   u.ID,
-			"role":      "MJ",
-			"isGemma":   req.IsGemma,
+			"ownerId":    u.ID,
+			"role":       "MJ",
+			"isGemma":    req.IsGemma,
 		},
 	})
 }
@@ -231,15 +231,15 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 		cn = characterName.String
 	}
 	resp := map[string]interface{}{
-		"id":                 g.ID,
-		"name":               g.Name,
-		"inviteCode":         g.InviteCode,
-		"ownerId":            g.OwnerID,
-		"role":               role,
-		"isGemma":            isGemma == 1,
+		"id":                  g.ID,
+		"name":                g.Name,
+		"inviteCode":          g.InviteCode,
+		"ownerId":             g.OwnerID,
+		"role":                role,
+		"isGemma":             isGemma == 1,
 		"tokenMovementLocked": tokenMovementLocked == 1,
-		"fogVisionRadius":    fogVisionRadius,
-		"characterName":      cn,
+		"fogVisionRadius":     fogVisionRadius,
+		"characterName":       cn,
 	}
 	if currentMapID.Valid {
 		resp["currentMapId"] = currentMapID.Int64
@@ -249,7 +249,7 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 
 type updateGameReq struct {
 	TokenMovementLocked *bool `json:"tokenMovementLocked"`
-	FogVisionRadius    *int  `json:"fogVisionRadius"`
+	FogVisionRadius     *int  `json:"fogVisionRadius"`
 }
 
 func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
@@ -289,7 +289,7 @@ func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 			return
 		}
-		s.hub.Broadcast(gameID, "gemma.tokensLocked", map[string]interface{}{"locked": *req.TokenMovementLocked})
+		s.hub.Broadcast(gameID, "game.settings", map[string]interface{}{"tokenMovementLocked": *req.TokenMovementLocked})
 	}
 
 	if req.FogVisionRadius != nil {
@@ -359,7 +359,7 @@ func (s *Server) handleSetCurrentMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.hub.Broadcast(gameID, "map.displayed", map[string]interface{}{"mapId": req.MapID})
+	s.broadcastMapDisplayed(gameID, req.MapID)
 	writeJSON(w, http.StatusOK, map[string]interface{}{"currentMapId": req.MapID})
 }
 
@@ -452,10 +452,7 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = s.db.Exec(
-		"UPDATE game_players SET character_name = ? WHERE game_id = ? AND user_id = ?",
-		req.CharacterName, id, u.ID,
-	)
+	err = s.setCharacterName(id, u.ID, req.CharacterName)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
@@ -495,6 +492,7 @@ func (s *Server) handleDeleteGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.hub.CloseGame(id)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Partie supprimée"})
 }
 

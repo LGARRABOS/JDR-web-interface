@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: jdr
+          POSTGRES_PASSWORD: jdr
+          POSTGRES_DB: jdr_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CGO dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc libc6-dev
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build backend
+        run: cd backend && go build ./cmd/server
+
+      - name: Vet backend
+        run: cd backend && go vet ./...
+
+      - name: Test backend (race detector on realtime)
+        run: cd backend && go test -race ./internal/realtime/... -count=3
+
+      - name: Test backend
+        env:
+          TEST_DATABASE_URL: postgres://jdr:jdr@localhost:5432/jdr_test?sslmode=disable
+        run: cd backend && go test ./... -count=1 -v
+
+  backend-quality:
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Build frontend
+        run: npm run build:frontend
+
+      - name: Typecheck frontend
+        run: npm run typecheck --prefix frontend
+
+      - name: Lint frontend
+        run: npm run lint:frontend
+
+      - name: Test frontend
+        run: npm run test:frontend
+
+  frontend-quality:
+    runs-on: ubuntu-latest
+    needs: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Check Prettier format
+        run: npm run format:check --prefix frontend
+
+      - name: Audit dependencies
+        run: |
+          npm audit --audit-level=high || true
+          npm audit --audit-level=high --prefix frontend || true
+
+  deploy-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Validate deploy scripts
+        run: shellcheck deploy/proxmox/*.sh deploy/runner/*.sh deploy/release/*.sh

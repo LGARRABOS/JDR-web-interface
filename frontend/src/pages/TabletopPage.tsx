@@ -1,22 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
-  GamesAPI,
-  MapsAPI,
-  TokensAPI,
-  MapElementsAPI,
   ElementsAPI,
+  GamesAPI,
   MessagesAPI,
   RollsAPI,
+  TokensAPI,
+  type TokenUpdate,
 } from '../api/client';
-import {
-  MapCanvas,
-  type Token,
-  type MapData,
-  type MapView,
-  type MapElement,
-} from '../components/MapCanvas';
+import { MapCanvas, type MapView, type Token } from '../components/MapCanvas';
 import { TokenPanel, type TokenFormData } from '../components/TokenPanel';
 import {
   MonsterEditorModal,
@@ -31,7 +24,10 @@ import { MusicPlayer } from '../components/MusicPlayer';
 import { DiceRollOverlay } from '../components/DiceRollOverlay';
 import { Checkbox } from '../components/Checkbox';
 import { CopyableCode } from '../components/CopyableCode';
-import { useGameSocket } from '../hooks/useGameSocket';
+import { ConnectionBanner } from '../components/tabletop/ConnectionBanner';
+import { MapSettingsPanel } from '../components/tabletop/MapSettingsPanel';
+import { useGameSession } from '../realtime/useGameSession';
+import { getErrorMessage } from '../utils/errorMessage';
 
 const GM_TIPS = [
   'Utilisez le panneau "Ajouter un ennemi" : recherchez un ennemi dans vos ressources, définissez ses PV/mana, puis placez-le sur la carte.',
@@ -49,116 +45,96 @@ function pickRandomTip(exclude?: string) {
   return available[Math.floor(Math.random() * available.length)] ?? GM_TIPS[0];
 }
 
+const DEFAULT_VIEW: MapView = { scale: 1, offset: { x: 0, y: 0 } };
+const VIEW_SEND_INTERVAL_MS = 50;
+
+interface LibraryElement {
+  id: number;
+  name: string;
+  imageUrl: string;
+  category: string;
+  maxHp?: number;
+  maxMana?: number;
+}
+
+/**
+ * Table de jeu. Tout l'état partagé (carte, jetons, chat, musique, présence…)
+ * vient du serveur via useGameSession. La page n'envoie que des commandes
+ * (requêtes HTTP ou actions WebSocket) et n'applique jamais elle-même le
+ * résultat : c'est l'événement diffusé par le serveur qui met l'écran à jour,
+ * de la même façon pour tous les participants.
+ */
 export function TabletopPage() {
   const { gameId: gameIdParam } = useParams();
   const gameId = gameIdParam ? parseInt(gameIdParam, 10) : 0;
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { store, state, send, resync } = useGameSession(gameId);
+  const { game, you, scene, live } = state;
 
-  const [game, setGame] = useState<{
-    id: number;
-    name: string;
-    role: string;
-    inviteCode?: string;
-    characterName?: string;
-    currentMapId?: number;
-    isGemma?: boolean;
-    tokenMovementLocked?: boolean;
-    fogVisionRadius?: number;
-  } | null>(null);
-  const [maps, setMaps] = useState<MapData[]>([]);
-  const [currentMap, setCurrentMap] = useState<MapData | null>(null);
-  const [tokens, setTokens] = useState<Token[]>([]);
-  const [mapElements, setMapElements] = useState<MapElement[]>([]);
-  const [elements, setElements] = useState<
-    Array<{
-      id: number;
-      name: string;
-      imageUrl: string;
-      category: string;
-      maxHp?: number;
-      maxMana?: number;
-    }>
-  >([]);
-  const [monsterViewElement, setMonsterViewElement] = useState<{
+  const isGM = you?.role === 'MJ';
+  const currentMap = scene?.map ?? null;
+  const tokens = useMemo(() => scene?.tokens ?? [], [scene]);
+  const mapElements = useMemo(() => scene?.mapElements ?? [], [scene]);
+  const gamePlayers = useMemo(
+    () => state.players.filter((p) => p.role !== 'MJ'),
+    [state.players]
+  );
+  const mapView: MapView = live.view
+    ? {
+        scale: live.view.scale,
+        offset: { x: live.view.offsetX, y: live.view.offsetY },
+      }
+    : DEFAULT_VIEW;
+
+  const [elements, setElements] = useState<LibraryElement[]>([]);
+  const [placementData, setPlacementData] = useState<TokenFormData | null>(
+    null
+  );
+  const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
+  const [selectedPlayerForTurn, setSelectedPlayerForTurn] = useState<
+    number | null
+  >(null);
+  const [characterNameInput, setCharacterNameInput] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [rollError, setRollError] = useState<string | null>(null);
+  const [gmTip, setGmTip] = useState(pickRandomTip);
+  const [monsterView, setMonsterView] = useState<{
     element: GameElementFull;
     tokenData: { hp: number; maxHp: number; mana: number; maxMana: number };
     tokenKind: string;
     tokenId: number;
   } | null>(null);
-  const [messages, setMessages] = useState<
-    Array<{
-      id: number;
-      userId: number;
-      role: string;
-      content: string;
-      displayName?: string;
-    }>
-  >([]);
-  const [lastRoll, setLastRoll] = useState<{
-    expression: string;
-    result: number;
-    displayName?: string;
-  } | null>(null);
-  const [lastRollHidden, setLastRollHidden] = useState<{
-    expression: string;
-    result: number;
-    displayName?: string;
-  } | null>(null);
-  const [highlightedPlayerId, setHighlightedPlayerId] = useState<number | null>(
-    null
-  );
-  const [selectedPlayerForTurn, setSelectedPlayerForTurn] = useState<
-    number | null
-  >(null);
-  const [connectedUsers, setConnectedUsers] = useState<
-    Array<{
-      userId: number;
-      displayName: string;
-      characterName?: string;
-      role: string;
-    }>
-  >([]);
-  const [gamePlayers, setGamePlayers] = useState<
-    Array<{ userId: number; displayName: string; characterName?: string }>
-  >([]);
-  const [musicState, setMusicState] = useState<{
-    trackId: number | null;
-    position: number;
-    playing: boolean;
-    volume?: number;
-  } | null>(null);
-  const [placementData, setPlacementData] = useState<TokenFormData | null>(
-    null
-  );
-  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
-  const [gmTip, setGmTip] = useState(pickRandomTip);
-  const draggingTokenIdRef = useRef<number | null>(null);
-  const [mapView, setMapView] = useState<MapView>({
-    scale: 1,
-    offset: { x: 0, y: 0 },
-  });
-  const mapViewSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
-  const mapViewLastSendRef = useRef<number>(0);
-  const mapViewPendingRef = useRef<MapView | null>(null);
-  const mapViewRef = useRef<MapView>(mapView);
-  const sendRef = useRef<
-    ((a: string, p?: Record<string, unknown>) => void) | null
-  >(null);
-  const musicPanelStateRef = useRef<{
-    trackId: number | null;
-    position: number;
-    playing: boolean;
-    volume: number;
-  } | null>(null);
 
-  const isGM = game?.role === 'MJ';
+  const selectedToken = tokens.find((t) => t.id === selectedTokenId) ?? null;
+
+  // --- Chargements annexes ------------------------------------------------
+
+  // Si la connexion échoue plusieurs fois avant le premier instantané, on vérifie
+  // que l'utilisateur a toujours accès à la partie (retirée, supprimée…).
+  useEffect(() => {
+    if (state.ready || state.failedAttempts < 3) return;
+    let cancelled = false;
+    GamesAPI.get(gameId).catch((e: { response?: { status?: number } }) => {
+      const status = e?.response?.status;
+      if (!cancelled && (status === 403 || status === 404)) navigate('/games');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.ready, state.failedAttempts, gameId, navigate]);
+
+  // Bibliothèque d'éléments (monstres, décors) : réservée au MJ.
+  useEffect(() => {
+    if (!isGM || !gameId) return;
+    ElementsAPI.list(gameId)
+      .then(({ data }) => setElements(data.elements ?? []))
+      .catch(() => setElements([]));
+  }, [gameId, isGM]);
 
   useEffect(() => {
-    mapViewRef.current = mapView;
-  }, [mapView]);
+    setCharacterNameInput(you?.characterName ?? '');
+  }, [you?.characterName]);
 
   useEffect(() => {
     if (!isGM) return;
@@ -169,551 +145,127 @@ export function TabletopPage() {
     return () => clearInterval(interval);
   }, [isGM]);
 
-  const loadGame = useCallback(async () => {
-    if (!gameId) return;
-    try {
-      const { data } = await GamesAPI.get(gameId);
-      setGame(data.game);
-    } catch {
-      navigate('/games');
-    }
-  }, [gameId, navigate]);
-
-  const loadMaps = useCallback(async () => {
-    if (!gameId) return;
-    try {
-      const { data } = await MapsAPI.list(gameId);
-      setMaps(data.maps ?? []);
-    } catch {
-      setMaps([]);
-    }
-  }, [gameId]);
-
-  const loadTokens = useCallback(async () => {
-    if (!currentMap) return;
-    try {
-      const { data } = await TokensAPI.list(currentMap.id);
-      setTokens(data.tokens ?? []);
-    } catch {
-      setTokens([]);
-    }
-  }, [currentMap]);
-
-  const loadMapElements = useCallback(async () => {
-    if (!currentMap) return;
-    try {
-      const { data } = await MapElementsAPI.list(currentMap.id);
-      setMapElements(data.elements ?? []);
-    } catch {
-      setMapElements([]);
-    }
-  }, [currentMap]);
-
-  const loadElements = useCallback(async () => {
-    if (!gameId || !isGM) return;
-    try {
-      const { data } = await ElementsAPI.list(gameId);
-      setElements(data.elements ?? []);
-    } catch {
-      setElements([]);
-    }
-  }, [gameId, isGM]);
-
-  const loadGamePlayers = useCallback(async () => {
-    if (!gameId || !isGM) return;
-    try {
-      const { data } = await GamesAPI.players(gameId);
-      setGamePlayers(data.players ?? []);
-    } catch {
-      setGamePlayers([]);
-    }
-  }, [gameId, isGM]);
-
-  const loadMessages = useCallback(async () => {
-    if (!gameId) return;
-    try {
-      const { data } = await MessagesAPI.list(gameId);
-      setMessages(data.messages ?? []);
-    } catch {
-      setMessages([]);
-    }
-  }, [gameId]);
-
   useEffect(() => {
-    loadGame();
-  }, [loadGame]);
+    if (!actionError) return;
+    const t = setTimeout(() => setActionError(null), 5000);
+    return () => clearTimeout(t);
+  }, [actionError]);
 
-  useEffect(() => {
-    loadMaps();
-  }, [loadMaps]);
-
-  useEffect(() => {
-    loadGamePlayers();
-  }, [loadGamePlayers]);
-
-  // Définir la carte courante : priorité à currentMapId du jeu, sinon première carte
-  useEffect(() => {
-    if (!maps.length) {
-      setCurrentMap(null);
-      return;
-    }
-    const targetId = game?.currentMapId;
-    const target = targetId ? maps.find((m) => m.id === targetId) : maps[0];
-    setCurrentMap(target ?? maps[0]);
-  }, [maps, game?.currentMapId]);
-
-  useEffect(() => {
-    setTokens([]);
-    setMapElements([]);
-  }, [currentMap?.id]);
-
-  useEffect(() => {
-    loadTokens();
-  }, [loadTokens]);
-
-  useEffect(() => {
-    loadMapElements();
-  }, [loadMapElements]);
-
-  useEffect(() => {
-    loadElements();
-  }, [loadElements]);
-
-  useEffect(() => {
-    loadMessages();
-  }, [loadMessages]);
-
-  const handleTokenDoubleClick = useCallback(
-    (t: Token) => {
-      if ((t.kind === 'PNJ' || t.kind === 'MORT') && t.elementId != null) {
-        ElementsAPI.get(gameId, t.elementId)
-          .then(({ data }) => {
-            const el = (data as { element?: GameElementFull }).element;
-            if (el) {
-              setMonsterViewElement({
-                element: el,
-                tokenData: {
-                  hp: t.hp ?? el.maxHp ?? 10,
-                  maxHp: t.maxHp ?? el.maxHp ?? 10,
-                  mana: t.mana ?? el.maxMana ?? 0,
-                  maxMana: t.maxMana ?? el.maxMana ?? 0,
-                },
-                tokenKind: t.kind,
-                tokenId: t.id,
-              });
-            }
-          })
-          .catch(() => setMonsterViewElement(null));
-      }
+  /** Une commande a échoué : on affiche l'erreur et on recharge l'état réel. */
+  const fail = useCallback(
+    (e: unknown, fallback: string) => {
+      setActionError(getErrorMessage(e, fallback));
+      resync();
     },
-    [gameId]
+    [resync]
   );
 
-  const handleMonsterStatusUpdate = useCallback(
-    (
-      tokenId: number,
-      statusEffects: Array<{
-        name: string;
-        effect: string;
-        turnsRemaining: number;
-      }>
-    ) => {
-      setTokens((prev) =>
-        prev.map((t) => (t.id === tokenId ? { ...t, statusEffects } : t))
-      );
-      TokensAPI.update(tokenId, { statusEffects }).catch(() => {
-        loadTokens();
-      });
-    },
-    [loadTokens]
-  );
+  // --- Vue de la carte ----------------------------------------------------
 
-  useEffect(() => {
-    return () => {
-      if (mapViewSendTimeoutRef.current) {
-        clearTimeout(mapViewSendTimeoutRef.current);
-      }
-    };
-  }, []);
+  const viewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const viewLastSent = useRef(0);
+  const viewPending = useRef<MapView | null>(null);
 
-  const { send, connected } = useGameSocket(gameId, {
-    'token.created': (p) => {
-      const t = p as Token;
-      if (t.mapId === currentMap?.id)
-        setTokens((prev) => [...prev.filter((x) => x.id !== t.id), t]);
-    },
-    'token.updated': (p) => {
-      const t = p as Token;
-      if (t.mapId === currentMap?.id && draggingTokenIdRef.current !== t.id)
-        setTokens((prev) => {
-          const idx = prev.findIndex((x) => x.id === t.id);
-          if (idx >= 0) return prev.map((x) => (x.id === t.id ? t : x));
-          return [...prev, t];
-        });
-    },
-    'token.deleted': (p) => {
-      const { id } = p as { id: number };
-      setTokens((prev) => prev.filter((x) => x.id !== id));
-    },
-    'map_element.created': (p) => {
-      const el = p as MapElement;
-      if (el.mapId === currentMap?.id)
-        setMapElements((prev) =>
-          prev.some((x) => x.id === el.id) ? prev : [...prev, el]
-        );
-    },
-    'map_element.updated': (p) => {
-      const el = p as MapElement;
-      if (el.mapId === currentMap?.id)
-        setMapElements((prev) => prev.map((x) => (x.id === el.id ? el : x)));
-    },
-    'map_element.deleted': (p) => {
-      const { id } = p as { id: number };
-      setMapElements((prev) => prev.filter((x) => x.id !== id));
-    },
-    'chat.message': (p) => {
-      const m = p as {
-        id: number;
-        userId: number;
-        role: string;
-        content: string;
-        displayName?: string;
-      };
-      setMessages((prev) =>
-        prev.some((x) => x.id === m.id) ? prev : [...prev, m]
-      );
-    },
-    'dice.rolled': (p) => {
-      const r = p as {
-        expression: string;
-        result: number;
-        displayName?: string;
-      };
-      setLastRoll(r);
-    },
-    'dice.rolled.hidden': (p) => {
-      const r = p as {
-        expression: string;
-        result: number;
-        displayName?: string;
-      };
-      setLastRollHidden(r);
-    },
-    'gemma.tokensLocked': (p) => {
-      const { locked } = p as { locked: boolean };
-      setGame((g) => (g ? { ...g, tokenMovementLocked: locked } : null));
-    },
-    'game.settings': (p) => {
-      const { fogVisionRadius } = p as { fogVisionRadius?: number };
-      if (fogVisionRadius !== undefined) {
-        setGame((g) => (g ? { ...g, fogVisionRadius } : null));
-      }
-    },
-    'gemma.turnHighlight': (p) => {
-      const { playerId } = p as { playerId?: number | null };
-      setHighlightedPlayerId(playerId ?? null);
-    },
-    'presence.joined': (p) => {
-      const u = p as {
-        userId: number;
-        displayName: string;
-        characterName?: string;
-        role: string;
-      };
-      setConnectedUsers((prev) => {
-        if (prev.some((x) => x.userId === u.userId)) return prev;
-        return [...prev, u];
-      });
-    },
-    'presence.left': (p) => {
-      const { userId } = p as { userId: number };
-      setConnectedUsers((prev) => prev.filter((x) => x.userId !== userId));
-    },
-    'character.updated': (p) => {
-      const { userId, characterName } = p as {
-        userId: number;
-        characterName?: string;
-      };
-      setConnectedUsers((prev) =>
-        prev.map((u) =>
-          u.userId === userId
-            ? {
-                ...u,
-                characterName,
-                ...(characterName ? { displayName: characterName } : {}),
-              }
-            : u
-        )
-      );
-    },
-    'presence.list': (p) => {
-      const { users } = p as {
-        users: Array<{
-          userId: number;
-          displayName: string;
-          characterName?: string;
-          role: string;
-        }>;
-      };
-      const seen = new Map<
-        number,
-        {
-          userId: number;
-          displayName: string;
-          characterName?: string;
-          role: string;
-        }
-      >();
-      (users ?? []).forEach((u) => {
-        if (!seen.has(u.userId)) seen.set(u.userId, u);
-      });
-      setConnectedUsers(Array.from(seen.values()));
-    },
-    'music.play': (p) => {
-      const { trackId, position, volume } = p as {
-        trackId: number;
-        position: number;
-        volume?: number;
-      };
-      setMusicState({
-        trackId,
-        position: position ?? 0,
-        playing: true,
-        volume: volume ?? 1,
-      });
-    },
-    'music.pause': (p) => {
-      const { trackId, position, volume } = p as {
-        trackId?: number;
-        position?: number;
-        volume?: number;
-      };
-      setMusicState((prev) =>
-        prev
-          ? {
-              trackId: trackId ?? prev.trackId,
-              position: position ?? prev.position,
-              playing: false,
-              volume: volume ?? prev.volume ?? 1,
-            }
-          : null
-      );
-    },
-    'music.seek': (p) => {
-      const { trackId, position, volume } = p as {
-        trackId: number;
-        position: number;
-        volume?: number;
-      };
-      setMusicState((prev) =>
-        prev
-          ? { ...prev, trackId, position, volume: volume ?? prev.volume ?? 1 }
-          : { trackId, position, playing: false, volume: volume ?? 1 }
-      );
-    },
-    'map.displayed': (p) => {
-      const { mapId } = p as { mapId: number };
-      setGame((g) => (g ? { ...g, currentMapId: mapId } : null));
-      setMapView({ scale: 1, offset: { x: 0, y: 0 } });
-      if (!isGM) {
-        sendRef.current?.('map.view.request');
-      }
-    },
-    'map.created': (p) => {
-      const m = p as MapData;
-      setMaps((prev) =>
-        prev.some((x) => x.id === m.id) ? prev : [...prev, m]
-      );
-    },
-    'map.deleted': (p) => {
-      const { mapId } = p as { mapId: number };
-      setMaps((prev) => prev.filter((m) => m.id !== mapId));
-      setGame((g) =>
-        g?.currentMapId === mapId ? { ...g, currentMapId: undefined } : g
-      );
-    },
-    'map.view': (p) => {
-      const { scale, offsetX, offsetY } = p as {
-        scale: number;
-        offsetX: number;
-        offsetY: number;
-      };
-      setMapView({
-        scale: scale ?? 1,
-        offset: { x: offsetX ?? 0, y: offsetY ?? 0 },
-      });
-    },
-    'map.view.request': () => {
-      const s = sendRef.current;
-      const v = mapViewRef.current;
-      if (s && v) {
-        s('map.view', {
-          scale: v.scale,
-          offsetX: v.offset.x,
-          offsetY: v.offset.y,
-        });
-      }
-    },
-    'music.state.request': () => {
-      const s = sendRef.current;
-      const state = musicPanelStateRef.current;
-      if (s && state && state.trackId != null) {
-        if (state.playing) {
-          s('music.play', {
-            trackId: state.trackId,
-            position: state.position,
-            volume: state.volume,
-          });
-        } else {
-          s('music.pause', {
-            trackId: state.trackId,
-            position: state.position,
-            volume: state.volume,
-          });
-        }
-      }
-    },
-  });
-
-  useEffect(() => {
-    sendRef.current = send;
+  const sendView = useCallback(() => {
+    const v = viewPending.current;
+    viewPending.current = null;
+    viewTimer.current = null;
+    if (!v) return;
+    viewLastSent.current = Date.now();
+    send({
+      action: 'map.view',
+      scale: v.scale,
+      offsetX: v.offset.x,
+      offsetY: v.offset.y,
+    });
   }, [send]);
 
-  useEffect(() => {
-    if (connected && !isGM && send) {
-      const t1 = setTimeout(() => send('map.view.request'), 150);
-      const t2 = setTimeout(() => send('music.state.request'), 300);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
-    }
-  }, [connected, isGM, send]);
+  const handleMapViewChange = useCallback(
+    (view: MapView) => {
+      store.setLocalView({
+        scale: view.scale,
+        offsetX: view.offset.x,
+        offsetY: view.offset.y,
+      });
+      if (!isGM) return;
+      viewPending.current = view;
+      const elapsed = Date.now() - viewLastSent.current;
+      if (elapsed >= VIEW_SEND_INTERVAL_MS) sendView();
+      else if (!viewTimer.current)
+        viewTimer.current = setTimeout(
+          sendView,
+          VIEW_SEND_INTERVAL_MS - elapsed
+        );
+    },
+    [isGM, sendView, store]
+  );
 
-  useEffect(() => {
-    if (connected && !isGM && currentMap && send) {
-      send('map.view.request');
+  const flushMapView = useCallback(() => {
+    if (viewTimer.current) clearTimeout(viewTimer.current);
+    if (!viewPending.current) {
+      const v = store.getState().live.view;
+      if (v)
+        viewPending.current = {
+          scale: v.scale,
+          offset: { x: v.offsetX, y: v.offsetY },
+        };
     }
-  }, [connected, isGM, currentMap?.id, send]);
+    sendView();
+  }, [sendView, store]);
 
-  // Recharger les données quand un joueur se connecte pour être synchro avec le MJ
-  useEffect(() => {
-    if (connected && !isGM && currentMap) {
-      loadTokens();
-      loadMapElements();
-    }
-  }, [connected, isGM, currentMap?.id, loadTokens, loadMapElements]);
+  useEffect(
+    () => () => {
+      if (viewTimer.current) clearTimeout(viewTimer.current);
+    },
+    []
+  );
 
-  const handleTokenUpdate = useCallback(
-    async (
-      id: number,
-      data: {
-        hp?: number;
-        maxHp?: number;
-        mana?: number;
-        maxMana?: number;
-        iconUrl?: string;
-        width?: number;
-        height?: number;
-      }
-    ) => {
+  // --- Jetons -------------------------------------------------------------
+
+  const handleTokenMove = useCallback(
+    (id: number, x: number, y: number) => store.moveTokenLocally(id, x, y),
+    [store]
+  );
+  const handleTokenDragStart = useCallback(
+    (id: number) => store.setDragging(id),
+    [store]
+  );
+  const handleTokenDragEnd = useCallback(
+    async (id: number, x: number, y: number) => {
+      store.moveTokenLocally(id, x, y);
       try {
-        const res = await TokensAPI.update(id, data);
-        const updated = (res.data as { token?: Token }).token;
-        if (updated) {
-          setTokens((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, ...updated } : t))
-          );
-        } else {
-          setTokens((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, ...data } : t))
-          );
-        }
-      } catch {
-        loadTokens();
+        await TokensAPI.update(id, { x, y });
+      } catch (e) {
+        fail(e, 'Déplacement refusé');
+      } finally {
+        store.setDragging(null);
       }
     },
-    [loadTokens]
+    [store, fail]
+  );
+
+  const handleTokenUpdate = useCallback(
+    async (id: number, data: TokenUpdate) => {
+      store.patchTokenLocally(id, data);
+      try {
+        await TokensAPI.update(id, data);
+      } catch (e) {
+        fail(e, 'Modification du jeton impossible');
+      }
+    },
+    [store, fail]
   );
 
   const handleTokenDelete = useCallback(
     async (id: number) => {
       try {
         await TokensAPI.delete(id);
-        setTokens((prev) => prev.filter((t) => t.id !== id));
-        setSelectedToken((prev) => (prev?.id === id ? null : prev));
-      } catch {
-        loadTokens();
+        setSelectedTokenId((prev) => (prev === id ? null : prev));
+      } catch (e) {
+        fail(e, 'Suppression impossible');
       }
     },
-    [loadTokens]
-  );
-
-  const flushMapView = useCallback(() => {
-    if (!isGM) return;
-    const v = mapViewRef.current;
-    if (!v) return;
-    if (mapViewSendTimeoutRef.current) {
-      clearTimeout(mapViewSendTimeoutRef.current);
-      mapViewSendTimeoutRef.current = null;
-    }
-    mapViewPendingRef.current = null;
-    mapViewLastSendRef.current = Date.now();
-    send('map.view', {
-      scale: v.scale,
-      offsetX: v.offset.x,
-      offsetY: v.offset.y,
-    });
-  }, [isGM, send]);
-
-  const handleMapViewChange = useCallback(
-    (view: MapView) => {
-      setMapView(view);
-      if (!isGM) return;
-      mapViewPendingRef.current = view;
-      const now = Date.now();
-      const elapsed = now - mapViewLastSendRef.current;
-      const throttleMs = 50;
-      const flush = () => {
-        const pending = mapViewPendingRef.current;
-        mapViewPendingRef.current = null;
-        mapViewSendTimeoutRef.current = null;
-        if (pending) {
-          mapViewLastSendRef.current = Date.now();
-          send('map.view', {
-            scale: pending.scale,
-            offsetX: pending.offset.x,
-            offsetY: pending.offset.y,
-          });
-        }
-      };
-      if (elapsed >= throttleMs || mapViewLastSendRef.current === 0) {
-        flush();
-      } else if (!mapViewSendTimeoutRef.current) {
-        mapViewSendTimeoutRef.current = setTimeout(flush, throttleMs - elapsed);
-      }
-    },
-    [isGM, send]
-  );
-
-  const handleTokenMove = useCallback((id: number, x: number, y: number) => {
-    setTokens((prev) => prev.map((t) => (t.id === id ? { ...t, x, y } : t)));
-  }, []);
-
-  const handleTokenDragStart = useCallback((id: number) => {
-    draggingTokenIdRef.current = id;
-  }, []);
-
-  const handleTokenDragEnd = useCallback(
-    async (id: number, x: number, y: number) => {
-      draggingTokenIdRef.current = null;
-      try {
-        await TokensAPI.update(id, { x, y });
-      } catch {
-        loadTokens();
-      }
-    },
-    [loadTokens]
+    [fail]
   );
 
   const handleTokenCreate = useCallback(
@@ -721,168 +273,167 @@ export function TabletopPage() {
       if (!currentMap || !placementData) return;
       const data = placementData;
       setPlacementData(null);
-      const {
-        name,
-        hp,
-        maxHp,
-        mana,
-        maxMana,
-        iconUrl,
-        width,
-        height,
-        elementId,
-      } = data;
       try {
-        const { data: res } = await TokensAPI.create(currentMap.id, {
+        await TokensAPI.create(currentMap.id, {
           x,
           y,
           kind: 'PNJ',
-          name,
-          hp,
-          maxHp,
-          mana,
-          maxMana,
-          iconUrl,
-          width,
-          height,
+          name: data.name,
+          hp: data.hp,
+          maxHp: data.maxHp,
+          mana: data.mana,
+          maxMana: data.maxMana,
+          iconUrl: data.iconUrl,
+          width: data.width,
+          height: data.height,
           visibleToPlayers: true,
-          elementId,
+          elementId: data.elementId,
         });
-        setTokens((prev) =>
-          prev.some((t) => t.id === res.token.id) ? prev : [...prev, res.token]
-        );
-      } catch {
-        loadTokens();
+      } catch (e) {
         setPlacementData(data);
+        fail(e, 'Création du jeton impossible');
       }
     },
-    [currentMap, loadTokens, placementData]
+    [currentMap, placementData, fail]
   );
+
+  const handleTokenDoubleClick = useCallback(
+    (t: Token) => {
+      if ((t.kind !== 'PNJ' && t.kind !== 'MORT') || t.elementId == null)
+        return;
+      ElementsAPI.get(gameId, t.elementId)
+        .then(({ data }) => {
+          const el = (data as { element?: GameElementFull }).element;
+          if (!el) return;
+          setMonsterView({
+            element: el,
+            tokenData: {
+              hp: t.hp ?? el.maxHp ?? 10,
+              maxHp: t.maxHp ?? el.maxHp ?? 10,
+              mana: t.mana ?? el.maxMana ?? 0,
+              maxMana: t.maxMana ?? el.maxMana ?? 0,
+            },
+            tokenKind: t.kind,
+            tokenId: t.id,
+          });
+        })
+        .catch(() => setMonsterView(null));
+    },
+    [gameId]
+  );
+
+  // --- Chat, dés, réglages -----------------------------------------------
 
   const handleSendMessage = useCallback(
     async (content: string) => {
       try {
-        const { data } = await MessagesAPI.create(gameId, { content });
-        const created = (
-          data as {
-            message?: {
-              id: number;
-              userId: number;
-              role: string;
-              content: string;
-            };
-          }
-        )?.message;
-        if (created) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === created.id)) return prev;
-            return [
-              ...prev,
-              {
-                id: created.id,
-                userId: created.userId,
-                role: created.role,
-                content: created.content,
-                displayName: game?.characterName ?? user?.displayName,
-              },
-            ];
-          });
-        } else {
-          loadMessages();
-        }
-      } catch {
-        loadMessages();
+        await MessagesAPI.create(gameId, { content });
+      } catch (e) {
+        fail(e, 'Message non envoyé');
       }
     },
-    [gameId, loadMessages, game?.characterName, user?.displayName]
+    [gameId, fail]
   );
 
-  const [rollError, setRollError] = useState<string | null>(null);
   const handleRoll = useCallback(
     async (expression: string, hidden?: boolean) => {
       setRollError(null);
       try {
         const { data } = await RollsAPI.roll(gameId, { expression, hidden });
-        const roll = (data as { roll?: { expression: string; result: number } })
-          ?.roll;
-        if (roll) {
-          const displayName =
-            game?.characterName ?? user?.displayName ?? 'Vous';
-          const r = {
-            expression: roll.expression,
-            result: roll.result,
-            displayName,
-          };
-          if (hidden) {
-            setLastRollHidden(r);
-          } else {
-            setLastRoll(r);
+        const roll = (
+          data as {
+            roll?: {
+              id: number;
+              expression: string;
+              result: number;
+              details?: string;
+            };
           }
+        )?.roll;
+        if (roll) {
+          store.showOwnRoll(
+            {
+              id: roll.id,
+              userId: user?.id ?? 0,
+              expression: roll.expression,
+              result: roll.result,
+              details: roll.details,
+              displayName: you?.characterName || user?.displayName || 'Vous',
+            },
+            !!hidden
+          );
         }
       } catch (e) {
-        const msg =
-          (e as { response?: { data?: { message?: string }; status?: number } })
-            ?.response?.data?.message ??
-          (e as Error)?.message ??
-          'Erreur lors du lancer';
-        setRollError(msg);
-        console.error('[Roll]', msg, e);
+        setRollError(getErrorMessage(e, 'Erreur lors du lancer'));
       }
     },
-    [gameId, game?.characterName, user?.displayName]
+    [gameId, store, user, you?.characterName]
   );
 
-  const handleToggleTokensLocked = useCallback(async () => {
-    const next = !game?.tokenMovementLocked;
-    try {
-      await GamesAPI.update(gameId, { tokenMovementLocked: next });
-      setGame((g) => (g ? { ...g, tokenMovementLocked: next } : null));
-    } catch {
-      loadGame();
-    }
-  }, [gameId, game?.tokenMovementLocked, loadGame]);
+  const updateSettings = useCallback(
+    async (patch: {
+      tokenMovementLocked?: boolean;
+      fogVisionRadius?: number;
+    }) => {
+      store.patchGameLocally(patch);
+      try {
+        await GamesAPI.update(gameId, patch);
+      } catch (e) {
+        fail(e, 'Réglage non enregistré');
+      }
+    },
+    [gameId, store, fail]
+  );
+
+  const handleSelectMap = useCallback(
+    async (mapId: number) => {
+      if (!isGM || !mapId) return;
+      try {
+        await GamesAPI.setCurrentMap(gameId, mapId);
+      } catch (e) {
+        fail(e, 'Impossible d’afficher cette carte');
+      }
+    },
+    [gameId, isGM, fail]
+  );
 
   const handleTurnHighlight = useCallback(
-    (playerId: number | null) => {
-      setHighlightedPlayerId(playerId);
-      send('gemma.turnHighlight', { playerId });
-    },
+    (playerId: number | null) => send({ action: 'turn.highlight', playerId }),
     [send]
   );
 
-  const [characterNameInput, setCharacterNameInput] = useState('');
-  useEffect(() => {
-    if (game?.characterName !== undefined)
-      setCharacterNameInput(game.characterName ?? '');
-  }, [game?.characterName]);
-
   const handleCharacterNameBlur = useCallback(async () => {
     const v = characterNameInput.trim();
-    setGame((g) => (g ? { ...g, characterName: v } : null));
+    if (v === (you?.characterName ?? '')) return;
     try {
       await GamesAPI.updateMe(gameId, { characterName: v });
-      if (user) {
-        setConnectedUsers((prev) =>
-          prev.map((u) =>
-            u.userId === user.id
-              ? {
-                  ...u,
-                  characterName: v,
-                  displayName: v || u.displayName,
-                }
-              : u
-          )
-        );
-      }
-    } catch {
-      loadGame();
+    } catch (e) {
+      fail(e, 'Nom non enregistré');
     }
-  }, [gameId, characterNameInput, loadGame, user]);
+  }, [characterNameInput, gameId, you?.characterName, fail]);
 
-  if (!game) {
+  const handleMonsterStatusUpdate = useCallback(
+    (tokenId: number, statusEffects: NonNullable<Token['statusEffects']>) =>
+      handleTokenUpdate(tokenId, { statusEffects }),
+    [handleTokenUpdate]
+  );
+
+  // --- Rendu --------------------------------------------------------------
+
+  if (!state.ready || !game) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-fantasy-muted-soft">Chargement...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <p className="text-fantasy-muted-soft">
+          {state.failedAttempts < 3
+            ? 'Connexion à la partie…'
+            : 'Le serveur ne répond pas, nouvelle tentative…'}
+        </p>
+        <button
+          onClick={() => navigate('/games')}
+          className="text-sm text-fantasy-muted-soft hover:text-fantasy-text-soft underline"
+        >
+          Retour aux parties
+        </button>
       </div>
     );
   }
@@ -909,36 +460,33 @@ export function TabletopPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={currentMap?.id ?? ''}
-            onChange={async (e) => {
-              if (!isGM) return;
-              const id = parseInt(e.target.value, 10);
-              const map = maps.find((m) => m.id === id) ?? null;
-              setCurrentMap(map);
-              setMapView({ scale: 1, offset: { x: 0, y: 0 } });
-              if (map) {
-                try {
-                  await GamesAPI.setCurrentMap(gameId, map.id);
-                  setGame((g) => (g ? { ...g, currentMapId: map.id } : null));
-                } catch {
-                  loadMaps();
-                }
-              }
-            }}
-            disabled={!isGM}
-            className="rounded bg-fantasy-input-soft px-3 py-1 text-sm text-fantasy-text-soft disabled:opacity-70"
-          >
-            {maps.length === 0 ? (
-              <option value="">Aucune carte</option>
-            ) : (
-              maps.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))
-            )}
-          </select>
+          {isGM ? (
+            <select
+              value={currentMap?.id ?? ''}
+              onChange={(e) => handleSelectMap(parseInt(e.target.value, 10))}
+              className="rounded bg-fantasy-input-soft px-3 py-1 text-sm text-fantasy-text-soft"
+            >
+              {currentMap &&
+                !state.maps.some((m) => m.id === currentMap.id) && (
+                  <option value={currentMap.id}>{currentMap.name}</option>
+                )}
+              {state.maps.length === 0 && !currentMap ? (
+                <option value="">Aucune carte</option>
+              ) : (
+                state.maps.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))
+              )}
+            </select>
+          ) : (
+            currentMap && (
+              <span className="text-sm text-fantasy-muted-soft">
+                {currentMap.name}
+              </span>
+            )
+          )}
           {isGM && (
             <button
               onClick={() => navigate(`/table/${gameId}/resources`)}
@@ -949,6 +497,21 @@ export function TabletopPage() {
           )}
         </div>
       </header>
+
+      <ConnectionBanner
+        status={state.connection}
+        failedAttempts={state.failedAttempts}
+        onRetry={resync}
+      />
+
+      {actionError && (
+        <div
+          role="alert"
+          className="px-4 py-1.5 text-sm text-center bg-red-500/15 text-red-200 border-b border-red-500/30"
+        >
+          {actionError}
+        </div>
+      )}
 
       {isGM && (
         <div className="px-4 py-2 bg-fantasy-accent/10 border-b border-fantasy-accent/20 flex flex-wrap items-center gap-4 text-sm text-fantasy-muted">
@@ -978,8 +541,10 @@ export function TabletopPage() {
         <div className="px-4 py-2 bg-fantasy-surface border-b border-fantasy-border-soft flex flex-wrap items-center gap-4 text-sm">
           <strong className="text-fantasy-text-soft">GEMMA :</strong>
           <Checkbox
-            checked={game.tokenMovementLocked ?? false}
-            onChange={() => handleToggleTokensLocked()}
+            checked={game.tokenMovementLocked}
+            onChange={() =>
+              updateSettings({ tokenMovementLocked: !game.tokenMovementLocked })
+            }
             aria-label="Bloquer mouvement des jetons"
           >
             <span className="text-fantasy-muted-soft">
@@ -990,10 +555,11 @@ export function TabletopPage() {
             <span className="text-fantasy-muted-soft">Tour de :</span>
             <select
               value={selectedPlayerForTurn ?? ''}
-              onChange={(e) => {
-                const v = e.target.value;
-                setSelectedPlayerForTurn(v ? parseInt(v, 10) : null);
-              }}
+              onChange={(e) =>
+                setSelectedPlayerForTurn(
+                  e.target.value ? parseInt(e.target.value, 10) : null
+                )
+              }
               className="rounded bg-fantasy-input-soft px-2 py-1 text-sm text-fantasy-text-soft"
             >
               <option value="">—</option>
@@ -1036,10 +602,11 @@ export function TabletopPage() {
             currentUserId={user?.id ?? 0}
             mapView={mapView}
             tokensMovementLocked={game.tokenMovementLocked}
-            highlightedPlayerId={highlightedPlayerId}
-            connectedUserIds={connectedUsers.map((u) => u.userId)}
-            connectedUsers={connectedUsers}
+            highlightedPlayerId={live.turnPlayerId}
+            connectedUserIds={state.presence.map((u) => u.userId)}
+            connectedUsers={state.presence}
             onMapViewChange={handleMapViewChange}
+            hasSharedView={live.view != null}
             onMapPanEnd={isGM ? flushMapView : undefined}
             onTokenMove={handleTokenMove}
             onTokenDragStart={handleTokenDragStart}
@@ -1047,92 +614,40 @@ export function TabletopPage() {
             onTokenCreate={
               isGM && placementData ? handleTokenCreate : undefined
             }
-            onTokenSelect={setSelectedToken}
+            onTokenSelect={(t) => setSelectedTokenId(t?.id ?? null)}
             onTokenDoubleClick={handleTokenDoubleClick}
-            selectedToken={
-              selectedToken
-                ? (tokens.find((t) => t.id === selectedToken.id) ??
-                  selectedToken)
-                : null
-            }
-            fogVisionRadius={game?.fogVisionRadius}
+            selectedToken={selectedToken}
+            fogVisionRadius={game.fogVisionRadius}
             diceRollOverlay={
               game.isGemma ? (
-                <DiceRollOverlay roll={lastRoll} durationMs={2500} inline />
+                <DiceRollOverlay
+                  roll={state.lastRoll}
+                  durationMs={2500}
+                  inline
+                />
               ) : undefined
             }
           />
         </div>
         <aside className="w-80 flex flex-col gap-4 p-4 bg-fantasy-surface/50 overflow-y-auto text-fantasy-text-soft">
-          <PresenceBar users={connectedUsers} />
+          <PresenceBar users={state.presence} />
           <DicePanel
             gameId={gameId}
             onRoll={handleRoll}
             rollError={rollError}
-            lastRoll={lastRoll}
-            lastRollHidden={lastRollHidden}
+            lastRoll={state.lastRoll}
+            lastRollHidden={state.lastRollHidden}
             isGemma={game.isGemma}
             isGM={isGM}
           />
-          <ChatPanel messages={messages} onSend={handleSendMessage} />
-          {isGM && game && (
-            <div className="rounded-lg bg-fantasy-surface border border-fantasy-border-soft p-4">
-              <h3 className="text-sm font-semibold font-heading mb-2 text-fantasy-text-soft">
-                Paramètres carte
-              </h3>
-              <label className="flex items-center gap-2 cursor-pointer mb-2">
-                <Checkbox
-                  checked={(game.fogVisionRadius ?? 0) > 0}
-                  onChange={async () => {
-                    const next = (game.fogVisionRadius ?? 0) > 0 ? 0 : 120;
-                    try {
-                      await GamesAPI.update(gameId, { fogVisionRadius: next });
-                      setGame((g) =>
-                        g ? { ...g, fogVisionRadius: next } : null
-                      );
-                    } catch {
-                      loadGame();
-                    }
-                  }}
-                  aria-label="Zone d'obscurité"
-                />
-                <span className="text-sm text-fantasy-muted-soft">
-                  Zone d&apos;obscurité (nuit/grotte)
-                </span>
-              </label>
-              {(game.fogVisionRadius ?? 0) > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-fantasy-muted-soft">
-                    Rayon :
-                  </span>
-                  <input
-                    type="number"
-                    min={40}
-                    max={300}
-                    step={20}
-                    value={game.fogVisionRadius ?? 120}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (!Number.isNaN(v) && v >= 0) {
-                        setGame((g) =>
-                          g ? { ...g, fogVisionRadius: v } : null
-                        );
-                      }
-                    }}
-                    onBlur={async () => {
-                      const r = game.fogVisionRadius ?? 120;
-                      try {
-                        await GamesAPI.update(gameId, { fogVisionRadius: r });
-                      } catch {
-                        loadGame();
-                      }
-                    }}
-                    className="w-16 rounded bg-fantasy-input-soft px-2 py-1 text-sm text-fantasy-text-soft"
-                  />
-                  <span className="text-xs text-fantasy-muted-soft">px</span>
-                </div>
-              )}
-            </div>
+          <ChatPanel messages={state.messages} onSend={handleSendMessage} />
+          {isGM && (
+            <MapSettingsPanel
+              fogVisionRadius={game.fogVisionRadius}
+              onChangeFogRadius={(fogVisionRadius) =>
+                updateSettings({ fogVisionRadius })
+              }
+            />
           )}
           <TokenPanel
             isGM={isGM}
@@ -1141,13 +656,8 @@ export function TabletopPage() {
             onStartPlacement={setPlacementData}
             placementActive={placementData != null}
             onCancelPlacement={() => setPlacementData(null)}
-            selectedToken={
-              selectedToken
-                ? (tokens.find((t) => t.id === selectedToken.id) ??
-                  selectedToken)
-                : null
-            }
-            onTokenSelect={setSelectedToken}
+            selectedToken={selectedToken}
+            onTokenSelect={(t) => setSelectedTokenId(t?.id ?? null)}
             onTokenDoubleClick={handleTokenDoubleClick}
             onTokenUpdate={handleTokenUpdate}
             onTokenDelete={handleTokenDelete}
@@ -1163,6 +673,9 @@ export function TabletopPage() {
                 value={characterNameInput}
                 onChange={(e) => setCharacterNameInput(e.target.value)}
                 onBlur={handleCharacterNameBlur}
+                onKeyDown={(e) =>
+                  e.key === 'Enter' && (e.target as HTMLInputElement).blur()
+                }
                 placeholder={user?.displayName ?? 'Mon personnage'}
                 className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft"
               />
@@ -1173,38 +686,40 @@ export function TabletopPage() {
             isGM={isGM}
             isGemma={game.isGemma}
             players={gamePlayers}
-            onSheetSaved={loadTokens}
           />
           {isGM ? (
             <MusicPanel
               gameId={gameId}
+              music={live.music}
+              serverOffsetMs={state.serverOffsetMs}
               send={send}
-              showUpload={false}
-              stateRef={musicPanelStateRef}
             />
           ) : (
-            <MusicPlayer gameId={gameId} musicState={musicState} />
+            <MusicPlayer
+              gameId={gameId}
+              music={live.music}
+              serverOffsetMs={state.serverOffsetMs}
+            />
           )}
         </aside>
       </div>
 
-      {monsterViewElement && (
+      {monsterView && (
         <MonsterEditorModal
-          element={monsterViewElement.element}
-          onClose={() => setMonsterViewElement(null)}
+          element={monsterView.element}
+          onClose={() => setMonsterView(null)}
           mode="view"
-          tokenData={monsterViewElement.tokenData}
-          tokenKind={monsterViewElement.tokenKind}
+          tokenData={monsterView.tokenData}
+          tokenKind={monsterView.tokenKind}
           isGM={isGM}
-          tokenId={monsterViewElement.tokenId}
+          tokenId={monsterView.tokenId}
           statusEffects={
-            tokens.find((t) => t.id === monsterViewElement.tokenId)
-              ?.statusEffects ?? []
+            tokens.find((t) => t.id === monsterView.tokenId)?.statusEffects ??
+            []
           }
           onStatusUpdate={
             isGM
-              ? (se) =>
-                  handleMonsterStatusUpdate(monsterViewElement.tokenId, se)
+              ? (se) => handleMonsterStatusUpdate(monsterView.tokenId, se)
               : undefined
           }
         />

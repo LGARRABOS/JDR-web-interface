@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ModalConfirm } from './Modal';
+import type { Token } from '../types/game';
 
 export interface TokenFormData {
   name: string;
@@ -21,21 +22,6 @@ interface GameElement {
   category: string;
   maxHp?: number;
   maxMana?: number;
-}
-
-interface Token {
-  id: number;
-  kind: string;
-  name: string;
-  iconUrl?: string;
-  width?: number;
-  height?: number;
-  ownerUserId?: number;
-  hp?: number;
-  maxHp?: number;
-  mana?: number;
-  maxMana?: number;
-  elementId?: number;
 }
 
 interface TokenPanelProps {

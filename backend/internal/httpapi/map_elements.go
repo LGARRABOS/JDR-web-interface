@@ -125,7 +125,7 @@ func (s *Server) handleCreateMapElement(w http.ResponseWriter, r *http.Request) 
 		CreatedAt: createdAt,
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"element": e})
-	s.hub.Broadcast(gameID, "map_element.created", e)
+	s.broadcastMapEvent(mapID, "map_element.created", e)
 }
 
 type updateMapElementReq struct {
@@ -201,7 +201,7 @@ func (s *Server) handleUpdateMapElement(w http.ResponseWriter, r *http.Request) 
 		id,
 	).Scan(&e.ID, &e.MapID, &e.ImageURL, &e.X, &e.Y, &e.Width, &e.Height, &e.CreatedAt)
 	writeJSON(w, http.StatusOK, map[string]interface{}{"element": e})
-	s.hub.Broadcast(gameID, "map_element.updated", e)
+	s.broadcastMapEvent(mapID, "map_element.updated", e)
 }
 
 func (s *Server) handleDeleteMapElement(w http.ResponseWriter, r *http.Request) {
@@ -235,5 +235,5 @@ func (s *Server) handleDeleteMapElement(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Supprimé"})
-	s.hub.Broadcast(gameID, "map_element.deleted", map[string]interface{}{"id": id})
+	s.broadcastMapEvent(mapID, "map_element.deleted", map[string]interface{}{"id": id, "mapId": mapID})
 }

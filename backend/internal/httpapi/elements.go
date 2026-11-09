@@ -145,12 +145,12 @@ func (s *Server) handleGetElement(w http.ResponseWriter, r *http.Request) {
 }
 
 type patchElementReq struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	UniqueTrait *string `json:"uniqueTrait"`
-	Loot        *string `json:"loot"`
-	MaxHp       *int    `json:"maxHp"`
-	MaxMana     *int    `json:"maxMana"`
+	Name        *string  `json:"name"`
+	Description *string  `json:"description"`
+	UniqueTrait *string  `json:"uniqueTrait"`
+	Loot        *string  `json:"loot"`
+	MaxHp       *int     `json:"maxHp"`
+	MaxMana     *int     `json:"maxMana"`
 	IconPosX    *int     `json:"iconPosX"`
 	IconPosY    *int     `json:"iconPosY"`
 	IconScale   *float64 `json:"iconScale"`

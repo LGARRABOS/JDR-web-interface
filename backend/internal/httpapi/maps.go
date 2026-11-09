@@ -409,7 +409,7 @@ func (s *Server) handleUpdateMap(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.Unmarshal([]byte(tagsJSON), &m.Tags)
 	writeJSON(w, http.StatusOK, map[string]interface{}{"map": m})
-	s.hub.Broadcast(gameID, "map.updated", m)
+	s.broadcastMapEvent(m.ID, "map.updated", m)
 }
 
 func (s *Server) handleDeleteMap(w http.ResponseWriter, r *http.Request) {
@@ -450,6 +450,7 @@ func (s *Server) handleDeleteMap(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	affectedGames := s.gamesShowingMap(mapID)
 	_, _ = s.db.Exec("UPDATE games SET current_map_id = NULL WHERE current_map_id = ?", mapID)
 	_, err = s.db.Exec("DELETE FROM maps WHERE id = ?", mapID)
 	if err != nil {
@@ -457,7 +458,9 @@ func (s *Server) handleDeleteMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.hub.Broadcast(gameID, "map.deleted", map[string]interface{}{"mapId": mapID})
+	for _, gid := range affectedGames {
+		s.hub.Broadcast(gid, "map.deleted", map[string]interface{}{"mapId": mapID})
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Carte supprimée"})
 }
 

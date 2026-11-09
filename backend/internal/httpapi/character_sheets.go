@@ -12,12 +12,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-
-	"jdr-backend/internal/domain"
 )
 
-const maxSheetSize = 10 << 20   // 10 Mo
-const maxAvatarSize = 2 << 20   // 2 Mo
+const maxSheetSize = 10 << 20 // 10 Mo
+const maxAvatarSize = 2 << 20 // 2 Mo
 const uploadsSheetsBase = "uploads/sheets"
 const uploadsAvatarsBase = "uploads/character-avatars"
 
@@ -124,8 +122,8 @@ func (s *Server) handleUploadCharacterSheet(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"filename":  header.Filename,
-		"mimeType":  mimeType,
+		"filename": header.Filename,
+		"mimeType": mimeType,
 	})
 }
 
@@ -355,8 +353,7 @@ func (s *Server) handlePatchCharacterSheet(w http.ResponseWriter, r *http.Reques
 		}
 
 		if tokenName != "" {
-			_, _ = s.db.Exec("UPDATE game_players SET character_name = ? WHERE game_id = ? AND user_id = ?", tokenName, gameID, u.ID)
-			s.hub.Broadcast(gameID, "character.updated", map[string]interface{}{"userId": u.ID, "characterName": tokenName})
+			_ = s.setCharacterName(gameID, u.ID, tokenName)
 		}
 		if iconURL != "" {
 			_, _ = s.db.Exec(`
@@ -381,73 +378,24 @@ func (s *Server) handlePatchCharacterSheet(w http.ResponseWriter, r *http.Reques
 			`, tokenAttackRange, tokenName, tokenName, tokenHp, tokenMaxHp, tokenMana, tokenMaxMana, gameID, u.ID)
 		}
 
-		// Broadcast token.updated pour chaque jeton PJ mis à jour
-		rows, _ := s.db.Query(`
+		// Diffuser chaque jeton PJ mis à jour
+		rows, err := s.db.Query(`
 			SELECT t.id FROM tokens t
 			JOIN maps m ON t.map_id = m.id
 			WHERE m.game_id = ? AND t.kind = 'PJ' AND t.owner_user_id = ?
 		`, gameID, u.ID)
-		if rows != nil {
-			defer rows.Close()
+		if err == nil {
+			var ids []int64
 			for rows.Next() {
 				var tid int64
 				if rows.Scan(&tid) == nil {
-					var t domain.Token
-					var ownerID, elemID sql.NullInt64
-					var iconURL sql.NullString
-					var visible int
-					var hp, maxHp, mana, maxMana, width, height sql.NullInt64
-					var iconPosX, iconPosY int
-					var iconScale float64
-					var attackRange sql.NullInt64
-					var statusEffectsJSON string
-					_ = s.db.QueryRow(`
-						SELECT id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players, hp, max_hp, mana, max_mana, width, height, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1), attack_range, element_id, COALESCE(status_effects::text, '[]')
-						FROM tokens WHERE id = ?
-					`, tid).Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y, &visible, &hp, &maxHp, &mana, &maxMana, &width, &height, &iconPosX, &iconPosY, &iconScale, &attackRange, &elemID, &statusEffectsJSON)
-					_ = json.Unmarshal([]byte(statusEffectsJSON), &t.StatusEffects)
-					t.IconPosX = iconPosX
-					t.IconPosY = iconPosY
-					t.IconScale = iconScale
-					if attackRange.Valid {
-						ar := int(attackRange.Int64)
-						t.AttackRange = &ar
-					}
-					if ownerID.Valid {
-						t.OwnerUserID = &ownerID.Int64
-					}
-					if elemID.Valid {
-						t.ElementID = &elemID.Int64
-					}
-					if iconURL.Valid {
-						t.IconURL = iconURL.String
-					}
-					t.VisibleToPlayers = visible == 1
-					if hp.Valid {
-						h := int(hp.Int64)
-						t.Hp = &h
-					}
-					if maxHp.Valid {
-						m := int(maxHp.Int64)
-						t.MaxHp = &m
-					}
-					if mana.Valid {
-						m := int(mana.Int64)
-						t.Mana = &m
-					}
-					if maxMana.Valid {
-						m := int(maxMana.Int64)
-						t.MaxMana = &m
-					}
-					if width.Valid {
-						w := int(width.Int64)
-						t.Width = &w
-					}
-					if height.Valid {
-						h := int(height.Int64)
-						t.Height = &h
-					}
-					s.hub.Broadcast(gameID, "token.updated", t)
+					ids = append(ids, tid)
+				}
+			}
+			rows.Close()
+			for _, tid := range ids {
+				if t, err := s.getToken(tid); err == nil {
+					s.broadcastToken("token.updated", t)
 				}
 			}
 		}

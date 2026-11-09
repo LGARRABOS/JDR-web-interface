@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
@@ -64,33 +63,16 @@ func NewServer(db storage.DB, staticDir string) (http.Handler, error) {
 		Secure:   isProduction(),
 	}
 
-	hub := realtime.NewHub(
-		func(userID, gameID int64) (string, string, string) {
-			var displayName, characterName, role string
-			_ = db.QueryRow(
-				"SELECT u.display_name, COALESCE(gp.character_name, ''), COALESCE(gp.role, 'PLAYER') FROM users u LEFT JOIN game_players gp ON gp.user_id = u.id AND gp.game_id = ? WHERE u.id = ?",
-				gameID, userID,
-			).Scan(&displayName, &characterName, &role)
-			return displayName, characterName, role
-		},
-		func(userID, gameID int64) bool {
-			var count int
-			err := db.QueryRow(
-				"SELECT 1 FROM game_players WHERE game_id = ? AND user_id = ?",
-				gameID, userID,
-			).Scan(&count)
-			return err == nil && count != 0
-		},
-		allowedOrigins(),
-	)
-	go hub.Run()
-
 	s := &Server{
 		db:    db,
 		mux:   chi.NewRouter(),
 		store: store,
-		hub:   hub,
 	}
+	s.hub = realtime.NewHub(realtime.Config{
+		ResolveMember:  s.resolveMember,
+		Snapshot:       s.buildSnapshot,
+		AllowedOrigins: allowedOrigins(),
+	})
 
 	s.mux.Use(middleware.RequestID)
 	s.mux.Use(middleware.Logger)
@@ -180,7 +162,6 @@ func (s *Server) wsHandler() http.Handler {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Non authentifié"})
 			return
 		}
-		ctx := context.WithValue(r.Context(), realtime.UserIDKey, u.ID)
-		s.hub.ServeHTTP(w, r.WithContext(ctx))
+		s.hub.ServeWS(w, r, u.ID)
 	})
 }

@@ -25,48 +25,48 @@ type GamePlayer struct {
 
 // Map représente une carte de jeu.
 type Map struct {
-	ID        int64    `json:"id"`
-	GameID    int64    `json:"gameId"`
-	Name      string   `json:"name"`
-	ImageURL  string   `json:"imageUrl"`
-	Width     int      `json:"width"`
-	Height    int      `json:"height"`
-	GridSize  int      `json:"gridSize"`
-	Tags      []string `json:"tags,omitempty"`
+	ID       int64    `json:"id"`
+	GameID   int64    `json:"gameId"`
+	Name     string   `json:"name"`
+	ImageURL string   `json:"imageUrl"`
+	Width    int      `json:"width"`
+	Height   int      `json:"height"`
+	GridSize int      `json:"gridSize"`
+	Tags     []string `json:"tags,omitempty"`
 }
 
 // Token représente un pion sur la carte.
 type Token struct {
-	ID               int64   `json:"id"`
-	MapID            int64   `json:"mapId"`
-	CreatedBy        int64   `json:"createdBy"`
-	OwnerUserID      *int64  `json:"ownerUserId,omitempty"`
-	Kind             string  `json:"kind"` // PJ, PNJ, OBJET, MORT (vaincu)
-	Name             string  `json:"name"`
-	Color            string  `json:"color"`
-	IconURL          string  `json:"iconUrl,omitempty"`
-	X                float64 `json:"x"`
-	Y                float64 `json:"y"`
-	Width            *int    `json:"width,omitempty"`
-	Height           *int    `json:"height,omitempty"`
-	IconPosX         int     `json:"iconPosX,omitempty"`   // 0-100, position horizontale du crop
-	IconPosY         int     `json:"iconPosY,omitempty"`   // 0-100, position verticale du crop
-	IconScale        float64 `json:"iconScale,omitempty"`   // zoom de l'image (1 = 100%, 1.5 = 150%)
-	AttackRange      *int    `json:"attackRange,omitempty"` // portée d'attaque en cases (pour cercle sur carte)
-	VisibleToPlayers bool    `json:"visibleToPlayers"`
-	Hp               *int   `json:"hp,omitempty"`       // PV actuels
-	MaxHp            *int    `json:"maxHp,omitempty"`   // PV max
-	Mana             *int    `json:"mana,omitempty"`     // Mana actuel
-	MaxMana          *int    `json:"maxMana,omitempty"` // Mana max
-	ElementID        *int64  `json:"elementId,omitempty"` // Lien vers game_elements (monstre source)
+	ID               int64          `json:"id"`
+	MapID            int64          `json:"mapId"`
+	CreatedBy        int64          `json:"createdBy"`
+	OwnerUserID      *int64         `json:"ownerUserId,omitempty"`
+	Kind             string         `json:"kind"` // PJ, PNJ, OBJET, MORT (vaincu)
+	Name             string         `json:"name"`
+	Color            string         `json:"color"`
+	IconURL          string         `json:"iconUrl,omitempty"`
+	X                float64        `json:"x"`
+	Y                float64        `json:"y"`
+	Width            *int           `json:"width,omitempty"`
+	Height           *int           `json:"height,omitempty"`
+	IconPosX         int            `json:"iconPosX,omitempty"`    // 0-100, position horizontale du crop
+	IconPosY         int            `json:"iconPosY,omitempty"`    // 0-100, position verticale du crop
+	IconScale        float64        `json:"iconScale,omitempty"`   // zoom de l'image (1 = 100%, 1.5 = 150%)
+	AttackRange      *int           `json:"attackRange,omitempty"` // portée d'attaque en cases (pour cercle sur carte)
+	VisibleToPlayers bool           `json:"visibleToPlayers"`
+	Hp               *int           `json:"hp,omitempty"`            // PV actuels
+	MaxHp            *int           `json:"maxHp,omitempty"`         // PV max
+	Mana             *int           `json:"mana,omitempty"`          // Mana actuel
+	MaxMana          *int           `json:"maxMana,omitempty"`       // Mana max
+	ElementID        *int64         `json:"elementId,omitempty"`     // Lien vers game_elements (monstre source)
 	StatusEffects    []StatusEffect `json:"statusEffects,omitempty"` // Effets de statut (poison, brûlure, etc.)
 }
 
 // StatusEffect représente un effet de statut sur un jeton (monstre).
 type StatusEffect struct {
-	Name            string `json:"name"`
-	Effect          string `json:"effect"`
-	TurnsRemaining  int    `json:"turnsRemaining"`
+	Name           string `json:"name"`
+	Effect         string `json:"effect"`
+	TurnsRemaining int    `json:"turnsRemaining"`
 }
 
 // GameElement représente un élément de la bibliothèque (monstre ou décor).
@@ -83,9 +83,9 @@ type GameElement struct {
 	Loot        string   `json:"loot,omitempty"`
 	MaxHp       *int     `json:"maxHp,omitempty"`
 	MaxMana     *int     `json:"maxMana,omitempty"`
-	IconPosX    int     `json:"iconPosX,omitempty"`   // 0-100, position horizontale du crop
-	IconPosY    int     `json:"iconPosY,omitempty"`   // 0-100, position verticale du crop
-	IconScale   float64 `json:"iconScale,omitempty"`  // zoom de l'image (1 = 100%, 1.5 = 150%)
+	IconPosX    int      `json:"iconPosX,omitempty"`  // 0-100, position horizontale du crop
+	IconPosY    int      `json:"iconPosY,omitempty"`  // 0-100, position verticale du crop
+	IconScale   float64  `json:"iconScale,omitempty"` // zoom de l'image (1 = 100%, 1.5 = 150%)
 }
 
 // MapElement représente un élément de décor fixe sur une carte.

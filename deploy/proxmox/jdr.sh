@@ -7,6 +7,7 @@
 set -e
 
 INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/LGARRABOS/JDR-web-interface/main/deploy/proxmox/jdr-install.sh"
+RUNTIME_SCRIPT_URL="https://raw.githubusercontent.com/LGARRABOS/JDR-web-interface/main/deploy/proxmox/jdr-install-runtime.sh"
 DEFAULT_HOSTNAME="jdr"
 DEFAULT_MEMORY="1024"
 DEFAULT_DISK="8"
@@ -79,6 +80,10 @@ BRIDGE=${BRIDGE:-$DEFAULT_BRIDGE}
 echo ""
 read -r -p "IP statique (vide = DHCP) [DHCP]: " STATIC_IP
 echo ""
+echo "Déploiement automatique : collez la clé SSH publique du runner CI"
+echo "(affichée à la fin de install-runner.sh). Laissez vide pour compiler dans le conteneur."
+read -r -p "Clé publique du runner []: " DEPLOY_PUBKEY
+echo ""
 
 # Vérifier que le CT n'existe pas déjà
 if pct status "${CTID}" &>/dev/null; then
@@ -148,8 +153,13 @@ for ((i=1; i<=30; i++)); do
     sleep 1
 done
 
-echo "==> Installation de l'application dans le CT..."
-pct exec "${CTID}" -- bash -c "$(curl -fsSL "${INSTALL_SCRIPT_URL}")"
+if [ -n "${DEPLOY_PUBKEY}" ]; then
+    echo "==> Préparation du CT pour le déploiement par le runner..."
+    pct exec "${CTID}" -- env JDR_DEPLOY_PUBKEY="${DEPLOY_PUBKEY}" bash -c "$(curl -fsSL "${RUNTIME_SCRIPT_URL}")"
+else
+    echo "==> Installation de l'application dans le CT..."
+    pct exec "${CTID}" -- bash -c "$(curl -fsSL "${INSTALL_SCRIPT_URL}")"
+fi
 
 # Récupérer l'IP
 CT_IP=$(pct exec "${CTID}" -- hostname -I | awk '{print $1}')
@@ -159,12 +169,22 @@ echo "=========================================="
 echo "  Installation terminée avec succès !"
 echo "=========================================="
 echo ""
-echo "  L'application est accessible sur :"
-echo "  http://${CT_IP}:4000"
-echo ""
-echo "  Configurez votre reverse proxy Nginx pour proxy vers :"
-echo "  http://${CT_IP}:4000"
-echo ""
-echo "  Mise à jour :"
-echo "  pct exec ${CTID} -- bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/LGARRABOS/JDR-web-interface/main/deploy/proxmox/jdr-update.sh)\""
+if [ -n "${DEPLOY_PUBKEY}" ]; then
+    echo "  Conteneur prêt : ${CT_IP}"
+    echo ""
+    echo "  Étapes suivantes :"
+    echo "  1. GitHub > Settings > Secrets and variables > Actions > Variables :"
+    echo "     JDR_HOST = ${CT_IP}"
+    echo "  2. Lancer le workflow Deploy (onglet Actions) ou pousser sur main."
+    echo "  3. Reverse proxy Nginx vers http://${CT_IP}:4000"
+else
+    echo "  L'application est accessible sur :"
+    echo "  http://${CT_IP}:4000"
+    echo ""
+    echo "  Configurez votre reverse proxy Nginx pour proxy vers :"
+    echo "  http://${CT_IP}:4000"
+    echo ""
+    echo "  Mise à jour :"
+    echo "  pct exec ${CTID} -- bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/LGARRABOS/JDR-web-interface/main/deploy/proxmox/jdr-update.sh)\""
+fi
 echo ""

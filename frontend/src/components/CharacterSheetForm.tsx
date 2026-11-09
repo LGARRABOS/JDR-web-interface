@@ -621,16 +621,18 @@ export function CharacterSheetForm({
           </div>
         )}
         <div className="grid grid-cols-2 gap-2">
-          {[
-            ['nom', 'Nom'],
-            ['race', 'Race'],
-            ['classe', 'Classe'],
-            ['grade', 'Grade'],
-            ['poidsSupplementaire', 'Poids supplémentaire'],
-            ['niveau', 'Niveau'],
-            ['xpActuel', 'XP actuel'],
-            ['xpPourNiveau', 'XP pour niveau'] as const,
-          ].map(([k, label]) => (
+          {(
+            [
+              ['nom', 'Nom'],
+              ['race', 'Race'],
+              ['classe', 'Classe'],
+              ['grade', 'Grade'],
+              ['poidsSupplementaire', 'Poids supplémentaire'],
+              ['niveau', 'Niveau'],
+              ['xpActuel', 'XP actuel'],
+              ['xpPourNiveau', 'XP pour niveau'],
+            ] as const
+          ).map(([k, label]) => (
             <div key={k}>
               <label className={labelClass}>{label}</label>
               <input

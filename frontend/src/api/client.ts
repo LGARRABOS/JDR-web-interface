@@ -116,6 +116,8 @@ export const MapsAPI = {
   delete: (mapId: number) => api.delete(`/maps/${mapId}`),
 };
 
+export type TokenUpdate = Parameters<(typeof TokensAPI)['update']>[1];
+
 export const TokensAPI = {
   list: (mapId: number) => api.get(`/maps/${mapId}/tokens`),
   create: (
@@ -151,6 +153,8 @@ export const TokensAPI = {
       iconPosX?: number;
       iconPosY?: number;
       iconScale?: number;
+      attackRange?: number;
+      visibleToPlayers?: boolean;
       hp?: number;
       maxHp?: number;
       mana?: number;

@@ -40,9 +40,9 @@ func TestHandleCreateUpdateDeleteMapElement(t *testing.T) {
 	createBody := map[string]interface{}{
 		"imageUrl": "https://example.com/img.png",
 		"x":        100.0,
-		"y":       50.0,
-		"width":   50,
-		"height":  50,
+		"y":        50.0,
+		"width":    50,
+		"height":   50,
 	}
 	createJSON, _ := json.Marshal(createBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/maps/"+mapIDStr+"/elements", bytes.NewReader(createJSON))

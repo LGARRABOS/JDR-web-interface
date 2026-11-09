@@ -13,8 +13,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"jdr-backend/internal/domain"
 	"github.com/go-chi/chi/v5"
+	"jdr-backend/internal/domain"
 )
 
 func (s *Server) registerAuthRoutes() {

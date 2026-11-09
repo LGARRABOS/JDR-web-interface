@@ -112,4 +112,3 @@ func TestHandleLoginWrongPassword(t *testing.T) {
 		t.Errorf("login wrong password: got status %d, want %d", rr.Code, http.StatusUnauthorized)
 	}
 }
-

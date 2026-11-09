@@ -28,6 +28,20 @@ npm run dev
 - `backend/` : API REST + WebSocket (Go)
 - `frontend/` : Interface React
 
+## Temps réel : comment l'état est synchronisé
+
+Le **serveur est la seule source de vérité**. Aucun client (même le MJ) ne détient d'état que les autres doivent lui demander.
+
+1. Le client ouvre `GET /api/ws?gameId=<id>` (cookie de session). Le serveur vérifie l'appartenance à la partie.
+2. Le serveur envoie **`sync.snapshot`** : partie, cartes, scène affichée (carte + jetons + décors), chat, joueurs, présence, et l'état « live » (vue de la carte, musique, tour en cours). Les jetons cachés ne sont jamais envoyés aux joueurs.
+3. Ensuite, chaque modification (faite via l'API REST ou une action WebSocket du MJ) est diffusée sous forme d'**événements idempotents** (remplacement ou suppression d'un objet entier).
+4. En cas de coupure ou de client trop lent, la connexion est fermée ; le client se reconnecte et reçoit un nouvel instantané. Il n'y a donc rien à « rattraper ».
+5. Le serveur envoie un `ping` toutes les 25 s ; le client répond `pong` et considère la connexion morte s'il n'a rien reçu depuis 45 s.
+
+Côté frontend, `src/realtime/` contient le protocole typé (`protocol.ts`), la connexion (`connection.ts`) et le store (`gameStore.ts`, un reducer pur testé). Les composants envoient des commandes et affichent l'état du store ; ils ne modifient jamais eux-mêmes l'état partagé (sauf affichage optimiste pendant un glisser-déposer).
+
+Le protocole est défini à deux endroits qui doivent rester alignés : `backend/internal/realtime/protocol.go` et `frontend/src/realtime/protocol.ts`.
+
 ## CI
 
 Les pushes sur `main` et `master` déclenchent une pipeline GitHub Actions qui exécute :
@@ -43,15 +57,56 @@ npm run lint    # Lint backend (go vet) + frontend (ESLint)
 npm run test    # Tests backend + frontend
 ```
 
-## Déploiement Proxmox
+## Déploiement automatique (Proxmox + runner CI)
 
-Installation en une commande sur un hôte Proxmox VE (création d’un conteneur LXC Debian 12) :
+Chaque push sur `main` lance la CI (sur GitHub) ; si elle passe, le workflow **Deploy** compile l'app sur le runner auto-hébergé et l'envoie sur le conteneur JDR, puis vérifie `/healthz` et revient à la version précédente en cas d'échec.
+
+```
+GitHub (CI) ──ok──> runner « homelab » (build Go + frontend) ──SSH──> CT JDR (/opt/jdr/current)
+```
+
+### 1. Machine runner (une fois, sert à tous les projets)
+
+Créez un CT ou une VM Debian 12 sur le Proxmox (2 vCPU, 4 Go RAM, 30 Go disque conseillés), puis en root :
+
+```bash
+# Jeton : GitHub > dépôt > Settings > Actions > Runners > New self-hosted runner
+bash install-runner.sh LGARRABOS/JDR-web-interface <JETON>
+```
+
+Le script affiche la **clé SSH publique du runner** : gardez-la pour l'étape 2.
+Pour un autre projet, relancez-le avec l'autre dépôt (un runner de plus sur la même machine).
+Astuce : avec une organisation GitHub (gratuite), un seul runner suffit pour tous les dépôts (`bash install-runner.sh <organisation> <JETON>`).
+
+> Dépôt public : dans *Settings > Actions > General*, activez « Require approval for all outside collaborators », pour qu'une pull request externe ne puisse pas exécuter de code sur votre runner.
+
+### 2. Conteneur JDR
+
+Sur l'hôte Proxmox :
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/LGARRABOS/JDR-web-interface/main/deploy/proxmox/jdr.sh)"
 ```
 
-L’application écoute sur le port 4000 dans le CT. Configurez votre reverse proxy Nginx pour proxy vers `http://<IP_CT>:4000` :
+Collez la clé publique du runner quand elle est demandée : le conteneur est alors préparé sans Go ni Node (PostgreSQL, utilisateur `jdr`, service systemd, secrets dans `/etc/jdr/jdr.env`).
+
+### 3. GitHub
+
+- *Settings > Secrets and variables > Actions > Variables* : `JDR_HOST` = IP du conteneur.
+- Onglet *Actions* > **Deploy** > *Run workflow* pour le premier déploiement (ensuite c'est automatique).
+
+### Organisation du conteneur
+
+| Chemin | Contenu |
+| --- | --- |
+| `/opt/jdr/current` | lien vers la version active |
+| `/opt/jdr/releases/<version>` | les 5 dernières versions (binaire + frontend) |
+| `/opt/jdr/data/uploads` | cartes, musiques, fiches… (conservées entre les versions) |
+| `/etc/jdr/jdr.env` | `DATABASE_URL`, `SESSION_SECRET`, `HTTPS`… |
+
+Retour manuel à une version : `ln -sfn /opt/jdr/releases/<version> /opt/jdr/current && systemctl restart jdr`.
+
+### Reverse proxy Nginx
 
 ```nginx
 location / {
@@ -64,7 +119,11 @@ location / {
 }
 ```
 
-Mise à jour (depuis l’hôte Proxmox ou dans le CT) :
+Si le site est en HTTPS, décommentez `HTTPS=true` dans `/etc/jdr/jdr.env` (cookies sécurisés) puis `systemctl restart jdr`.
+
+### Installation sans runner (ancien mode)
+
+Laissez la clé vide dans `jdr.sh` : l'app est compilée dans le conteneur, et se met à jour avec :
 
 ```bash
 pct exec <CTID> -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/LGARRABOS/JDR-web-interface/main/deploy/proxmox/jdr-update.sh)"

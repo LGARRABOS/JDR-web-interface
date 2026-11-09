@@ -174,7 +174,7 @@ export function MapEditor({
     return () => ro.disconnect();
   }, [selectedMap, updateScaleToFit]);
 
-  const handleMapSelect = (map: MapData) => {
+  const handleMapSelect = (map: MapData | null) => {
     setSelectedMap(map);
     setDisplaySize(null);
     setSelectedToken(null);
@@ -924,9 +924,9 @@ export function MapEditor({
                             t.id === selectedToken.id ? { ...t, maxMana: v } : t
                           )
                         );
-                        TokensAPI.update(selectedToken.id, { maxMana: v }).catch(
-                          showApiError
-                        );
+                        TokensAPI.update(selectedToken.id, {
+                          maxMana: v,
+                        }).catch(showApiError);
                       }
                     }}
                     className="w-full rounded bg-fantasy-input-soft px-2 py-1 text-fantasy-text-soft"
