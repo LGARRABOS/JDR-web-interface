@@ -1,0 +1,71 @@
+name: Deploy
+
+# Déploie automatiquement main sur le conteneur JDR après une CI réussie.
+# Le build se fait sur le runner auto-hébergé (label "homelab") ; le conteneur
+# ne reçoit que le binaire et le frontend compilés.
+#
+# À configurer dans GitHub > Settings > Secrets and variables > Actions > Variables :
+#   JDR_HOST : IP du conteneur JDR (ex. 192.168.1.50)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-jdr
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, homelab]
+    env:
+      JDR_HOST: ${{ vars.JDR_HOST }}
+      JDR_USER: jdr
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build backend
+        run: |
+          mkdir -p release
+          cd backend
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../release/server ./cmd/server
+
+      - name: Build frontend
+        run: |
+          npm ci --prefix frontend
+          npm run build --prefix frontend
+          cp -r frontend/dist release/dist
+
+      - name: Package
+        run: |
+          tar -czf jdr-release.tgz -C release .
+          echo "VERSION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
+
+      - name: Deploy
+        run: |
+          test -n "$JDR_HOST" || { echo "Variable JDR_HOST non définie"; exit 1; }
+          mkdir -p ~/.ssh
+          ssh-keygen -F "$JDR_HOST" >/dev/null || ssh-keyscan -H "$JDR_HOST" >> ~/.ssh/known_hosts
+          scp -o BatchMode=yes jdr-release.tgz deploy/release/activate.sh "$JDR_USER@$JDR_HOST:/tmp/"
+          ssh -o BatchMode=yes "$JDR_USER@$JDR_HOST" "bash /tmp/activate.sh $VERSION /tmp/jdr-release.tgz && rm -f /tmp/activate.sh"
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf release jdr-release.tgz
