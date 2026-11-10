@@ -119,10 +119,12 @@ export function useSyncedAudio({
     const ended = () => onEndedRef.current?.();
     audio.addEventListener('timeupdate', onTime);
     audio.addEventListener('durationchange', onDuration);
+    audio.addEventListener('loadedmetadata', onDuration);
     audio.addEventListener('ended', ended);
     return () => {
       audio.removeEventListener('timeupdate', onTime);
       audio.removeEventListener('durationchange', onDuration);
+      audio.removeEventListener('loadedmetadata', onDuration);
       audio.removeEventListener('ended', ended);
     };
   }, []);

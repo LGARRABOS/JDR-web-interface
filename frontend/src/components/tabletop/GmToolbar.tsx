@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Member } from '../../realtime/protocol';
 import { displayNameOf } from './presence';
-import { Cursor, Flag, Focus, Lock, Moon, PlusCircle } from './icons';
+import type { FogShape } from '../../fog/fog';
+import {
+  Cloud,
+  Cursor,
+  Eye,
+  Flag,
+  Focus,
+  Lock,
+  Moon,
+  PlusCircle,
+  Undo,
+} from './icons';
 
-type PopoverId = 'fog' | 'turn' | null;
+export type FogTool = { shape: FogShape; reveal: boolean } | null;
+
+type PopoverId = 'fog' | 'warfog' | 'turn' | null;
 
 interface GmToolbarProps {
   placementActive: boolean;
@@ -18,6 +31,17 @@ interface GmToolbarProps {
   turnPlayerId: number | null;
   onTurn: (playerId: number | null) => void;
   onRecenter: () => void;
+  /** Brouillard de guerre de la carte affichée. */
+  hasMap: boolean;
+  warFogEnabled: boolean;
+  onToggleWarFog: () => void;
+  fogTool: FogTool;
+  onFogTool: (tool: FogTool) => void;
+  onFogUndo: () => void;
+  onFogReset: (revealAll: boolean) => void;
+  canUndoFog: boolean;
+  /** Voir la table comme un joueur. */
+  onPreviewAsPlayer: () => void;
 }
 
 /** Barre d'outils verticale du MJ, à gauche de la carte. */
@@ -34,6 +58,15 @@ export function GmToolbar({
   turnPlayerId,
   onTurn,
   onRecenter,
+  hasMap,
+  warFogEnabled,
+  onToggleWarFog,
+  fogTool,
+  onFogTool,
+  onFogUndo,
+  onFogReset,
+  canUndoFog,
+  onPreviewAsPlayer,
 }: GmToolbarProps) {
   const [open, setOpen] = useState<PopoverId>(null);
   const [radius, setRadius] = useState(String(fogVisionRadius || 120));
@@ -47,6 +80,8 @@ export function GmToolbar({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
+      // Pendant le dessin du brouillard, le menu reste ouvert.
+      if (open === 'warfog' && fogTool) return;
       if (rootRef.current && !rootRef.current.contains(e.target as Node))
         setOpen(null);
     };
@@ -57,6 +92,12 @@ export function GmToolbar({
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
+  }, [open, fogTool]);
+
+  // Fermer le menu du brouillard range l'outil de dessin.
+  useEffect(() => {
+    if (open !== 'warfog' && fogTool) onFogTool(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const toggle = (id: PopoverId) => setOpen((cur) => (cur === id ? null : id));
@@ -111,6 +152,18 @@ export function GmToolbar({
         <button
           type="button"
           className="icon-btn"
+          aria-label="Brouillard de guerre"
+          title={hasMap ? 'Brouillard de guerre' : 'Affichez une carte'}
+          disabled={!hasMap}
+          aria-pressed={warFogEnabled}
+          aria-expanded={open === 'warfog'}
+          onClick={() => toggle('warfog')}
+        >
+          <Cloud />
+        </button>
+        <button
+          type="button"
+          className="icon-btn"
           aria-label={
             tokensLocked
               ? 'Débloquer les déplacements'
@@ -146,6 +199,18 @@ export function GmToolbar({
           onClick={onRecenter}
         >
           <Focus />
+        </button>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Voir comme un joueur"
+          title="Voir comme un joueur"
+          onClick={() => {
+            setOpen(null);
+            onPreviewAsPlayer();
+          }}
+        >
+          <Eye />
         </button>
       </nav>
 
@@ -189,6 +254,136 @@ export function GmToolbar({
                 <span className="text-fantasy-muted">px</span>
               </span>
             </label>
+          )}
+        </div>
+      )}
+
+      {open === 'warfog' && (
+        <div
+          className="glass rounded-2xl p-4 w-72 flex flex-col gap-3"
+          role="dialog"
+          aria-label="Brouillard de guerre"
+        >
+          <p className="font-heading font-semibold">Brouillard de guerre</p>
+          <label className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+            Actif sur cette carte
+            <input
+              type="checkbox"
+              checked={warFogEnabled}
+              onChange={onToggleWarFog}
+              className="w-5 h-5 accent-fantasy-accent"
+            />
+          </label>
+          {!warFogEnabled ? (
+            <p className="text-sm text-fantasy-muted leading-snug">
+              La carte est cachée aux joueurs ; vous révélez les zones au fur et
+              à mesure de l&apos;exploration.
+            </p>
+          ) : (
+            <>
+              <div
+                className="grid grid-cols-2 gap-1.5"
+                role="group"
+                aria-label="Outil"
+              >
+                {[
+                  { reveal: true, label: 'Révéler' },
+                  { reveal: false, label: 'Cacher' },
+                ].map((o) => {
+                  const active = fogTool?.reveal === o.reveal;
+                  return (
+                    <button
+                      key={o.label}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() =>
+                        onFogTool(
+                          active
+                            ? null
+                            : {
+                                reveal: o.reveal,
+                                shape: fogTool?.shape ?? 'rect',
+                              }
+                        )
+                      }
+                      className={`h-9 rounded-lg text-sm ${
+                        active
+                          ? 'bg-fantasy-accent text-fantasy-bg font-bold'
+                          : 'bg-fantasy-input-soft hover:bg-fantasy-input-hover'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div
+                className="grid grid-cols-2 gap-1.5"
+                role="group"
+                aria-label="Forme"
+              >
+                {(
+                  [
+                    { shape: 'rect', label: 'Rectangle' },
+                    { shape: 'ellipse', label: 'Ellipse' },
+                  ] as const
+                ).map((o) => {
+                  const active = (fogTool?.shape ?? 'rect') === o.shape;
+                  return (
+                    <button
+                      key={o.shape}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() =>
+                        onFogTool({
+                          reveal: fogTool?.reveal ?? true,
+                          shape: o.shape,
+                        })
+                      }
+                      className={`h-8 rounded-lg text-[13px] border ${
+                        active
+                          ? 'border-fantasy-accent text-fantasy-accent'
+                          : 'border-fantasy-border-soft text-fantasy-muted hover:text-fantasy-text'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[13px] text-fantasy-muted leading-snug">
+                {fogTool
+                  ? 'Glissez sur la carte pour dessiner la zone.'
+                  : 'Choisissez « Révéler » ou « Cacher », puis glissez sur la carte.'}{' '}
+                Vous voyez le brouillard en transparence.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={onFogUndo}
+                  disabled={!canUndoFog}
+                  className="h-9 rounded-lg bg-fantasy-input-soft hover:bg-fantasy-input-hover text-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
+                >
+                  <Undo size={15} /> Annuler la dernière zone
+                </button>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onFogReset(true)}
+                    className="h-9 rounded-lg bg-fantasy-input-soft hover:bg-fantasy-input-hover text-sm"
+                  >
+                    Tout révéler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onFogReset(false)}
+                    className="h-9 rounded-lg bg-fantasy-input-soft hover:bg-fantasy-input-hover text-sm"
+                  >
+                    Tout cacher
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}

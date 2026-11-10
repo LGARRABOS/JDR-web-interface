@@ -286,16 +286,38 @@ Pour afficher le cercle de portée : cliquez sur un jeton PJ ayant une portée >
   },
   {
     id: 'zone-obscurite',
-    title: "Zone d'obscurité (brouillard de guerre)",
+    title: "Zone d'obscurité (vision autour des personnages)",
     category: 'Maître du Jeu',
     tags: ['carte', 'MJ', 'vision'],
-    content: `La zone d'obscurité simule le brouillard de guerre (nuit, grotte, vision limitée). Disponible pour toutes les parties.
+    content: `La zone d'obscurité simule une vision limitée (nuit, grotte). Disponible pour toutes les parties.
 
-Dans les paramètres de la carte (colonne de droite) : cochez "Zone d'obscurité (nuit/grotte)". Par défaut, un rayon de 120 px est appliqué autour de chaque jeton de joueur.
+Dans la barre d'outils du MJ, à gauche de la carte, cliquez sur la lune puis cochez « Activée ». Par défaut, un rayon de 120 px est appliqué autour de chaque jeton de joueur ; vous pouvez l'ajuster.
 
-Les joueurs ne voient que la zone éclairée autour des jetons PJ. Le reste de la carte est masqué. Le MJ voit toujours la carte entière.
+Les joueurs ne voient que la zone éclairée autour des personnages, ennemis compris. Le MJ voit toujours la carte entière.
 
-Vous pouvez ajuster le rayon (40 à 300 px) pour adapter la portée de vision.`,
+Combinée au brouillard de guerre, la vision perce le brouillard autour des personnages.`,
+  },
+  {
+    id: 'brouillard-de-guerre',
+    title: 'Brouillard de guerre',
+    category: 'Maître du Jeu',
+    tags: ['carte', 'MJ', 'vision', 'exploration'],
+    content: `Le brouillard de guerre cache la carte aux joueurs ; le MJ la révèle au fur et à mesure de l'exploration. Il se règle carte par carte.
+
+Dans la barre d'outils du MJ, cliquez sur le nuage puis cochez « Actif sur cette carte » : toute la carte est alors cachée aux joueurs. Choisissez « Révéler » (ou « Cacher »), la forme (rectangle ou ellipse), puis glissez sur la carte pour dessiner la zone. Les zones s'appliquent dans l'ordre : une zone « Cacher » dessinée par-dessus une zone révélée la recouvre.
+
+« Annuler la dernière zone » retire la dernière zone dessinée ; « Tout révéler » et « Tout cacher » repartent de zéro.
+
+Le MJ voit le brouillard en transparence. Les ennemis situés sous le brouillard ne sont ni visibles ni cliquables pour les joueurs ; les personnages restent toujours visibles.`,
+  },
+  {
+    id: 'vue-joueur',
+    title: 'Voir la table comme un joueur',
+    category: 'Maître du Jeu',
+    tags: ['MJ', 'vision'],
+    content: `Le bouton en forme d'œil, en bas de la barre d'outils du MJ, affiche la table exactement comme vos joueurs la voient : jetons cachés absents, brouillard opaque, PV des ennemis masqués, fiches des monstres vaincus réduites aux rubriques visibles.
+
+Dans ce mode, vous ne pouvez rien modifier sur la carte. Cliquez sur « Revenir en MJ » (ou appuyez sur Échap) pour reprendre la main.`,
   },
   {
     id: 'fiche-gemma',
@@ -445,7 +467,7 @@ Les éléments placés dans l'éditeur font partie de la carte et sont visibles 
     tags: ['jetons', 'MJ', 'combat'],
     content: `Lorsqu'un ennemi ou PNJ est vaincu, le MJ peut le marquer automatiquement en mettant ses PV à 0 : sélectionnez le jeton et réglez les PV actuels sur 0. Le jeton passe alors en état "MORT".
 
-Un jeton MORT affiche une icône 💀 et le texte "(vaincu)". Le loot défini dans l'éditeur de monstre devient visible pour les joueurs : ils peuvent double-cliquer sur le jeton pour consulter la fiche du monstre, y compris le loot.
+Un jeton MORT affiche une icône 💀 et le texte "(vaincu)". Les joueurs peuvent alors ouvrir la fiche du monstre (bouton « Fiche » ou double-clic sur le jeton). Ils n'y voient que les rubriques cochées par le MJ dans « Visible par les joueurs une fois vaincu » : par défaut le nom, l'image et la description. Les PV et le mana des ennemis ne sont jamais montrés aux joueurs.
 
 Cela permet de gérer les récompenses de combat sans révéler le loot avant la mort de la créature. Le MJ peut supprimer le jeton pour le retirer de la carte.`,
   },

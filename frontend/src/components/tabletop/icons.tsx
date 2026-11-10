@@ -165,3 +165,14 @@ export const Scroll = (p: IconProps) => (
     <path d="M8 21h11a2 2 0 002-2v-2H10v2a2 2 0 01-2 2zm0 0a2 2 0 01-2-2V5a2 2 0 00-2-2h11a2 2 0 012 2v12" />
   </Svg>
 );
+export const Cloud = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z" />
+  </Svg>
+);
+export const Undo = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 14L4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+  </Svg>
+);

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
   ElementsAPI,
+  FogAPI,
   GamesAPI,
   MessagesAPI,
   RollsAPI,
@@ -18,11 +19,16 @@ import {
 import { CharacterSheetPanel } from '../components/CharacterSheetPanel';
 import { DiceRollOverlay } from '../components/DiceRollOverlay';
 import { TopBar } from '../components/tabletop/TopBar';
-import { GmToolbar } from '../components/tabletop/GmToolbar';
+import { GmToolbar, type FogTool } from '../components/tabletop/GmToolbar';
+import {
+  elementForPlayers,
+  tokensForPlayers,
+} from '../components/tabletop/playerView';
 import { SidePanel, type SidePanelTab } from '../components/tabletop/SidePanel';
 import { ChatFeed } from '../components/tabletop/ChatFeed';
 import { DiceBar } from '../components/tabletop/DiceBar';
 import { TokenQuickCard } from '../components/tabletop/TokenQuickCard';
+import { MonsterSheetView } from '../components/tabletop/MonsterSheetView';
 import { MiniPlayer, MusicTab } from '../components/tabletop/MusicControls';
 import { useAmbientMusic } from '../hooks/useAmbientMusic';
 import { useGameSession } from '../realtime/useGameSession';
@@ -270,14 +276,28 @@ export function TabletopPage() {
     [currentMap, placementData, fail]
   );
 
+  const [playerSheet, setPlayerSheet] = useState<GameElementFull | null>(null);
+  // Vue « comme un joueur » : le MJ voit la table telle que ses joueurs la voient.
+  const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
+  const viewAsGM = isGM && !previewAsPlayer;
+  const [fogTool, setFogTool] = useState<FogTool>(null);
+  const fog = scene?.fog ?? null;
+
   const handleTokenDoubleClick = useCallback(
     (t: Token) => {
       if ((t.kind !== 'PNJ' && t.kind !== 'MORT') || t.elementId == null)
         return;
+      // Les joueurs ne consultent la fiche qu'une fois le monstre vaincu.
+      if (!viewAsGM && t.kind !== 'MORT') return;
       ElementsAPI.get(gameId, t.elementId)
         .then(({ data }) => {
           const el = (data as { element?: GameElementFull }).element;
           if (!el) return;
+          if (!viewAsGM) {
+            // En vue joueur, le MJ reçoit la fiche complète : on la filtre ici.
+            setPlayerSheet(isGM ? elementForPlayers(el) : el);
+            return;
+          }
           setMonsterView({
             element: el,
             tokenData: {
@@ -290,9 +310,68 @@ export function TabletopPage() {
             tokenId: t.id,
           });
         })
-        .catch(() => setMonsterView(null));
+        .catch((e) => {
+          setMonsterView(null);
+          if (!isGM) fail(e, 'Fiche indisponible');
+        });
     },
-    [gameId]
+    [gameId, isGM, viewAsGM, fail]
+  );
+
+  // --- Brouillard de guerre ------------------------------------------------
+
+  const currentMapId = scene?.map.id;
+  const toggleWarFog = useCallback(() => {
+    if (!currentMapId) return;
+    FogAPI.setEnabled(currentMapId, !fog?.enabled).catch((e) =>
+      fail(e, 'Brouillard non modifié')
+    );
+  }, [currentMapId, fog?.enabled, fail]);
+
+  const handleFogDraw = useCallback(
+    (zone: Parameters<typeof FogAPI.addPatch>[1]) => {
+      if (!currentMapId) return;
+      FogAPI.addPatch(currentMapId, zone).catch((e) =>
+        fail(e, 'Zone non enregistrée')
+      );
+    },
+    [currentMapId, fail]
+  );
+
+  const handleFogUndo = useCallback(() => {
+    if (!currentMapId) return;
+    FogAPI.undo(currentMapId).catch((e) => fail(e, 'Annulation impossible'));
+  }, [currentMapId, fail]);
+
+  const handleFogReset = useCallback(
+    (revealAll: boolean) => {
+      if (!currentMapId) return;
+      FogAPI.reset(currentMapId, revealAll).catch((e) =>
+        fail(e, 'Brouillard non modifié')
+      );
+    },
+    [currentMapId, fail]
+  );
+
+  // Changer de carte range l'outil de dessin.
+  useEffect(() => setFogTool(null), [currentMapId]);
+
+  // Échap quitte la vue joueur.
+  useEffect(() => {
+    if (!previewAsPlayer) return;
+    const onKey = (e: KeyboardEvent) =>
+      e.key === 'Escape' && setPreviewAsPlayer(false);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [previewAsPlayer]);
+
+  const handlePlayerFieldsChange = useCallback(
+    (elementId: number, playerFields: string[]) => {
+      ElementsAPI.update(gameId, elementId, { playerFields }).catch((e) =>
+        fail(e, 'Réglage non enregistré')
+      );
+    },
+    [gameId, fail]
   );
 
   // --- Chat, dés, réglages -----------------------------------------------
@@ -543,10 +622,13 @@ export function TabletopPage() {
       <div className="absolute inset-0 flex">
         <MapCanvas
           map={currentMap}
-          tokens={tokens}
+          tokens={previewAsPlayer ? tokensForPlayers(tokens) : tokens}
           gameId={gameId}
           mapElements={mapElements}
-          isGM={isGM}
+          isGM={viewAsGM}
+          fog={fog}
+          fogTool={viewAsGM ? fogTool : null}
+          onFogDraw={handleFogDraw}
           currentUserId={user?.id ?? 0}
           mapView={mapView}
           tokensMovementLocked={game.tokenMovementLocked}
@@ -560,7 +642,9 @@ export function TabletopPage() {
           onTokenMove={handleTokenMove}
           onTokenDragStart={handleTokenDragStart}
           onTokenDragEnd={handleTokenDragEnd}
-          onTokenCreate={isGM && placementData ? handleTokenCreate : undefined}
+          onTokenCreate={
+            viewAsGM && placementData ? handleTokenCreate : undefined
+          }
           onTokenSelect={(t) => setSelectedTokenId(t?.id ?? null)}
           onTokenDoubleClick={handleTokenDoubleClick}
           selectedToken={selectedToken}
@@ -569,12 +653,15 @@ export function TabletopPage() {
             <TokenQuickCard
               token={t}
               displayName={name}
-              isGM={isGM}
-              canEdit={isGM || (t.kind === 'PJ' && t.ownerUserId === user?.id)}
+              isGM={viewAsGM}
+              canEdit={
+                viewAsGM || (t.kind === 'PJ' && t.ownerUserId === user?.id)
+              }
               onUpdate={handleTokenUpdate}
               onDelete={handleTokenDelete}
               onOpenSheet={handleTokenDoubleClick}
               onClose={close}
+              manaLabel={game.isGemma ? 'Aether' : 'Mana'}
             />
           )}
           diceRollOverlay={
@@ -624,7 +711,22 @@ export function TabletopPage() {
         </div>
       )}
 
-      {isGM && (
+      {previewAsPlayer && (
+        <div className="glass absolute top-20 left-1/2 -translate-x-1/2 z-40 rounded-xl pl-4 pr-1.5 py-1.5 flex items-center gap-3 text-sm">
+          <span>
+            <strong>Vue joueur</strong> : vous voyez la table comme vos joueurs.
+          </span>
+          <button
+            type="button"
+            onClick={() => setPreviewAsPlayer(false)}
+            className="h-8 px-3 rounded-lg bg-fantasy-accent text-fantasy-bg font-semibold"
+          >
+            Revenir en MJ
+          </button>
+        </div>
+      )}
+
+      {viewAsGM && (
         <GmToolbar
           placementActive={placementData != null}
           enemyPanelOpen={panelOpen && activeTab === 'tokens'}
@@ -646,6 +748,20 @@ export function TabletopPage() {
           turnPlayerId={live.turnPlayerId}
           onTurn={handleTurnHighlight}
           onRecenter={() => setFitSignal((n) => n + 1)}
+          hasMap={currentMap != null}
+          warFogEnabled={!!fog?.enabled}
+          onToggleWarFog={toggleWarFog}
+          fogTool={fogTool}
+          onFogTool={setFogTool}
+          canUndoFog={(fog?.patches.length ?? 0) > 0}
+          onFogUndo={handleFogUndo}
+          onFogReset={handleFogReset}
+          onPreviewAsPlayer={() => {
+            setPlacementData(null);
+            setFogTool(null);
+            setSelectedTokenId(null);
+            setPreviewAsPlayer(true);
+          }}
         />
       )}
 
@@ -691,6 +807,18 @@ export function TabletopPage() {
               ? (se) => handleMonsterStatusUpdate(monsterView.tokenId, se)
               : undefined
           }
+          onPlayerFieldsChange={
+            isGM
+              ? (fields) =>
+                  handlePlayerFieldsChange(monsterView.element.id, fields)
+              : undefined
+          }
+        />
+      )}
+      {playerSheet && (
+        <MonsterSheetView
+          element={playerSheet}
+          onClose={() => setPlayerSheet(null)}
         />
       )}
     </div>

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"database/sql"
 	"encoding/json"
+	"math"
 
 	"jdr-backend/internal/domain"
 	"jdr-backend/internal/realtime"
@@ -86,9 +87,23 @@ func (s *Server) listMapTokens(mapID int64, forGM bool) ([]*domain.Token, error)
 		if err != nil {
 			return nil, err
 		}
+		if !forGM {
+			t = tokenForPlayers(t)
+		}
 		tokens = append(tokens, t)
 	}
 	return tokens, rows.Err()
+}
+
+// tokenForPlayers retire ce que les joueurs ne doivent pas voir : les PV et le
+// mana des ennemis restent connus du seul MJ. Les personnages sont inchangés.
+func tokenForPlayers(t *domain.Token) *domain.Token {
+	if t == nil || t.Kind == "PJ" {
+		return t
+	}
+	c := *t
+	c.Hp, c.MaxHp, c.Mana, c.MaxMana = nil, nil, nil, nil
+	return &c
 }
 
 // ensurePlayerToken crée le jeton PJ d'un joueur sur une carte s'il n'existe pas encore.
@@ -109,13 +124,26 @@ func (s *Server) ensurePlayerToken(mapID, gameID, userID int64) *domain.Token {
 		name = charName.String
 	}
 	color := tokenColors[int(userID)%len(tokenColors)]
+	// Le nouveau jeton reprend l'apparence et les jauges du dernier jeton du
+	// personnage dans la partie (image, taille, PV, aether…), et apparaît au
+	// centre de la carte.
 	var id int64
 	err := s.db.QueryRow(`
-		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, x, y, visible_to_players)
-		SELECT ?::bigint, ?::bigint, ?::bigint, 'PJ', ?::text, ?::text, 100, 100, 1
-		WHERE NOT EXISTS (SELECT 1 FROM tokens WHERE map_id = ? AND owner_user_id = ? AND kind = 'PJ')
+		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players,
+		                    hp, max_hp, mana, max_mana, width, height, icon_pos_x, icon_pos_y, icon_scale, attack_range)
+		SELECT ?::bigint, ?::bigint, ?::bigint, 'PJ', ?::text, COALESCE(p.color, ?::text), p.icon_url,
+		       m.width / 2.0, m.height / 2.0, 1,
+		       p.hp, p.max_hp, p.mana, p.max_mana, p.width, p.height, p.icon_pos_x, p.icon_pos_y, p.icon_scale, p.attack_range
+		FROM maps m
+		LEFT JOIN LATERAL (
+			SELECT t.* FROM tokens t JOIN maps tm ON tm.id = t.map_id
+			WHERE tm.game_id = ? AND t.kind = 'PJ' AND t.owner_user_id = ?
+			ORDER BY t.id DESC LIMIT 1
+		) p ON true
+		WHERE m.id = ?
+		  AND NOT EXISTS (SELECT 1 FROM tokens WHERE map_id = ? AND owner_user_id = ? AND kind = 'PJ')
 		RETURNING id`,
-		mapID, userID, userID, name, color, mapID, userID,
+		mapID, userID, userID, name, color, gameID, userID, mapID, mapID, userID,
 	).Scan(&id)
 	if err != nil {
 		// sql.ErrNoRows : le jeton existe déjà ; violation d'unicité : créé en parallèle.
@@ -151,6 +179,88 @@ func (s *Server) ensurePlayerTokensForMap(mapID, gameID int64) []*domain.Token {
 	return created
 }
 
+// syncPlayerTokens recopie PV, mana et taille d'un jeton PJ sur les jetons du
+// même personnage posés sur les autres cartes de la partie.
+func (s *Server) syncPlayerTokens(gameID int64, src *domain.Token) {
+	_, _ = s.db.Exec(`
+		UPDATE tokens t
+		SET hp = ?, max_hp = ?, mana = ?, max_mana = ?, width = ?, height = ?
+		FROM maps m
+		WHERE t.map_id = m.id AND m.game_id = ? AND t.kind = 'PJ' AND t.owner_user_id = ? AND t.id != ?`,
+		ptrValue(src.Hp), ptrValue(src.MaxHp), ptrValue(src.Mana), ptrValue(src.MaxMana),
+		ptrValue(src.Width), ptrValue(src.Height), gameID, *src.OwnerUserID, src.ID)
+}
+
+// ptrValue convertit un *int en valeur SQL (NULL si absent).
+func ptrValue(p *int) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+// spawnPositions répartit n jetons en grille serrée autour du centre de la carte.
+// Le centre tombe toujours dans l'image, même quand elle est affichée avec des
+// bandes (rapport largeur/hauteur différent de celui de la carte).
+func spawnPositions(n, width, height, gridSize int) [][2]float64 {
+	if n <= 0 {
+		return nil
+	}
+	spacing := float64(gridSize)
+	if spacing < 60 {
+		spacing = 60
+	}
+	cols := int(math.Ceil(math.Sqrt(float64(n))))
+	rows := (n + cols - 1) / cols
+	// Ne pas dépasser la carte si elle est petite.
+	if maxSpacing := float64(width) / float64(cols+1); spacing > maxSpacing && maxSpacing > 0 {
+		spacing = maxSpacing
+	}
+	if maxSpacing := float64(height) / float64(rows+1); spacing > maxSpacing && maxSpacing > 0 {
+		spacing = maxSpacing
+	}
+	cx, cy := float64(width)/2, float64(height)/2
+	out := make([][2]float64, 0, n)
+	for i := 0; i < n; i++ {
+		row, col := i/cols, i%cols
+		inRow := cols
+		if row == rows-1 && n%cols != 0 {
+			inRow = n % cols // dernière ligne incomplète : centrée elle aussi
+		}
+		x := cx + (float64(col)-float64(inRow-1)/2)*spacing
+		y := cy + (float64(row)-float64(rows-1)/2)*spacing
+		out = append(out, [2]float64{x, y})
+	}
+	return out
+}
+
+// recenterPlayerTokens regroupe les jetons des joueurs au centre de la carte.
+// Appelé à chaque affichage d'une carte : les monstres et décors gardent leur
+// place, les personnages arrivent ensemble au milieu.
+func (s *Server) recenterPlayerTokens(mapID int64) {
+	m, err := s.getMap(mapID)
+	if err != nil {
+		return
+	}
+	rows, err := s.db.Query(
+		"SELECT id FROM tokens WHERE map_id = ? AND kind = 'PJ' ORDER BY owner_user_id, id", mapID,
+	)
+	if err != nil {
+		return
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	rows.Close()
+	for i, p := range spawnPositions(len(ids), m.Width, m.Height, m.GridSize) {
+		_, _ = s.db.Exec("UPDATE tokens SET x = ?, y = ? WHERE id = ?", p[0], p[1], ids[i])
+	}
+}
+
 // gamesShowingMap retourne les parties concernées par une carte : sa partie
 // d'origine et toutes les parties qui l'affichent (cartes partagées entre parties).
 func (s *Server) gamesShowingMap(mapID int64) []int64 {
@@ -181,10 +291,14 @@ func (s *Server) broadcastToken(eventType string, t *domain.Token) {
 		return
 	}
 	deleted := map[string]int64{"id": t.ID, "mapId": t.MapID}
+	public := tokenForPlayers(t)
 	for _, gameID := range s.gamesShowingMap(t.MapID) {
 		s.hub.BroadcastFunc(gameID, func(m realtime.Member) (string, any, bool) {
-			if m.IsGM() || t.VisibleToPlayers {
+			if m.IsGM() {
 				return eventType, t, true
+			}
+			if t.VisibleToPlayers {
+				return eventType, public, true
 			}
 			return "token.deleted", deleted, true
 		})

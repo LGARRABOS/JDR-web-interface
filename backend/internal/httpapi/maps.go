@@ -51,9 +51,11 @@ func (s *Server) registerMapRoutes() {
 	s.mux.Route("/api/maps/{mapId}/fog", func(r chi.Router) {
 		r.Use(s.requireAuth)
 		r.Use(s.requireMapAccess)
-		r.Get("/", s.handleListFog)
-		r.With(s.requireGM).Post("/reveal", s.handleRevealFog)
-		r.With(s.requireGM).Post("/hide", s.handleHideFog)
+		r.Get("/", s.handleGetFog)
+		r.With(s.requireGM).Post("/patches", s.handleAddFogPatch)
+		r.With(s.requireGM).Post("/undo", s.handleUndoFog)
+		r.With(s.requireGM).Post("/reset", s.handleResetFog)
+		r.With(s.requireGM).Post("/enabled", s.handleSetFogEnabled)
 	})
 }
 
@@ -462,112 +464,4 @@ func (s *Server) handleDeleteMap(w http.ResponseWriter, r *http.Request) {
 		s.hub.Broadcast(gid, "map.deleted", map[string]interface{}{"mapId": mapID})
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Carte supprimée"})
-}
-
-func (s *Server) handleListFog(w http.ResponseWriter, r *http.Request) {
-	mapIDStr := chi.URLParam(r, "mapId")
-	mapID, err := strconv.ParseInt(mapIDStr, 10, 64)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
-		return
-	}
-
-	rows, err := s.db.Query(
-		"SELECT id, map_id, shape_type, shape_data, revealed FROM fog_patches WHERE map_id = ?",
-		mapID,
-	)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
-		return
-	}
-	defer rows.Close()
-
-	var patches []*domain.FogPatch
-	for rows.Next() {
-		var p domain.FogPatch
-		var revealed int
-		if err := rows.Scan(&p.ID, &p.MapID, &p.ShapeType, &p.ShapeData, &revealed); err != nil {
-			continue
-		}
-		p.Revealed = revealed == 1
-		patches = append(patches, &p)
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{"patches": patches})
-}
-
-type fogReq struct {
-	ShapeType string `json:"shapeType"`
-	ShapeData string `json:"shapeData"`
-}
-
-func (s *Server) handleRevealFog(w http.ResponseWriter, r *http.Request) {
-	mapIDStr := chi.URLParam(r, "mapId")
-	mapID, err := strconv.ParseInt(mapIDStr, 10, 64)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
-		return
-	}
-
-	var req fogReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Requête invalide"})
-		return
-	}
-	if req.ShapeType == "" {
-		req.ShapeType = "rect"
-	}
-	if req.ShapeData == "" {
-		req.ShapeData = "{}"
-	}
-
-	var gameID int64
-	_ = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
-
-	var id int64
-	err = s.db.QueryRow(
-		"INSERT INTO fog_patches (map_id, shape_type, shape_data, revealed) VALUES (?, ?, ?, 1) RETURNING id",
-		mapID, req.ShapeType, req.ShapeData,
-	).Scan(&id)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
-		return
-	}
-
-	p := &domain.FogPatch{ID: id, MapID: mapID, ShapeType: req.ShapeType, ShapeData: req.ShapeData, Revealed: true}
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"patch": p})
-	s.hub.Broadcast(gameID, "fog.updated", p)
-}
-
-func (s *Server) handleHideFog(w http.ResponseWriter, r *http.Request) {
-	mapIDStr := chi.URLParam(r, "mapId")
-	mapID, err := strconv.ParseInt(mapIDStr, 10, 64)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
-		return
-	}
-
-	var req struct {
-		PatchID int64 `json:"patchId"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PatchID == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "patchId requis"})
-		return
-	}
-
-	var gameID int64
-	err = s.db.QueryRow("SELECT game_id FROM maps WHERE id = ?", mapID).Scan(&gameID)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Carte introuvable"})
-		return
-	}
-
-	_, err = s.db.Exec("UPDATE fog_patches SET revealed = 0 WHERE id = ? AND map_id = ?", req.PatchID, mapID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]string{"message": "ok"})
-	s.hub.Broadcast(gameID, "fog.updated", map[string]interface{}{"patchId": req.PatchID, "revealed": false})
 }

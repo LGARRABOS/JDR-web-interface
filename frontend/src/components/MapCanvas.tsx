@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { FogDrawOverlay, FogLayer } from './FogLayer';
+import { isVisibleToPlayers, type FogShape, type FogState } from '../fog/fog';
 import type {
   MapData,
   MapElement,
@@ -112,6 +114,18 @@ interface MapCanvasProps {
   onTokenDoubleClick?: (token: Token) => void;
   selectedToken?: Token | null;
   diceRollOverlay?: React.ReactNode;
+  /** Brouillard de guerre de la carte. */
+  fog?: FogState | null;
+  /** Outil de brouillard actif (MJ) : glisser sur la carte dessine une zone. */
+  fogTool?: { shape: FogShape; reveal: boolean } | null;
+  onFogDraw?: (zone: {
+    shape: FogShape;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    reveal: boolean;
+  }) => void;
 }
 
 export function MapCanvas({
@@ -140,6 +154,9 @@ export function MapCanvas({
   onTokenDoubleClick,
   selectedToken = null,
   diceRollOverlay,
+  fog = null,
+  fogTool = null,
+  onFogDraw,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -166,30 +183,38 @@ export function MapCanvas({
   const [inspectedTokenId, setInspectedTokenId] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  // Taille réelle de l'image, mémorisée avec l'URL à laquelle elle correspond :
+  // sans ça, la taille de la carte précédente restait utilisée après un
+  // changement de carte (placement et déplacement des jetons décalés).
   const [imageNaturalSize, setImageNaturalSize] = useState<{
+    src: string;
     w: number;
     h: number;
   } | null>(null);
 
   useEffect(() => {
-    if (!map?.imageUrl) {
-      setImageNaturalSize(null);
-      return;
-    }
+    const src = map?.imageUrl;
+    if (!src) return;
+    let cancelled = false;
     const img = new Image();
     img.onload = () => {
-      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-        setImageNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+      if (!cancelled && img.naturalWidth > 0 && img.naturalHeight > 0) {
+        setImageNaturalSize({ src, w: img.naturalWidth, h: img.naturalHeight });
       }
     };
-    img.src = map.imageUrl;
+    img.src = src;
     return () => {
-      img.src = '';
+      cancelled = true;
+      img.onload = null;
     };
-  }, [map?.id, map?.imageUrl]);
+  }, [map?.imageUrl]);
 
-  const imgW = imageNaturalSize?.w ?? map?.width ?? 1;
-  const imgH = imageNaturalSize?.h ?? map?.height ?? 1;
+  const naturalSize =
+    imageNaturalSize && imageNaturalSize.src === map?.imageUrl
+      ? imageNaturalSize
+      : null;
+  const imgW = naturalSize?.w ?? map?.width ?? 1;
+  const imgH = naturalSize?.h ?? map?.height ?? 1;
 
   const canMove = useCallback(
     (t: Token) => {
@@ -200,8 +225,16 @@ export function MapCanvas({
     [isGM, currentUserId, tokensMovementLocked]
   );
 
-  const visibleTokens = tokens.filter((t) => isGM || t.visibleToPlayers);
   const pjTokens = tokens.filter((t) => t.kind === 'PJ');
+  // Côté joueur, un jeton caché par le MJ ou sous le brouillard n'est pas
+  // affiché (ni cliquable). Les personnages restent toujours visibles.
+  const visibleTokens = tokens.filter(
+    (t) =>
+      isGM ||
+      (t.visibleToPlayers &&
+        (t.kind === 'PJ' ||
+          isVisibleToPlayers(fog, fogVisionRadius, pjTokens, t.x, t.y)))
+  );
   const fogMaskId = `fog-mask-${map?.id ?? 0}`;
 
   const mapId = map?.id;
@@ -612,38 +645,40 @@ export function MapCanvas({
                 </svg>
               </div>
             )}
-          {isGM === false && fogVisionRadius > 0 && pjTokens.length > 0 && (
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{ width: map.width, height: map.height, zIndex: 5 }}
-            >
-              <svg
-                width={map.width}
-                height={map.height}
-                className="absolute inset-0 w-full h-full"
-              >
-                <defs>
-                  <mask id={fogMaskId}>
-                    <rect width={map.width} height={map.height} fill="white" />
-                    {pjTokens.map((t) => (
-                      <circle
-                        key={t.id}
-                        cx={t.x}
-                        cy={t.y}
-                        r={fogVisionRadius}
-                        fill="black"
-                      />
-                    ))}
-                  </mask>
-                </defs>
-                <rect
-                  width={map.width}
-                  height={map.height}
-                  style={{ fill: 'rgb(var(--c-bg))' }}
-                  mask={`url(#${fogMaskId})`}
-                />
-              </svg>
-            </div>
+          <FogLayer
+            mapW={map.width}
+            mapH={map.height}
+            content={getImageContentRect(map.width, map.height, imgW, imgH)}
+            fog={fog}
+            visionRadius={isGM ? 0 : fogVisionRadius}
+            characters={pjTokens}
+            opacity={isGM ? 0.5 : 1}
+            // Joueurs : au-dessus des ennemis, sous les personnages (z 14).
+            zIndex={isGM ? 5 : 12}
+            maskId={fogMaskId}
+          />
+          {isGM && fogTool && onFogDraw && (
+            <FogDrawOverlay
+              mapW={map.width}
+              mapH={map.height}
+              content={getImageContentRect(map.width, map.height, imgW, imgH)}
+              shape={fogTool.shape}
+              reveal={fogTool.reveal}
+              toMap={(cx, cy) => {
+                const rect = mapContainerRef.current?.getBoundingClientRect();
+                if (!rect) return { x: 0, y: 0 };
+                return clientToMapCoords(
+                  cx,
+                  cy,
+                  rect,
+                  map.width,
+                  map.height,
+                  imgW,
+                  imgH
+                );
+              }}
+              onDraw={onFogDraw}
+            />
           )}
           {visibleTokens.map((t) => {
             const displayName =
@@ -675,7 +710,7 @@ export function MapCanvas({
                   transform: 'translate(-50%, -50%)',
                   minWidth: t.width ?? 56,
                   minHeight: t.height ?? 56,
-                  zIndex: 10,
+                  zIndex: t.kind === 'PJ' ? 14 : 10,
                 }}
                 onMouseDown={(e) => {
                   e.preventDefault();

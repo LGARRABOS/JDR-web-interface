@@ -222,6 +222,10 @@ func AutoMigrate(db *sql.DB) error {
 		`ALTER TABLE tokens ADD COLUMN icon_scale REAL DEFAULT 1`,
 		`ALTER TABLE tokens ADD COLUMN attack_range INTEGER`,
 		`ALTER TABLE tokens ADD COLUMN status_effects JSONB`,
+		`ALTER TABLE game_elements ADD COLUMN player_fields JSONB`,
+		`ALTER TABLE maps ADD COLUMN fog_enabled INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE fog_patches DROP CONSTRAINT IF EXISTS fog_patches_shape_type_check`,
+		`ALTER TABLE fog_patches ADD CONSTRAINT fog_patches_shape_type_check CHECK (shape_type IN ('rect','polygon','ellipse'))`,
 	}
 
 	for _, stmt := range orderedStmts {

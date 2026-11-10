@@ -86,6 +86,9 @@ type GameElement struct {
 	IconPosX    int      `json:"iconPosX,omitempty"`  // 0-100, position horizontale du crop
 	IconPosY    int      `json:"iconPosY,omitempty"`  // 0-100, position verticale du crop
 	IconScale   float64  `json:"iconScale,omitempty"` // zoom de l'image (1 = 100%, 1.5 = 150%)
+	// Rubriques de la fiche visibles par les joueurs une fois le monstre vaincu
+	// (name, image, description, uniqueTrait, loot, stats).
+	PlayerFields []string `json:"playerFields"`
 }
 
 // MapElement représente un élément de décor fixe sur une carte.

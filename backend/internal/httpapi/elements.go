@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -48,43 +47,20 @@ func (s *Server) handleListElements(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Éléments partagés : tous ceux uploadés par ce MJ (toutes parties confondues)
-	rows, err := s.db.Query(
-		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at, COALESCE(description, ''), COALESCE(unique_trait, ''), COALESCE(loot, ''), max_hp, max_mana, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1) FROM game_elements WHERE user_id = ? ORDER BY id",
-		u.ID,
-	)
+	rows, err := s.db.Query("SELECT "+elementColumns+" FROM game_elements WHERE user_id = ? ORDER BY id", u.ID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
 	defer rows.Close()
 
-	var elements []*domain.GameElement
+	elements := []*domain.GameElement{}
 	for rows.Next() {
-		var e domain.GameElement
-		var tagsJSON string
-		var desc, trait, loot string
-		var maxHp, maxMana sql.NullInt64
-		var iconX, iconY int
-		var iconScale float64
-		if err := rows.Scan(&e.ID, &e.GameID, &e.Name, &e.ImageURL, &e.Category, &tagsJSON, &e.CreatedAt, &desc, &trait, &loot, &maxHp, &maxMana, &iconX, &iconY, &iconScale); err != nil {
+		e, err := scanElement(rows)
+		if err != nil {
 			continue
 		}
-		_ = json.Unmarshal([]byte(tagsJSON), &e.Tags)
-		e.Description = desc
-		e.UniqueTrait = trait
-		e.Loot = loot
-		if maxHp.Valid {
-			h := int(maxHp.Int64)
-			e.MaxHp = &h
-		}
-		if maxMana.Valid {
-			m := int(maxMana.Int64)
-			e.MaxMana = &m
-		}
-		e.IconPosX = iconX
-		e.IconPosY = iconY
-		e.IconScale = iconScale
-		elements = append(elements, &e)
+		elements = append(elements, e)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"elements": elements})
@@ -96,51 +72,36 @@ func (s *Server) handleGetElement(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "gameId requis"})
 		return
 	}
-
-	u := s.getSessionUser(r)
-	var role string
-	_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role)
-	if role != "MJ" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Réservé au MJ"})
-		return
-	}
-
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
 		return
 	}
 
-	var e domain.GameElement
-	var tagsJSON string
-	var desc, trait, loot string
-	var maxHp, maxMana sql.NullInt64
-	var iconX, iconY int
-	var iconScale float64
-	err = s.db.QueryRow(
-		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at, COALESCE(description, ''), COALESCE(unique_trait, ''), COALESCE(loot, ''), max_hp, max_mana, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1) FROM game_elements WHERE id = ? AND (user_id = ? OR game_id = ?)",
+	u := s.getSessionUser(r)
+	var role string
+	_ = s.db.QueryRow("SELECT role FROM game_players WHERE game_id = ? AND user_id = ?", gameID, u.ID).Scan(&role)
+
+	if role != "MJ" {
+		// Un joueur ne lit la fiche d'un monstre qu'une fois celui-ci vaincu,
+		// et seulement les rubriques que le MJ a rendues visibles.
+		e, err := s.getElement(id)
+		if err != nil || !s.isDefeatedInGame(gameID, id) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"message": "Fiche disponible une fois le monstre vaincu"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"element": elementForPlayers(e)})
+		return
+	}
+
+	e, err := scanElement(s.db.QueryRow(
+		"SELECT "+elementColumns+" FROM game_elements WHERE id = ? AND (user_id = ? OR game_id = ?)",
 		id, u.ID, gameID,
-	).Scan(&e.ID, &e.GameID, &e.Name, &e.ImageURL, &e.Category, &tagsJSON, &e.CreatedAt, &desc, &trait, &loot, &maxHp, &maxMana, &iconX, &iconY, &iconScale)
+	))
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Élément introuvable"})
 		return
 	}
-	_ = json.Unmarshal([]byte(tagsJSON), &e.Tags)
-	e.Description = desc
-	e.UniqueTrait = trait
-	e.Loot = loot
-	if maxHp.Valid {
-		h := int(maxHp.Int64)
-		e.MaxHp = &h
-	}
-	if maxMana.Valid {
-		m := int(maxMana.Int64)
-		e.MaxMana = &m
-	}
-	e.IconPosX = iconX
-	e.IconPosY = iconY
-	e.IconScale = iconScale
 	writeJSON(w, http.StatusOK, map[string]interface{}{"element": e})
 }
 
@@ -154,6 +115,8 @@ type patchElementReq struct {
 	IconPosX    *int     `json:"iconPosX"`
 	IconPosY    *int     `json:"iconPosY"`
 	IconScale   *float64 `json:"iconScale"`
+	// Rubriques de la fiche visibles par les joueurs une fois le monstre vaincu.
+	PlayerFields *[]string `json:"playerFields"`
 }
 
 func (s *Server) handlePatchElement(w http.ResponseWriter, r *http.Request) {
@@ -222,6 +185,15 @@ func (s *Server) handlePatchElement(w http.ResponseWriter, r *http.Request) {
 		updates = append(updates, "icon_scale = ?")
 		args = append(args, *req.IconScale)
 	}
+	if req.PlayerFields != nil {
+		fields, err := json.Marshal(normalizePlayerFields(*req.PlayerFields))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Rubriques invalides"})
+			return
+		}
+		updates = append(updates, "player_fields = ?::jsonb")
+		args = append(args, string(fields))
+	}
 	if len(updates) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucune modification"})
 		return
@@ -235,29 +207,11 @@ func (s *Server) handlePatchElement(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Retourner l'élément mis à jour
-	var e domain.GameElement
-	var tagsJSON string
-	var desc, trait, loot string
-	var maxHp, maxMana sql.NullInt64
-	var iconX, iconY int
-	_ = s.db.QueryRow(
-		"SELECT id, game_id, name, image_url, category, COALESCE(tags, '[]'), created_at, COALESCE(description, ''), COALESCE(unique_trait, ''), COALESCE(loot, ''), max_hp, max_mana, COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1) FROM game_elements WHERE id = ?",
-		id,
-	).Scan(&e.ID, &e.GameID, &e.Name, &e.ImageURL, &e.Category, &tagsJSON, &e.CreatedAt, &desc, &trait, &loot, &maxHp, &maxMana, &iconX, &iconY, &e.IconScale)
-	_ = json.Unmarshal([]byte(tagsJSON), &e.Tags)
-	e.Description = desc
-	e.UniqueTrait = trait
-	e.Loot = loot
-	if maxHp.Valid {
-		h := int(maxHp.Int64)
-		e.MaxHp = &h
+	e, err := s.getElement(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Élément introuvable"})
+		return
 	}
-	if maxMana.Valid {
-		m := int(maxMana.Int64)
-		e.MaxMana = &m
-	}
-	e.IconPosX = iconX
-	e.IconPosY = iconY
 	writeJSON(w, http.StatusOK, map[string]interface{}{"element": e})
 }
 
@@ -375,6 +329,7 @@ func (s *Server) handleUploadElement(w http.ResponseWriter, r *http.Request) {
 		Tags:      tags,
 		CreatedAt: createdAt,
 	}
+	e.PlayerFields = defaultPlayerFields
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"element": e})
 }
 

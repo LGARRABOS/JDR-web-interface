@@ -28,6 +28,7 @@ type mapScene struct {
 	Map         *domain.Map          `json:"map"`
 	Tokens      []*domain.Token      `json:"tokens"`
 	MapElements []*domain.MapElement `json:"mapElements"`
+	Fog         *fogState            `json:"fog"`
 }
 
 type snapshotPlayer struct {
@@ -130,13 +131,18 @@ func (s *Server) buildScene(mapID int64, forGM bool) (*mapScene, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &mapScene{Map: m, Tokens: tokens, MapElements: elements}, nil
+	fog, err := s.getFogState(mapID)
+	if err != nil {
+		return nil, err
+	}
+	return &mapScene{Map: m, Tokens: tokens, MapElements: elements, Fog: fog}, nil
 }
 
 // broadcastMapDisplayed prévient tous les clients du changement de carte en
 // leur envoyant directement la nouvelle scène (filtrée selon le rôle).
 func (s *Server) broadcastMapDisplayed(gameID, mapID int64) {
 	s.ensurePlayerTokensForMap(mapID, gameID)
+	s.recenterPlayerTokens(mapID)
 	s.hub.ResetMapView(gameID)
 	gmScene, err := s.buildScene(mapID, true)
 	if err != nil {

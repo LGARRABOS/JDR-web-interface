@@ -186,6 +186,7 @@ export const ElementsAPI = {
       iconPosX?: number;
       iconPosY?: number;
       iconScale?: number;
+      playerFields?: string[];
     }
   ) => api.patch(`/games/${gameId}/elements/${id}`, data),
   upload: (
@@ -204,6 +205,27 @@ export const ElementsAPI = {
   },
   delete: (gameId: number, id: number) =>
     api.delete(`/games/${gameId}/elements/${id}`),
+};
+
+/** Brouillard de guerre (réservé au MJ, sauf la lecture). */
+export const FogAPI = {
+  get: (mapId: number) => api.get(`/maps/${mapId}/fog`),
+  setEnabled: (mapId: number, enabled: boolean) =>
+    api.post(`/maps/${mapId}/fog/enabled`, { enabled }),
+  addPatch: (
+    mapId: number,
+    data: {
+      shape: 'rect' | 'ellipse';
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      reveal: boolean;
+    }
+  ) => api.post(`/maps/${mapId}/fog/patches`, data),
+  undo: (mapId: number) => api.post(`/maps/${mapId}/fog/undo`),
+  reset: (mapId: number, revealAll: boolean) =>
+    api.post(`/maps/${mapId}/fog/reset`, { revealAll }),
 };
 
 export const MapElementsAPI = {

@@ -1,3 +1,4 @@
+import { addPatch } from '../fog/fog';
 import type { MapData, Token } from '../types/game';
 import type { ConnectionStatus } from './connection';
 import {
@@ -138,6 +139,7 @@ export function applyEvent(
               map: snap.scene.map,
               tokens: snap.scene.tokens ?? [],
               mapElements: snap.scene.mapElements ?? [],
+              fog: snap.scene.fog ?? null,
             }
           : null,
         messages: (snap.messages ?? []).slice(-MAX_MESSAGES),
@@ -155,8 +157,24 @@ export function applyEvent(
     }
 
     case 'ping':
-    case 'fog.updated':
       return state;
+
+    case 'fog.state': {
+      const fog = env.payload;
+      if (!onCurrentMap(state, fog.mapId)) return state;
+      return withScene(state, (sc) => ({ ...sc, fog }));
+    }
+    case 'fog.patch': {
+      const p = env.payload;
+      if (!onCurrentMap(state, p.mapId)) return state;
+      return withScene(state, (sc) => ({
+        ...sc,
+        fog: addPatch(
+          sc.fog ?? { mapId: p.mapId, enabled: true, patches: [] },
+          p
+        ),
+      }));
+    }
 
     case 'presence.joined':
       return { ...state, presence: upsertMember(state.presence, env.payload) };
@@ -261,6 +279,7 @@ export function applyEvent(
           map: scene.map,
           tokens: scene.tokens ?? [],
           mapElements: scene.mapElements ?? [],
+          fog: scene.fog ?? null,
         },
         game: state.game
           ? { ...state.game, currentMapId: scene.map.id }

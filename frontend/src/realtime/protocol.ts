@@ -9,6 +9,7 @@
  *   d'objets entiers), qu'on peut rejouer sans risque.
  */
 
+import type { FogPatch, FogState } from '../fog/fog';
 import type { MapData, MapElement, Token } from '../types/game';
 
 export type Role = 'MJ' | 'PLAYER';
@@ -56,6 +57,8 @@ export interface Scene {
   map: MapData;
   tokens: Token[];
   mapElements: MapElement[];
+  /** Brouillard de guerre de la carte (absent des anciens serveurs). */
+  fog?: FogState | null;
 }
 
 export interface ChatMessage {
@@ -123,7 +126,8 @@ export type ServerEvent =
   | { type: 'chat.message'; payload: ChatMessage }
   | { type: 'dice.rolled'; payload: DiceRoll }
   | { type: 'dice.rolled.hidden'; payload: DiceRoll }
-  | { type: 'fog.updated'; payload: unknown };
+  | { type: 'fog.state'; payload: FogState }
+  | { type: 'fog.patch'; payload: FogPatch };
 
 export type ServerEventType = ServerEvent['type'];
 
@@ -164,7 +168,8 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set<ServerEventType>([
   'chat.message',
   'dice.rolled',
   'dice.rolled.hidden',
-  'fog.updated',
+  'fog.state',
+  'fog.patch',
 ]);
 
 /** Décode un message serveur ; retourne null s'il est invalide ou inconnu. */

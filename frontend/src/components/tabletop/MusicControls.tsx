@@ -221,7 +221,10 @@ export function MusicTab({
               value={Math.min(shownPosition, m.duration)}
               onChange={(e) => setDragPosition(parseFloat(e.target.value))}
               onPointerUp={commitSeek}
+              onMouseUp={commitSeek}
+              onTouchEnd={commitSeek}
               onKeyUp={commitSeek}
+              onBlur={commitSeek}
               className="flex-1 accent-fantasy-accent"
             />
             <span className="w-9 text-right">{formatTime(m.duration)}</span>

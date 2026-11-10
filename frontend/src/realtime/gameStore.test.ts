@@ -292,4 +292,38 @@ describe('applyEvent', () => {
     expect(s.rolls[1].hidden).toBe(true);
     expect(s.lastRollHidden?.id).toBe(11);
   });
+
+  it('applique le brouillard de la carte affichée seulement', () => {
+    let s = ready();
+    s = applyEvent(
+      s,
+      env({
+        type: 'fog.state',
+        payload: { mapId: 10, enabled: true, patches: [] },
+      })
+    );
+    expect(s.scene?.fog?.enabled).toBe(true);
+    const zone = {
+      id: 1,
+      mapId: 10,
+      shape: 'rect' as const,
+      x: 0,
+      y: 0,
+      w: 10,
+      h: 10,
+      reveal: true,
+    };
+    s = applyEvent(s, env({ type: 'fog.patch', payload: zone }));
+    s = applyEvent(s, env({ type: 'fog.patch', payload: zone }));
+    expect(s.scene?.fog?.patches).toHaveLength(1);
+    // Brouillard d'une autre carte : ignoré.
+    s = applyEvent(
+      s,
+      env({
+        type: 'fog.state',
+        payload: { mapId: 11, enabled: false, patches: [] },
+      })
+    );
+    expect(s.scene?.fog?.enabled).toBe(true);
+  });
 });

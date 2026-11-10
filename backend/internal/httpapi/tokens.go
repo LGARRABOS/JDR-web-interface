@@ -399,6 +399,13 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Un personnage a un jeton par carte : PV, mana et taille restent les mêmes
+	// partout, pour qu'un changement de carte ne fasse pas revenir d'anciennes valeurs.
+	if t.Kind == "PJ" && t.OwnerUserID != nil &&
+		(req.Hp != nil || req.MaxHp != nil || req.Mana != nil || req.MaxMana != nil || req.Width != nil || req.Height != nil) {
+		s.syncPlayerTokens(gameID, t)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{"token": t})
 	s.broadcastToken("token.updated", t)
 }

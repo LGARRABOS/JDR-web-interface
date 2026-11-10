@@ -17,6 +17,59 @@ export interface GameElementFull {
   iconPosX?: number;
   iconPosY?: number;
   iconScale?: number;
+  /** Rubriques visibles par les joueurs une fois le monstre vaincu. */
+  playerFields?: string[];
+}
+
+/** Rubriques d'une fiche monstre que le MJ peut révéler aux joueurs. */
+export const PLAYER_FIELD_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: 'name', label: 'Nom' },
+  { key: 'image', label: 'Image' },
+  { key: 'description', label: 'Description' },
+  { key: 'uniqueTrait', label: 'Caractéristique unique' },
+  { key: 'loot', label: 'Butin' },
+  { key: 'stats', label: 'PV et mana max' },
+];
+
+export const DEFAULT_PLAYER_FIELDS = ['name', 'image', 'description'];
+
+/** Cases à cocher : ce que les joueurs verront de la fiche après la victoire. */
+export function PlayerFieldsPicker({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (fields: string[]) => void;
+}) {
+  const toggle = (key: string) =>
+    onChange(
+      PLAYER_FIELD_OPTIONS.map((o) => o.key).filter((k) =>
+        k === key ? !value.includes(k) : value.includes(k)
+      )
+    );
+  return (
+    <fieldset className="rounded bg-fantasy-input-soft/50 border border-fantasy-border-soft p-3">
+      <legend className="px-1 text-sm text-fantasy-muted-soft">
+        Visible par les joueurs une fois vaincu
+      </legend>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        {PLAYER_FIELD_OPTIONS.map((o) => (
+          <label
+            key={o.key}
+            className="flex items-center gap-2 text-sm text-fantasy-text-soft cursor-pointer"
+          >
+            <input
+              type="checkbox"
+              checked={value.includes(o.key)}
+              onChange={() => toggle(o.key)}
+              className="accent-fantasy-accent"
+            />
+            {o.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 
 interface MonsterEditorModalProps {
@@ -34,6 +87,8 @@ interface MonsterEditorModalProps {
   statusEffects?: StatusEffect[];
   /** Callback pour mettre à jour les effets de statut du jeton */
   onStatusUpdate?: (statusEffects: StatusEffect[]) => void;
+  /** MJ en partie : enregistre aussitôt les rubriques visibles par les joueurs. */
+  onPlayerFieldsChange?: (fields: string[]) => void;
 }
 
 export function MonsterEditorModal({
@@ -47,7 +102,11 @@ export function MonsterEditorModal({
   tokenId,
   statusEffects = [],
   onStatusUpdate,
+  onPlayerFieldsChange,
 }: MonsterEditorModalProps) {
+  const [playerFields, setPlayerFields] = useState<string[]>(
+    element.playerFields ?? DEFAULT_PLAYER_FIELDS
+  );
   const [name, setName] = useState(element.name);
   const [description, setDescription] = useState(element.description ?? '');
   const [uniqueTrait, setUniqueTrait] = useState(element.uniqueTrait ?? '');
@@ -135,6 +194,7 @@ export function MonsterEditorModal({
         iconPosX,
         iconPosY,
         iconScale,
+        playerFields,
       });
       onClose();
     } finally {
@@ -150,6 +210,7 @@ export function MonsterEditorModal({
     iconPosX,
     iconPosY,
     iconScale,
+    playerFields,
     onSave,
     onClose,
   ]);
@@ -340,6 +401,16 @@ export function MonsterEditorModal({
                 className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-sm text-fantasy-text-soft placeholder:text-fantasy-muted-soft border border-fantasy-border-soft focus:border-fantasy-accent focus:outline-none resize-y disabled:opacity-70"
               />
             </div>
+          )}
+
+          {isGM && (isEdit || onPlayerFieldsChange) && (
+            <PlayerFieldsPicker
+              value={playerFields}
+              onChange={(fields) => {
+                setPlayerFields(fields);
+                if (!isEdit) onPlayerFieldsChange?.(fields);
+              }}
+            />
           )}
 
           {/* Effets de statut : visible uniquement en vue jeton (tokenData présent) */}

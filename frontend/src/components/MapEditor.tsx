@@ -166,13 +166,39 @@ export function MapEditor({
     setOffset({ x: 0, y: 0 });
   }, []);
 
+  // Taille de la zone d'affichage : la carte y est inscrite en gardant les
+  // proportions de l'image, pour que les positions (en % de la carte) tombent
+  // exactement sur l'image, comme sur la table.
+  const [viewportSize, setViewportSize] = useState<{
+    w: number;
+    h: number;
+  } | null>(null);
+
   useEffect(() => {
     if (!selectedMap) return;
     updateScaleToFit();
-    const ro = new ResizeObserver(updateScaleToFit);
+    const measure = () => {
+      const el = viewportRef.current;
+      if (el) setViewportSize({ w: el.clientWidth, h: el.clientHeight });
+    };
+    measure();
+    const ro = new ResizeObserver(() => {
+      updateScaleToFit();
+      measure();
+    });
     if (viewportRef.current) ro.observe(viewportRef.current);
     return () => ro.disconnect();
   }, [selectedMap, updateScaleToFit]);
+
+  const fitted = (() => {
+    if (!viewportSize || viewportSize.w <= 0 || viewportSize.h <= 0)
+      return null;
+    const ratio = Math.min(
+      viewportSize.w / displayW,
+      viewportSize.h / displayH
+    );
+    return { w: displayW * ratio, h: displayH * ratio };
+  })();
 
   const handleMapSelect = (map: MapData | null) => {
     setSelectedMap(map);
@@ -605,18 +631,14 @@ export function MapEditor({
                   <div
                     className="flex items-center justify-center overflow-hidden shrink-0"
                     style={{
-                      aspectRatio: `${displayW} / ${displayH}`,
-                      width: '100%',
-                      height: '100%',
-                      maxWidth: '100%',
-                      maxHeight: '100%',
+                      width: fitted ? fitted.w : '100%',
+                      height: fitted ? fitted.h : '100%',
                       transform: `scale(${scale}) translate(${offset.x}px, ${offset.y}px)`,
                     }}
                   >
                     <div
                       ref={mapContainerRef}
                       className="relative cursor-crosshair w-full h-full"
-                      style={{ aspectRatio: `${displayW} / ${displayH}` }}
                       onMouseDown={handleMapMouseDown}
                       onClick={handleCanvasClick}
                     >

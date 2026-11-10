@@ -221,8 +221,14 @@ func (s *Server) handleGetMusicFile(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Content-Type", "audio/mpeg")
 	}
-	w.Header().Set("Accept-Ranges", "bytes")
-	_, _ = io.Copy(w, f)
+	// ServeContent gère les requêtes Range (avance/recul dans la piste) et
+	// annonce la taille exacte du fichier, dont le navigateur déduit la durée.
+	var modTime time.Time
+	if st, err := f.Stat(); err == nil {
+		modTime = st.ModTime()
+	}
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	http.ServeContent(w, r, filename, modTime, f)
 }
 
 func (s *Server) handleDeleteMusic(w http.ResponseWriter, r *http.Request) {
