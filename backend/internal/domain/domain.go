@@ -53,6 +53,7 @@ type Token struct {
 	IconPosY         int            `json:"iconPosY,omitempty"`    // 0-100, position verticale du crop
 	IconScale        float64        `json:"iconScale,omitempty"`   // zoom de l'image (1 = 100%, 1.5 = 150%)
 	AttackRange      *int           `json:"attackRange,omitempty"` // portée d'attaque en cases (pour cercle sur carte)
+	Facing           int            `json:"facing"`                // direction du regard en degrés (0 bas, 90 gauche, 180 haut, 270 droite)
 	VisibleToPlayers bool           `json:"visibleToPlayers"`
 	Hp               *int           `json:"hp,omitempty"`            // PV actuels
 	MaxHp            *int           `json:"maxHp,omitempty"`         // PV max

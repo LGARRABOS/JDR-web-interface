@@ -69,6 +69,13 @@ export const GamesAPI = {
     data: { tokenMovementLocked?: boolean; fogVisionRadius?: number }
   ) => api.patch(`/games/${gameId}`, data),
   delete: (id: number) => api.delete(`/games/${id}`),
+  /** Un joueur quitte la partie (le MJ, lui, la supprime). */
+  leave: (id: number) => api.delete(`/games/${id}/players/me`),
+};
+
+/** Bibliothèque personnelle (ressources hors partie). */
+export const LibraryAPI = {
+  get: () => api.get('/library'),
 };
 
 export const CharacterSheetsAPI = {
@@ -154,6 +161,7 @@ export const TokensAPI = {
       iconPosY?: number;
       iconScale?: number;
       attackRange?: number;
+      facing?: number;
       visibleToPlayers?: boolean;
       hp?: number;
       maxHp?: number;

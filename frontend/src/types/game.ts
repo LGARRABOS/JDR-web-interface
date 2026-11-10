@@ -21,6 +21,8 @@ export interface Token {
   iconPosY?: number;
   iconScale?: number;
   attackRange?: number;
+  /** Direction du regard en degrés : 0 bas, 90 gauche, 180 haut, 270 droite. */
+  facing?: number;
   visibleToPlayers: boolean;
   ownerUserId?: number;
   hp?: number;

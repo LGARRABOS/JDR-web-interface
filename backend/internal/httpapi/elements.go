@@ -24,10 +24,14 @@ func (s *Server) registerElementRoutes() {
 		r.Use(s.requireGameAccess)
 		r.Get("/", s.handleListElements)
 		r.Post("/upload", s.handleUploadElement)
-		r.Get("/file/{filename}", s.handleGetElementFile)
 		r.Get("/{id}", s.handleGetElement)
 		r.Patch("/{id}", s.handlePatchElement)
 		r.Delete("/{id}", s.handleDeleteElement)
+	})
+	s.mux.Route("/api/games/{gameId}/elements/file/{filename}", func(r chi.Router) {
+		r.Use(s.requireAuth)
+		r.Use(s.requireElementFileAccess)
+		r.Get("/", s.handleGetElementFile)
 	})
 }
 

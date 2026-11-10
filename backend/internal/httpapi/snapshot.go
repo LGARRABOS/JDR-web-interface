@@ -177,7 +177,7 @@ func (s *Server) getMap(mapID int64) (*domain.Map, error) {
 func (s *Server) listGameMaps(gameID int64) ([]*domain.Map, error) {
 	rows, err := s.db.Query(
 		`SELECT id, game_id, name, image_url, width, height, grid_size, COALESCE(tags, '[]')
-		 FROM maps WHERE game_id = ? ORDER BY id`, gameID,
+		 FROM maps WHERE id IN `+gameMapsFilter+` ORDER BY id`, gameID, gameID,
 	)
 	if err != nil {
 		return nil, err

@@ -224,6 +224,8 @@ func AutoMigrate(db *sql.DB) error {
 		`ALTER TABLE tokens ADD COLUMN status_effects JSONB`,
 		`ALTER TABLE game_elements ADD COLUMN player_fields JSONB`,
 		`ALTER TABLE maps ADD COLUMN fog_enabled INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE games ADD COLUMN is_library INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE tokens ADD COLUMN facing INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fog_patches DROP CONSTRAINT IF EXISTS fog_patches_shape_type_check`,
 		`ALTER TABLE fog_patches ADD CONSTRAINT fog_patches_shape_type_check CHECK (shape_type IN ('rect','polygon','ellipse'))`,
 	}

@@ -15,7 +15,7 @@ import (
 const tokenColumns = `id, map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y,
 	visible_to_players, hp, max_hp, mana, max_mana, width, height,
 	COALESCE(icon_pos_x, 50), COALESCE(icon_pos_y, 50), COALESCE(icon_scale, 1),
-	attack_range, element_id, COALESCE(status_effects::text, '[]')`
+	attack_range, element_id, COALESCE(status_effects::text, '[]'), COALESCE(facing, 0)`
 
 type rowScanner interface {
 	Scan(dest ...interface{}) error
@@ -31,7 +31,7 @@ func scanToken(sc rowScanner) (*domain.Token, error) {
 	if err := sc.Scan(&t.ID, &t.MapID, &t.CreatedBy, &ownerID, &t.Kind, &t.Name, &t.Color, &iconURL, &t.X, &t.Y,
 		&visible, &hp, &maxHp, &mana, &maxMana, &width, &height,
 		&t.IconPosX, &t.IconPosY, &t.IconScale,
-		&attackRange, &elemID, &statusEffectsJSON); err != nil {
+		&attackRange, &elemID, &statusEffectsJSON, &t.Facing); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(statusEffectsJSON), &t.StatusEffects)
@@ -130,20 +130,20 @@ func (s *Server) ensurePlayerToken(mapID, gameID, userID int64) *domain.Token {
 	var id int64
 	err := s.db.QueryRow(`
 		INSERT INTO tokens (map_id, created_by, owner_user_id, kind, name, color, icon_url, x, y, visible_to_players,
-		                    hp, max_hp, mana, max_mana, width, height, icon_pos_x, icon_pos_y, icon_scale, attack_range)
+		                    hp, max_hp, mana, max_mana, width, height, icon_pos_x, icon_pos_y, icon_scale, attack_range, facing)
 		SELECT ?::bigint, ?::bigint, ?::bigint, 'PJ', ?::text, COALESCE(p.color, ?::text), p.icon_url,
 		       m.width / 2.0, m.height / 2.0, 1,
-		       p.hp, p.max_hp, p.mana, p.max_mana, p.width, p.height, p.icon_pos_x, p.icon_pos_y, p.icon_scale, p.attack_range
+		       p.hp, p.max_hp, p.mana, p.max_mana, p.width, p.height, p.icon_pos_x, p.icon_pos_y, p.icon_scale, p.attack_range, COALESCE(p.facing, 0)
 		FROM maps m
 		LEFT JOIN LATERAL (
-			SELECT t.* FROM tokens t JOIN maps tm ON tm.id = t.map_id
-			WHERE tm.game_id = ? AND t.kind = 'PJ' AND t.owner_user_id = ?
+			SELECT t.* FROM tokens t
+			WHERE t.map_id IN `+gameMapsFilter+` AND t.kind = 'PJ' AND t.owner_user_id = ?
 			ORDER BY t.id DESC LIMIT 1
 		) p ON true
 		WHERE m.id = ?
 		  AND NOT EXISTS (SELECT 1 FROM tokens WHERE map_id = ? AND owner_user_id = ? AND kind = 'PJ')
 		RETURNING id`,
-		mapID, userID, userID, name, color, gameID, userID, mapID, mapID, userID,
+		mapID, userID, userID, name, color, gameID, gameID, userID, mapID, mapID, userID,
 	).Scan(&id)
 	if err != nil {
 		// sql.ErrNoRows : le jeton existe déjà ; violation d'unicité : créé en parallèle.
@@ -185,10 +185,9 @@ func (s *Server) syncPlayerTokens(gameID int64, src *domain.Token) {
 	_, _ = s.db.Exec(`
 		UPDATE tokens t
 		SET hp = ?, max_hp = ?, mana = ?, max_mana = ?, width = ?, height = ?
-		FROM maps m
-		WHERE t.map_id = m.id AND m.game_id = ? AND t.kind = 'PJ' AND t.owner_user_id = ? AND t.id != ?`,
+		WHERE t.map_id IN `+gameMapsFilter+` AND t.kind = 'PJ' AND t.owner_user_id = ? AND t.id != ?`,
 		ptrValue(src.Hp), ptrValue(src.MaxHp), ptrValue(src.Mana), ptrValue(src.MaxMana),
-		ptrValue(src.Width), ptrValue(src.Height), gameID, *src.OwnerUserID, src.ID)
+		ptrValue(src.Width), ptrValue(src.Height), gameID, gameID, *src.OwnerUserID, src.ID)
 }
 
 // ptrValue convertit un *int en valeur SQL (NULL si absent).

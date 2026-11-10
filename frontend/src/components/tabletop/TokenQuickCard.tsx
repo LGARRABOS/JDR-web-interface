@@ -250,6 +250,12 @@ export function TokenQuickCard({
         </p>
       )}
 
+      {t.kind === 'PJ' && canEdit && (
+        <p className="text-[12px] text-fantasy-muted-soft">
+          Flèches du clavier : orienter le personnage
+        </p>
+      )}
+
       {isGM && t.kind !== 'MORT' && (
         <SizeSlider
           size={size}

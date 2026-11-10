@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TokensAPI, MapElementsAPI, MapsAPI } from '../api/client';
 import { Modal, ModalButtons } from './Modal';
+import { clientToMapCoords, mapCoordsToContainer } from '../utils/mapCoords';
 import type { MapData } from './MapCanvas';
 import type { Token } from './MapCanvas';
 
@@ -190,14 +191,15 @@ export function MapEditor({
     return () => ro.disconnect();
   }, [selectedMap, updateScaleToFit]);
 
+  // La carte garde sa taille logique (comme sur la table) et elle est réduite
+  // pour tenir dans la zone d'affichage.
+  const mapW = selectedMap?.width ?? 800;
+  const mapH = selectedMap?.height ?? 600;
   const fitted = (() => {
     if (!viewportSize || viewportSize.w <= 0 || viewportSize.h <= 0)
       return null;
-    const ratio = Math.min(
-      viewportSize.w / displayW,
-      viewportSize.h / displayH
-    );
-    return { w: displayW * ratio, h: displayH * ratio };
+    const ratio = Math.min(viewportSize.w / mapW, viewportSize.h / mapH);
+    return { w: mapW * ratio, h: mapH * ratio, ratio };
   })();
 
   const handleMapSelect = (map: MapData | null) => {
@@ -215,8 +217,15 @@ export function MapEditor({
     if ((e.target as HTMLElement).closest('[data-resize-handle]')) return;
 
     const mapRect = mapContainerRef.current.getBoundingClientRect();
-    const x = ((e.clientX - mapRect.left) * selectedMap.width) / mapRect.width;
-    const y = ((e.clientY - mapRect.top) * selectedMap.height) / mapRect.height;
+    const { x, y } = clientToMapCoords(
+      e.clientX,
+      e.clientY,
+      mapRect,
+      selectedMap.width,
+      selectedMap.height,
+      displayW,
+      displayH
+    );
     if (x < 0 || y < 0 || x > selectedMap.width || y > selectedMap.height)
       return;
 
@@ -313,10 +322,15 @@ export function MapEditor({
       if (dragRef.current && selectedMap && mapContainerRef.current) {
         const { type, id, startXMap, startYMap } = dragRef.current;
         const mapRect = mapContainerRef.current.getBoundingClientRect();
-        const x =
-          ((e.clientX - mapRect.left) * selectedMap.width) / mapRect.width;
-        const y =
-          ((e.clientY - mapRect.top) * selectedMap.height) / mapRect.height;
+        const { x, y } = clientToMapCoords(
+          e.clientX,
+          e.clientY,
+          mapRect,
+          selectedMap.width,
+          selectedMap.height,
+          displayW,
+          displayH
+        );
         const dx = x - startXMap;
         const dy = y - startYMap;
         const newX = Math.max(0, Math.min(selectedMap.width, startXMap + dx));
@@ -335,8 +349,14 @@ export function MapEditor({
       } else if (resizeRef.current) {
         const { type, id, startX, startY, startW, startH, corner } =
           resizeRef.current;
-        const dx = (e.clientX - startX) / scale;
-        const dy = (e.clientY - startY) / scale;
+        // Écran -> unités de la carte (le conteneur est mis à l'échelle).
+        const rect = mapContainerRef.current?.getBoundingClientRect();
+        const ratio =
+          rect && rect.width > 0 && selectedMap
+            ? selectedMap.width / rect.width
+            : 1 / scale;
+        const dx = (e.clientX - startX) * ratio;
+        const dy = (e.clientY - startY) * ratio;
         let dw = 0,
           dh = 0;
         if (corner.includes('e')) dw += dx;
@@ -369,7 +389,7 @@ export function MapEditor({
         });
       }
     },
-    [scale, selectedMap]
+    [scale, selectedMap, displayW, displayH]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -638,7 +658,12 @@ export function MapEditor({
                   >
                     <div
                       ref={mapContainerRef}
-                      className="relative cursor-crosshair w-full h-full"
+                      className="relative cursor-crosshair shrink-0"
+                      style={{
+                        width: mapW,
+                        height: mapH,
+                        transform: `scale(${fitted?.ratio ?? 1})`,
+                      }}
                       onMouseDown={handleMapMouseDown}
                       onClick={handleCanvasClick}
                     >
@@ -654,8 +679,22 @@ export function MapEditor({
                           data-map-element
                           className="absolute cursor-move"
                           style={{
-                            left: `${(el.x / selectedMap.width) * 100}%`,
-                            top: `${(el.y / selectedMap.height) * 100}%`,
+                            left: mapCoordsToContainer(
+                              el.x,
+                              el.y,
+                              selectedMap.width,
+                              selectedMap.height,
+                              displayW,
+                              displayH
+                            ).left,
+                            top: mapCoordsToContainer(
+                              el.x,
+                              el.y,
+                              selectedMap.width,
+                              selectedMap.height,
+                              displayW,
+                              displayH
+                            ).top,
                             width: el.width,
                             height: el.height,
                             transform: 'translate(-50%, -50%)',
@@ -720,8 +759,22 @@ export function MapEditor({
                             data-token
                             className="absolute cursor-pointer flex flex-col items-center relative"
                             style={{
-                              left: `${(t.x / selectedMap.width) * 100}%`,
-                              top: `${(t.y / selectedMap.height) * 100}%`,
+                              left: mapCoordsToContainer(
+                                t.x,
+                                t.y,
+                                selectedMap.width,
+                                selectedMap.height,
+                                displayW,
+                                displayH
+                              ).left,
+                              top: mapCoordsToContainer(
+                                t.x,
+                                t.y,
+                                selectedMap.width,
+                                selectedMap.height,
+                                displayW,
+                                displayH
+                              ).top,
                               transform: 'translate(-50%, -50%)',
                               border:
                                 selectedToken?.id === t.id

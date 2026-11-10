@@ -339,9 +339,16 @@ function MapUploadForm({
   );
 }
 
-export function ResourcesPage() {
+interface ResourcesPageProps {
+  /** Bibliothèque personnelle : ressources préparées hors de toute partie. */
+  libraryGameId?: number;
+}
+
+export function ResourcesPage({ libraryGameId }: ResourcesPageProps = {}) {
   const { gameId: gameIdParam } = useParams();
-  const gameId = gameIdParam ? parseInt(gameIdParam, 10) : 0;
+  const isLibrary = libraryGameId != null;
+  const gameId = libraryGameId ?? (gameIdParam ? parseInt(gameIdParam, 10) : 0);
+  const backPath = isLibrary ? '/games' : `/table/${gameId}`;
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<ResourcesTab>('maps');
@@ -656,10 +663,10 @@ export function ResourcesPage() {
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
         <p className="text-fantasy-muted-soft">Accès réservé au MJ</p>
         <button
-          onClick={() => navigate(`/table/${gameId}`)}
+          onClick={() => navigate(backPath)}
           className="px-4 py-2 rounded bg-fantasy-input-soft hover:bg-fantasy-input-hover-soft text-fantasy-text-soft"
         >
-          Retour à la table
+          Retour
         </button>
       </div>
     );
@@ -771,19 +778,27 @@ export function ResourcesPage() {
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => navigate(`/table/${gameId}`)}
+            onClick={() => navigate(backPath)}
             className="inline-flex items-center gap-1.5 h-10 pl-2 pr-3 rounded-lg bg-fantasy-surface hover:bg-fantasy-surface-hover text-[15px]"
           >
             <ChevronLeft size={18} />
-            Table de jeu
+            {isLibrary ? 'Mes parties' : 'Table de jeu'}
           </button>
           <div className="leading-tight">
-            <h1 className="font-heading font-bold text-[22px]">Ressources</h1>
-            <span className="text-[13px] text-fantasy-muted">{game.name}</span>
+            <h1 className="font-heading font-bold text-[22px]">
+              {isLibrary ? 'Ma bibliothèque' : 'Ressources'}
+            </h1>
+            <span className="text-[13px] text-fantasy-muted">
+              {isLibrary
+                ? 'Préparez vos ressources sans être en partie'
+                : game.name}
+            </span>
           </div>
         </div>
         <span className="text-[13px] text-fantasy-muted">
-          Partagées entre toutes vos parties
+          {isLibrary
+            ? 'Disponibles dans toutes vos parties'
+            : 'Votre bibliothèque est incluse'}
         </span>
       </header>
 
@@ -957,6 +972,7 @@ export function ResourcesPage() {
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
                   {filteredMaps.map((m) => {
                     const displayed = game.currentMapId === m.id;
+                    const fromLibrary = !isLibrary && m.gameId !== gameId;
                     return (
                       <article
                         key={m.id}
@@ -972,6 +988,11 @@ export function ResourcesPage() {
                           {displayed && (
                             <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full bg-fantasy-accent text-fantasy-bg text-xs font-bold">
                               Affichée
+                            </span>
+                          )}
+                          {fromLibrary && (
+                            <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full bg-fantasy-bg/80 text-fantasy-text text-xs">
+                              Bibliothèque
                             </span>
                           )}
                         </div>
@@ -997,16 +1018,18 @@ export function ResourcesPage() {
                             </div>
                           )}
                           <div className="flex gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleShowMap(m.id)}
-                              disabled={displayed}
-                              className={`${cardButton} flex-1 disabled:opacity-60 disabled:cursor-default`}
-                            >
-                              {displayed
-                                ? 'Sur la table'
-                                : 'Afficher sur la table'}
-                            </button>
+                            {!isLibrary && (
+                              <button
+                                type="button"
+                                onClick={() => handleShowMap(m.id)}
+                                disabled={displayed}
+                                className={`${cardButton} flex-1 disabled:opacity-60 disabled:cursor-default`}
+                              >
+                                {displayed
+                                  ? 'Sur la table'
+                                  : 'Afficher sur la table'}
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => setActiveTab('editor')}

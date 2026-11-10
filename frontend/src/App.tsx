@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthPage } from './pages/AuthPage';
 import { GameLobbyPage } from './pages/GameLobbyPage';
 import { TabletopPage } from './pages/TabletopPage';
+import { LibraryPage } from './pages/LibraryPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 import { WikiPage } from './pages/WikiPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -87,6 +88,14 @@ export const App = () => {
           element={
             <ProtectedRoute>
               <ResourcesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/library"
+          element={
+            <ProtectedRoute>
+              <LibraryPage />
             </ProtectedRoute>
           }
         />

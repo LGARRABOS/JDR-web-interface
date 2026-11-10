@@ -135,10 +135,9 @@ func (s *Server) handleListMusic(w http.ResponseWriter, r *http.Request) {
 	// Pistes de la partie : l'utilisateur doit être dans la partie (MJ ou joueur)
 	rows, err := s.db.Query(
 		`SELECT gm.id, gm.game_id, gm.filename FROM game_music gm
-		 INNER JOIN game_players gp ON gp.game_id = gm.game_id AND gp.user_id = ?
-		 WHERE gm.game_id = ?
+		 WHERE gm.game_id = ?::bigint OR gm.game_id IN `+libraryOfGameMJ+`
 		 ORDER BY gm.created_at`,
-		u.ID, gameID,
+		gameID, gameID,
 	)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
@@ -188,8 +187,8 @@ func (s *Server) handleGetMusicFile(w http.ResponseWriter, r *http.Request) {
 
 	var storagePath, filename string
 	err = s.db.QueryRow(
-		"SELECT storage_path, filename FROM game_music WHERE id = ? AND game_id = ?",
-		trackID, gameID,
+		"SELECT storage_path, filename FROM game_music WHERE id = ? AND (game_id = ?::bigint OR game_id IN "+libraryOfGameMJ+")",
+		trackID, gameID, gameID,
 	).Scan(&storagePath, &filename)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Piste introuvable", http.StatusNotFound)

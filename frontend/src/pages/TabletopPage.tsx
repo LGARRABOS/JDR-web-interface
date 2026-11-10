@@ -629,6 +629,11 @@ export function TabletopPage() {
           fog={fog}
           fogTool={viewAsGM ? fogTool : null}
           onFogDraw={handleFogDraw}
+          onTokenFace={
+            previewAsPlayer
+              ? undefined
+              : (id, facing) => handleTokenUpdate(id, { facing })
+          }
           currentUserId={user?.id ?? 0}
           mapView={mapView}
           tokensMovementLocked={game.tokenMovementLocked}

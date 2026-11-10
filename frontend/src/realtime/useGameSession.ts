@@ -52,5 +52,21 @@ export function useGameSession(gameId: number): GameSession {
   );
   const resync = useCallback(() => connRef.current?.resync(), []);
 
+  // Un onglet resté en arrière-plan peut avoir manqué des messages (navigateur
+  // en veille, connexion coupée sans prévenir) : au retour, on redemande l'état.
+  useEffect(() => {
+    let hiddenAt: number | null = null;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+      } else if (hiddenAt != null && Date.now() - hiddenAt > 10_000) {
+        hiddenAt = null;
+        connRef.current?.resync();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
   return { store, state, send, resync };
 }

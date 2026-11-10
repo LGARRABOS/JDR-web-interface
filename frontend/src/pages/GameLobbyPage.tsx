@@ -5,7 +5,14 @@ import { GamesAPI } from '../api/client';
 import { getErrorMessage } from '../utils/errorMessage';
 import { ModalConfirm } from '../components/Modal';
 import { ProfileModal } from '../components/ProfileModal';
-import { Check, ChevronDown, Copy, Trash } from '../components/tabletop/icons';
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Library,
+  LogOut,
+  Trash,
+} from '../components/tabletop/icons';
 import { initials } from '../components/tabletop/presence';
 import { D20Logo } from './AuthPage';
 
@@ -131,6 +138,7 @@ export function GameLobbyPage() {
   const [joinCode, setJoinCode] = useState('');
   const [err, setErr] = useState('');
   const [deleteGameId, setDeleteGameId] = useState<number | null>(null);
+  const [leaveGameId, setLeaveGameId] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [busy, setBusy] = useState<'create' | 'join' | null>(null);
 
@@ -203,6 +211,18 @@ export function GameLobbyPage() {
     }
   };
 
+  const handleLeaveConfirm = async () => {
+    if (!leaveGameId) return;
+    try {
+      await GamesAPI.leave(leaveGameId);
+      setGames((prev) => prev.filter((g) => g.id !== leaveGameId));
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e, 'Impossible de quitter la partie'));
+    } finally {
+      setLeaveGameId(null);
+    }
+  };
+
   const copyCode = async (g: Game) => {
     try {
       await navigator.clipboard.writeText(g.inviteCode);
@@ -223,9 +243,18 @@ export function GameLobbyPage() {
         open={deleteGameId !== null}
         onClose={() => setDeleteGameId(null)}
         onConfirm={handleDeleteConfirm}
-        title="Supprimer la partie"
-        message="Supprimer cette partie ? Cette action est irréversible."
-        confirmLabel="Supprimer"
+        title="Quitter et supprimer la partie"
+        message="Vous êtes le MJ : quitter la partie la supprime pour tous les joueurs (fiches, messages et lancers compris), et c'est irréversible. Vos cartes, monstres, décors et musiques sont rangés dans votre bibliothèque."
+        confirmLabel="Supprimer la partie"
+        danger
+      />
+      <ModalConfirm
+        open={leaveGameId !== null}
+        onClose={() => setLeaveGameId(null)}
+        onConfirm={handleLeaveConfirm}
+        title="Quitter la partie"
+        message="Votre personnage sera retiré de la table. Vous pourrez revenir avec le code d'invitation du MJ et retrouver votre fiche."
+        confirmLabel="Quitter"
         danger
       />
       <ProfileModal
@@ -341,7 +370,17 @@ export function GameLobbyPage() {
         </div>
 
         <section className="flex flex-col gap-4">
-          <h1 className="font-heading font-bold text-2xl">Mes parties</h1>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="font-heading font-bold text-2xl">Mes parties</h1>
+            <button
+              type="button"
+              onClick={() => navigate('/library')}
+              className="h-10 px-3.5 rounded-lg border border-fantasy-border text-sm text-fantasy-text hover:bg-fantasy-surface flex items-center gap-2"
+            >
+              <Library size={16} />
+              Ma bibliothèque
+            </button>
+          </div>
           {loading ? (
             <p className="text-fantasy-muted">Chargement…</p>
           ) : games.length === 0 ? (
@@ -437,13 +476,24 @@ export function GameLobbyPage() {
                             <button
                               type="button"
                               onClick={() => setDeleteGameId(g.id)}
-                              title="Supprimer la partie"
+                              title="Quitter et supprimer la partie"
                               aria-label={`Supprimer la partie ${g.name}`}
                               className="w-11 h-11 rounded-lg border border-fantasy-border text-fantasy-muted hover:text-fantasy-error hover:border-fantasy-danger/60 flex items-center justify-center"
                             >
                               <Trash size={16} />
                             </button>
                           </>
+                        )}
+                        {!isGM && (
+                          <button
+                            type="button"
+                            onClick={() => setLeaveGameId(g.id)}
+                            title="Quitter la partie"
+                            aria-label={`Quitter la partie ${g.name}`}
+                            className="w-11 h-11 rounded-lg border border-fantasy-border text-fantasy-muted hover:text-fantasy-error hover:border-fantasy-danger/60 flex items-center justify-center"
+                          >
+                            <LogOut size={16} />
+                          </button>
                         )}
                       </div>
                     </div>

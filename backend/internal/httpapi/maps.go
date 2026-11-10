@@ -69,9 +69,9 @@ func (s *Server) handleListMaps(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(
 		`SELECT m.id, m.game_id, m.name, m.image_url, m.width, m.height, m.grid_size, COALESCE(m.tags, '[]')
 		 FROM maps m
-		 WHERE m.game_id = ?
+		 WHERE m.id IN `+gameMapsFilter+`
 		 ORDER BY m.id`,
-		gameID,
+		gameID, gameID,
 	)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})

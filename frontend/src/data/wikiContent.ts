@@ -311,6 +311,35 @@ Dans la barre d'outils du MJ, cliquez sur le nuage puis cochez « Actif sur cett
 Le MJ voit le brouillard en transparence. Les ennemis situés sous le brouillard ne sont ni visibles ni cliquables pour les joueurs ; les personnages restent toujours visibles.`,
   },
   {
+    id: 'bibliotheque',
+    title: 'Ma bibliothèque',
+    category: 'Maître du Jeu',
+    tags: ['MJ', 'ressources', 'préparation'],
+    content: `« Ma bibliothèque », sur la page Mes parties, permet de préparer cartes, monstres, décors et musiques sans être dans une partie.
+
+Tout ce qui est rangé dans la bibliothèque est proposé dans les Ressources de toutes vos parties (badge « Bibliothèque » sur les cartes) et peut être affiché sur la table comme une carte de la partie.
+
+Quand vous supprimez une partie, ses cartes, monstres, décors et musiques sont rangés dans votre bibliothèque : rien de ce que vous avez préparé n'est perdu.`,
+  },
+  {
+    id: 'quitter-partie',
+    title: 'Quitter une partie',
+    category: 'Démarrage',
+    tags: ['joueur', 'MJ', 'partie'],
+    content: `Joueur : sur la page Mes parties, le bouton de sortie de la carte de la partie vous retire de la table. Votre jeton disparaît ; votre fiche est gardée et vous la retrouvez si vous revenez avec le code d'invitation.
+
+MJ : quitter sa partie la supprime pour tout le monde (fiches, messages et lancers compris). Un avertissement est affiché avant. Vos ressources rejoignent votre bibliothèque.`,
+  },
+  {
+    id: 'personnages',
+    title: 'Personnages des joueurs',
+    category: 'Cartes et jetons',
+    tags: ['jetons', 'joueur'],
+    content: `Les jetons des joueurs sont de petits personnages vus du dessus, à la couleur du joueur.
+
+Cliquez sur votre personnage puis utilisez les flèches du clavier pour l'orienter (haut, bas, gauche, droite). Tout le monde voit dans quelle direction il regarde. Le MJ peut orienter tous les personnages. L'orientation reste possible quand le MJ a bloqué les déplacements.`,
+  },
+  {
     id: 'vue-joueur',
     title: 'Voir la table comme un joueur',
     category: 'Maître du Jeu',

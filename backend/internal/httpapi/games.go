@@ -46,6 +46,7 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 		FROM games g
 		INNER JOIN game_players gp ON gp.game_id = g.id AND gp.user_id = ?
 		LEFT JOIN maps m ON m.id = g.current_map_id
+		WHERE COALESCE(g.is_library, 0) = 0
 		ORDER BY g.id DESC
 	`, u.ID)
 	if err != nil {
@@ -164,7 +165,7 @@ func (s *Server) handleJoinByCode(w http.ResponseWriter, r *http.Request) {
 
 	var game domain.Game
 	err := s.db.QueryRow(
-		"SELECT id, name, invite_code, owner_id FROM games WHERE invite_code = ?",
+		"SELECT id, name, invite_code, owner_id FROM games WHERE invite_code = ? AND COALESCE(is_library, 0) = 0",
 		req.InviteCode,
 	).Scan(&game.ID, &game.Name, &game.InviteCode, &game.OwnerID)
 	if err != nil {
@@ -485,13 +486,23 @@ func (s *Server) handleDeleteGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.isLibrary(id) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "La bibliothèque ne peut pas être supprimée"})
+		return
+	}
+	// Cartes, monstres, décors et musiques rejoignent la bibliothèque du MJ.
+	if err := s.moveGameAssetsToLibrary(id, ownerID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+		return
+	}
+	s.hub.CloseGame(id)
+
 	_, err = s.db.Exec("DELETE FROM games WHERE id = ?", id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
 
-	s.hub.CloseGame(id)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Partie supprimée"})
 }
 

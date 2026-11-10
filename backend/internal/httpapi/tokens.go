@@ -185,6 +185,15 @@ type updateTokenReq struct {
 	Mana             *int                   `json:"mana"`
 	MaxMana          *int                   `json:"maxMana"`
 	StatusEffects    *[]domain.StatusEffect `json:"statusEffects"`
+	// Direction du regard en degrés (0 bas, 90 gauche, 180 haut, 270 droite).
+	Facing *int `json:"facing"`
+}
+
+// onlyFacing : la requête ne fait que tourner le personnage.
+func (r updateTokenReq) onlyFacing() bool {
+	c := r
+	c.Facing = nil
+	return r.Facing != nil && c == updateTokenReq{}
 }
 
 func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +205,7 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := s.getSessionUser(r)
-	_, gameID, kind, ownerUserID, err := s.getTokenContext(id)
+	_, gameID, kind, ownerUserID, err := s.getTokenContextFor(id, u.ID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Token introuvable"})
 		return
@@ -216,7 +225,8 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 
 	movementLocked := s.isTokenMovementLocked(gameID)
 	if role != "MJ" {
-		if movementLocked {
+		// Tourner son personnage reste permis quand les déplacements sont bloqués.
+		if movementLocked && !req.onlyFacing() {
 			writeJSON(w, http.StatusForbidden, map[string]string{"message": "Déplacement des jetons verrouillé"})
 			return
 		}
@@ -312,6 +322,10 @@ func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
 	if req.AttackRange != nil {
 		updates = append(updates, "attack_range = ?")
 		args = append(args, *req.AttackRange)
+	}
+	if req.Facing != nil {
+		updates = append(updates, "facing = ?")
+		args = append(args, ((*req.Facing%360)+360)%360)
 	}
 	if len(updates) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucune modification"})
@@ -419,7 +433,7 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := s.getSessionUser(r)
-	mapID, gameID, kind, ownerUserID, err := s.getTokenContext(id)
+	mapID, gameID, kind, ownerUserID, err := s.getTokenContextFor(id, u.ID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Token introuvable"})
 		return

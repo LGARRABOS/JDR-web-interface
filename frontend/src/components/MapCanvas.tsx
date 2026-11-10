@@ -2,6 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { FogDrawOverlay, FogLayer } from './FogLayer';
+import { CharacterFigure } from './tabletop/CharacterFigure';
+import { facingFromKey } from './tabletop/character';
+import {
+  clientToMapCoords,
+  getImageContentRect,
+  mapCoordsToContainer,
+} from '../utils/mapCoords';
 import { isVisibleToPlayers, type FogShape, type FogState } from '../fog/fog';
 import type {
   MapData,
@@ -12,69 +19,6 @@ import type {
 } from '../types/game';
 
 export type { MapData, MapElement, MapView, StatusEffect, Token };
-
-function getImageContentRect(
-  containerW: number,
-  containerH: number,
-  imgW: number,
-  imgH: number
-) {
-  if (imgW <= 0 || imgH <= 0) {
-    return { left: 0, top: 0, width: containerW, height: containerH };
-  }
-  const containerAspect = containerW / containerH;
-  const imageAspect = imgW / imgH;
-  if (imageAspect > containerAspect) {
-    const displayH = containerW / imageAspect;
-    return {
-      left: 0,
-      top: (containerH - displayH) / 2,
-      width: containerW,
-      height: displayH,
-    };
-  }
-  const displayW = containerH * imageAspect;
-  return {
-    left: (containerW - displayW) / 2,
-    top: 0,
-    width: displayW,
-    height: containerH,
-  };
-}
-
-function clientToMapCoords(
-  clientX: number,
-  clientY: number,
-  containerRect: DOMRect,
-  mapW: number,
-  mapH: number,
-  imgW: number,
-  imgH: number
-) {
-  const relX = clientX - containerRect.left;
-  const relY = clientY - containerRect.top;
-  const logicalX = (relX / containerRect.width) * mapW;
-  const logicalY = (relY / containerRect.height) * mapH;
-  const content = getImageContentRect(mapW, mapH, imgW, imgH);
-  const x = ((logicalX - content.left) / content.width) * mapW;
-  const y = ((logicalY - content.top) / content.height) * mapH;
-  return { x, y };
-}
-
-function mapCoordsToContainer(
-  x: number,
-  y: number,
-  mapW: number,
-  mapH: number,
-  imgW: number,
-  imgH: number
-) {
-  const content = getImageContentRect(mapW, mapH, imgW, imgH);
-  return {
-    left: content.left + (x / mapW) * content.width,
-    top: content.top + (y / mapH) * content.height,
-  };
-}
 
 interface MapCanvasProps {
   map: MapData | null;
@@ -118,6 +62,8 @@ interface MapCanvasProps {
   fog?: FogState | null;
   /** Outil de brouillard actif (MJ) : glisser sur la carte dessine une zone. */
   fogTool?: { shape: FogShape; reveal: boolean } | null;
+  /** Tourner un personnage (flèches du clavier sur le jeton sélectionné). */
+  onTokenFace?: (id: number, facing: number) => void;
   onFogDraw?: (zone: {
     shape: FogShape;
     x: number;
@@ -157,6 +103,7 @@ export function MapCanvas({
   fog = null,
   fogTool = null,
   onFogDraw,
+  onTokenFace,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -432,6 +379,35 @@ export function MapCanvas({
   }, [handleMapMouseMove, handleMapMouseUp]);
 
   const placementClickRef = useRef(false);
+  // Flèches du clavier : le personnage sélectionné regarde dans cette direction
+  // (son joueur ou le MJ). Ignoré pendant la saisie dans un champ.
+  const facingTarget = tokens.find(
+    (t) =>
+      t.id === inspectedTokenId &&
+      t.kind === 'PJ' &&
+      (isGM || t.ownerUserId === currentUserId)
+  );
+  const facingTargetId = facingTarget?.id;
+  const facingTargetValue = facingTarget?.facing ?? 0;
+  useEffect(() => {
+    if (facingTargetId == null || !onTokenFace) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (
+        el &&
+        (el.isContentEditable ||
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
+      )
+        return;
+      const facing = facingFromKey(e.key);
+      if (facing == null || e.altKey || e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      if (facing !== facingTargetValue) onTokenFace(facingTargetId, facing);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [facingTargetId, facingTargetValue, onTokenFace]);
+
   const handleCanvasClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('[data-token]')) return;
     setInspectedTokenId(null);
@@ -758,6 +734,23 @@ export function MapCanvas({
                   >
                     💀
                   </div>
+                ) : t.kind === 'PJ' ? (
+                  <>
+                    <CharacterFigure
+                      color={t.color}
+                      facing={t.facing ?? 0}
+                      size={t.width ?? 56}
+                      seed={t.ownerUserId ?? t.id}
+                      ring={canMove(t) ? 'rgb(var(--c-accent))' : undefined}
+                      glow={
+                        highlightedPlayerId != null &&
+                        t.ownerUserId === highlightedPlayerId
+                      }
+                    />
+                    <span className="mt-0.5 max-w-[120px] truncate px-1.5 rounded bg-black/55 text-[11px] font-semibold text-white leading-4 pointer-events-none">
+                      {displayName}
+                    </span>
+                  </>
                 ) : t.iconUrl ? (
                   <div
                     className="rounded-full overflow-hidden flex-shrink-0 pointer-events-none"
