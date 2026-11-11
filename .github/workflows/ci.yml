@@ -163,11 +163,29 @@ jobs:
           done
           echo "Le serveur n'a pas démarré :"; cat ../server.log; exit 1
 
+      - name: Cache des navigateurs Playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package.json') }}
+
       - name: Installation de Playwright
         working-directory: e2e
         run: |
           npm install --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          # Le navigateur vient du CDN de Playwright : pas besoin des miroirs Ubuntu.
+          npx playwright install chromium
+          # Bibliothèques système : déjà présentes sur l'image GitHub (seules
+          # quelques polices manquent). Un miroir Ubuntu injoignable ne doit
+          # donc pas faire échouer la CI : on réessaie, puis on continue.
+          for i in 1 2 3; do
+            if timeout 300 npx playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "install-deps a échoué (essai $i/3)"
+            sleep 15
+          done
+          echo "::warning::Dépendances système de Playwright non installées (miroirs Ubuntu injoignables) ; les tests continuent avec celles de l'image."
 
       - name: Tests de bout en bout
         working-directory: e2e
