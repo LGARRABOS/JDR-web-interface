@@ -98,6 +98,8 @@ func NewServer(db storage.DB, staticDir string) (http.Handler, error) {
 	s.registerMessageRoutes()
 	s.registerRollRoutes()
 	s.registerLibraryRoutes()
+	s.registerHandoutRoutes()
+	s.registerNoteRoutes()
 	s.mux.Handle("/api/ws", s.wsHandler())
 
 	if staticDir != "" {

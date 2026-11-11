@@ -226,6 +226,23 @@ func AutoMigrate(db *sql.DB) error {
 		`ALTER TABLE maps ADD COLUMN fog_enabled INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE games ADD COLUMN is_library INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE tokens ADD COLUMN facing INTEGER NOT NULL DEFAULT 0`,
+		`CREATE TABLE IF NOT EXISTS handouts (
+			id SERIAL PRIMARY KEY,
+			game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+			title TEXT NOT NULL,
+			body TEXT NOT NULL DEFAULT '',
+			image_url TEXT NOT NULL DEFAULT '',
+			shown INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS game_notes (
+			id SERIAL PRIMARY KEY,
+			game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+			map_id INTEGER REFERENCES maps(id) ON DELETE CASCADE,
+			body TEXT NOT NULL DEFAULT '',
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS game_notes_scope ON game_notes (game_id, COALESCE(map_id, 0))`,
 		`ALTER TABLE fog_patches DROP CONSTRAINT IF EXISTS fog_patches_shape_type_check`,
 		`ALTER TABLE fog_patches ADD CONSTRAINT fog_patches_shape_type_check CHECK (shape_type IN ('rect','polygon','ellipse'))`,
 	}

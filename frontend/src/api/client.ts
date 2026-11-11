@@ -215,6 +215,41 @@ export const ElementsAPI = {
     api.delete(`/games/${gameId}/elements/${id}`),
 };
 
+/** Documents montrés aux joueurs (lettres, plans, portraits…). */
+export const HandoutsAPI = {
+  list: (gameId: number) => api.get(`/games/${gameId}/handouts`),
+  create: (gameId: number, title: string, body: string, file?: File) => {
+    const form = new FormData();
+    form.append('title', title);
+    form.append('body', body);
+    if (file) form.append('file', file);
+    return api.post(`/games/${gameId}/handouts`, form);
+  },
+  update: (
+    gameId: number,
+    id: number,
+    data: { title?: string; body?: string; shown?: boolean }
+  ) => api.patch(`/games/${gameId}/handouts/${id}`, data),
+  show: (gameId: number, id: number) =>
+    api.post(`/games/${gameId}/handouts/${id}/show`),
+  delete: (gameId: number, id: number) =>
+    api.delete(`/games/${gameId}/handouts/${id}`),
+};
+
+/** Notes privées du MJ : la partie (sans mapId) ou une carte. */
+export const NotesAPI = {
+  get: (gameId: number, mapId?: number) =>
+    api.get(`/games/${gameId}/notes`, {
+      params: mapId ? { mapId } : undefined,
+    }),
+  put: (gameId: number, body: string, mapId?: number) =>
+    api.put(
+      `/games/${gameId}/notes`,
+      { body },
+      { params: mapId ? { mapId } : undefined }
+    ),
+};
+
 /** Brouillard de guerre (réservé au MJ, sauf la lecture). */
 export const FogAPI = {
   get: (mapId: number) => api.get(`/maps/${mapId}/fog`),

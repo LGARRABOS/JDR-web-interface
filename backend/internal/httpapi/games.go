@@ -303,6 +303,10 @@ func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.hub.Broadcast(gameID, "game.settings", map[string]interface{}{"fogVisionRadius": radius})
+		var current *int64
+		if s.db.QueryRow("SELECT current_map_id FROM games WHERE id = ?", gameID).Scan(&current) == nil && current != nil {
+			s.refreshPlayerTokens(*current, false)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"message": "ok"})

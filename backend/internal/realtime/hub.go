@@ -315,6 +315,9 @@ func (h *Hub) handleAction(c *Client, msg clientMessage) {
 	case ActionSync:
 		c.resync()
 		return
+	case ActionRuler:
+		h.relayRuler(c, msg)
+		return
 	}
 
 	// Toutes les autres actions sont réservées au MJ.
@@ -389,6 +392,25 @@ func (h *Hub) handleAction(c *Client, msg clientMessage) {
 	r.live.Music.UpdatedAt = now
 	music := r.live.Music
 	h.broadcastLocked(r, nil, func(Member) (string, any, bool) { return EventMusicState, music, true })
+}
+
+// relayRuler transmet la mesure d'un membre aux autres (pas d'écho, rien
+// n'est mémorisé : une mesure ne vit que le temps du geste).
+func (h *Hub) relayRuler(c *Client, msg clientMessage) {
+	line := RulerLine{UserID: c.member.UserID}
+	if msg.MapID != nil {
+		line.MapID = *msg.MapID
+	}
+	if msg.From != nil && msg.To != nil {
+		if !finite(msg.From.X, msg.From.Y, msg.To.X, msg.To.Y) {
+			return
+		}
+		line.From, line.To = msg.From, msg.To
+	}
+	r := c.room
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	h.broadcastLocked(r, c, func(Member) (string, any, bool) { return EventRuler, line, true })
 }
 
 func currentPosition(m MusicState, nowMs int64) float64 {

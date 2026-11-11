@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { RollDisplay } from '../../realtime/gameStore';
 import { currentSides, withDie } from './dice';
 
@@ -42,11 +42,15 @@ export function DiceBar({
 
   return (
     <div
-      className="absolute bottom-4 z-20 flex flex-col items-center gap-2 transition-[left] duration-200"
-      style={{
-        left: panelOpen ? 'calc(50% - 188px)' : '50%',
-        transform: 'translateX(-50%)',
-      }}
+      // Sur ordinateur, la barre se décale quand le panneau est ouvert ; sur
+      // téléphone elle occupe la largeur de l'écran et défile horizontalement.
+      className="absolute bottom-2 sm:bottom-4 z-20 flex flex-col items-center gap-2 transition-[left] duration-200 left-1/2 sm:left-[var(--dice-left)] max-w-[calc(100vw-1rem)]"
+      style={
+        {
+          '--dice-left': panelOpen ? 'calc(50% - 188px)' : '50%',
+          transform: 'translateX(-50%)',
+        } as CSSProperties
+      }
     >
       {error && (
         <div
@@ -73,7 +77,7 @@ export function DiceBar({
       )}
       <form
         onSubmit={roll}
-        className="glass rounded-2xl p-1.5 flex items-center gap-1.5"
+        className="glass rounded-2xl p-1.5 flex items-center gap-1.5 max-w-full overflow-x-auto"
       >
         {DICE.map((d) => (
           <button
@@ -83,7 +87,7 @@ export function DiceBar({
             onDoubleClick={() => onRoll(withDie(expr, d), isGM && hidden)}
             title={`d${d} — double-clic pour lancer directement`}
             aria-pressed={sides === d}
-            className={`h-11 ${d === 100 ? 'w-12' : 'w-11'} rounded-lg text-sm font-bold ${
+            className={`h-11 shrink-0 ${d === 100 ? 'w-12' : 'w-11'} rounded-lg text-sm font-bold ${
               sides === d
                 ? 'bg-fantasy-accent text-fantasy-bg'
                 : 'bg-fantasy-surface text-fantasy-text hover:bg-fantasy-surface-hover'
@@ -102,7 +106,7 @@ export function DiceBar({
           onChange={(e) => setExpr(e.target.value)}
           placeholder="ex. 2d6+3"
           autoComplete="off"
-          className="w-28 h-11 px-3 rounded-lg bg-fantasy-bg border border-fantasy-border-soft text-[15px] text-fantasy-text placeholder:text-fantasy-muted-soft focus:outline-none focus:border-fantasy-accent"
+          className="w-24 sm:w-28 shrink-0 h-11 px-3 rounded-lg bg-fantasy-bg border border-fantasy-border-soft text-[15px] text-fantasy-text placeholder:text-fantasy-muted-soft focus:outline-none focus:border-fantasy-accent"
         />
         {isGM && (
           <label className="flex items-center gap-1.5 px-2 text-sm text-fantasy-text-soft cursor-pointer select-none">
@@ -117,7 +121,7 @@ export function DiceBar({
         )}
         <button
           type="submit"
-          className="h-11 px-5 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold hover:bg-fantasy-accent-hover"
+          className="h-11 px-4 sm:px-5 shrink-0 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold hover:bg-fantasy-accent-hover"
         >
           Lancer
         </button>

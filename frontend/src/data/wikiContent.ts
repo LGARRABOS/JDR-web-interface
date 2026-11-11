@@ -340,6 +340,40 @@ MJ : quitter sa partie la supprime pour tout le monde (fiches, messages et lance
 Cliquez sur votre personnage puis utilisez les flèches du clavier pour l'orienter (haut, bas, gauche, droite). Tout le monde voit dans quelle direction il regarde. Le MJ peut orienter tous les personnages. L'orientation reste possible quand le MJ a bloqué les déplacements.`,
   },
   {
+    id: 'regle',
+    title: 'Règle de mesure',
+    category: 'Cartes et jetons',
+    tags: ['carte', 'distance', 'joueur', 'MJ'],
+    content: `Le bouton règle, en haut à gauche à côté du nom de la partie, active la mesure pour tout le monde (MJ et joueurs).
+
+Glissez sur la carte (souris ou doigt) : la distance s'affiche en cases, en ligne droite. Les autres participants voient votre mesure en direct, à votre couleur et avec votre nom. Recliquez sur la règle ou appuyez sur Échap pour revenir au mode normal.`,
+  },
+  {
+    id: 'documents',
+    title: 'Documents pour les joueurs',
+    category: 'Maître du Jeu',
+    tags: ['MJ', 'joueur', 'documents', 'images'],
+    content: `Onglet « Docs » du panneau. Le MJ ajoute un document (titre, texte et/ou image : une lettre, un plan, le portrait d'un PNJ…). Il reste caché jusqu'à ce que le MJ clique « Montrer » : il s'ouvre alors en grand chez tous les joueurs.
+
+Les joueurs retrouvent dans leur onglet « Docs » tout ce qui leur a été montré. Le MJ peut le cacher à nouveau (il disparaît chez les joueurs), le remontrer ou le supprimer.`,
+  },
+  {
+    id: 'notes-mj',
+    title: 'Notes du MJ',
+    category: 'Maître du Jeu',
+    tags: ['MJ', 'préparation'],
+    content: `Onglet « Notes » du panneau, réservé au MJ et jamais envoyé aux joueurs. Deux zones : les notes de la partie, et les notes de la carte affichée (elles changent avec la carte). Tout est enregistré automatiquement.`,
+  },
+  {
+    id: 'mobile',
+    title: 'Jouer sur téléphone ou tablette',
+    category: 'Démarrage',
+    tags: ['mobile', 'tablette', 'tactile'],
+    content: `La table s'utilise au doigt : glisser pour déplacer la carte ou son personnage, pincer à deux doigts pour zoomer. Un joueur peut ainsi régler sa propre vue ; elle se recale quand le MJ recadre la carte.
+
+Sur téléphone, le panneau (chat, fiche, documents…) s'ouvre en bas de l'écran avec le bouton « Panneau », et la barre de dés défile horizontalement.`,
+  },
+  {
     id: 'vue-joueur',
     title: 'Voir la table comme un joueur',
     category: 'Maître du Jeu',

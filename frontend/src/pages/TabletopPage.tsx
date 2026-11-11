@@ -4,6 +4,7 @@ import { useAuth } from '../auth/useAuth';
 import {
   ElementsAPI,
   FogAPI,
+  HandoutsAPI,
   GamesAPI,
   MessagesAPI,
   RollsAPI,
@@ -29,9 +30,16 @@ import { ChatFeed } from '../components/tabletop/ChatFeed';
 import { DiceBar } from '../components/tabletop/DiceBar';
 import { TokenQuickCard } from '../components/tabletop/TokenQuickCard';
 import { MonsterSheetView } from '../components/tabletop/MonsterSheetView';
+import { HandoutsTab } from '../components/tabletop/HandoutsTab';
+import { HandoutViewer } from '../components/tabletop/HandoutViewer';
+import { NotesTab } from '../components/tabletop/NotesTab';
+import type { Handout } from '../realtime/protocol';
 import { MiniPlayer, MusicTab } from '../components/tabletop/MusicControls';
 import { useAmbientMusic } from '../hooks/useAmbientMusic';
 import { useGameSession } from '../realtime/useGameSession';
+import type { RulerPoint } from '../realtime/protocol';
+import type { DrawnRuler } from '../components/tabletop/RulerLayer';
+import { colorForUser, displayNameOf } from '../components/tabletop/presence';
 import { getErrorMessage } from '../utils/errorMessage';
 
 const DEFAULT_VIEW: MapView = { scale: 1, offset: { x: 0, y: 0 } };
@@ -84,7 +92,10 @@ export function TabletopPage() {
   const [characterNameInput, setCharacterNameInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [rollError, setRollError] = useState<string | null>(null);
-  const [panelOpen, setPanelOpen] = useState(true);
+  // Sur téléphone, le panneau couvre la carte : il démarre replié.
+  const [panelOpen, setPanelOpen] = useState(
+    () => typeof window === 'undefined' || window.innerWidth >= 640
+  );
   const [activeTab, setActiveTab] = useState('chat');
   const [fitSignal, setFitSignal] = useState(0);
   const [monsterView, setMonsterView] = useState<{
@@ -356,6 +367,83 @@ export function TabletopPage() {
   // Changer de carte range l'outil de dessin.
   useEffect(() => setFogTool(null), [currentMapId]);
 
+  // --- Documents -------------------------------------------------------------
+
+  const handleCreateHandout = useCallback(
+    async (title: string, body: string, file?: File) => {
+      try {
+        const { data } = await HandoutsAPI.create(gameId, title, body, file);
+        store.upsertHandoutLocally((data as { handout: Handout }).handout);
+        return true;
+      } catch (e) {
+        fail(e, 'Document non ajouté');
+        return false;
+      }
+    },
+    [gameId, store, fail]
+  );
+
+  // --- Règle de mesure (tout le monde) --------------------------------------
+
+  const [rulerActive, setRulerActive] = useState(false);
+  const rulerSentAt = useRef(0);
+  const rulerPending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleRulerChange = useCallback(
+    (line: { from: RulerPoint; to: RulerPoint } | null) => {
+      if (!currentMapId) return;
+      const sendNow = () => {
+        rulerSentAt.current = Date.now();
+        send(
+          line
+            ? { action: 'ruler', mapId: currentMapId, ...line }
+            : { action: 'ruler', mapId: currentMapId }
+        );
+      };
+      if (rulerPending.current) clearTimeout(rulerPending.current);
+      rulerPending.current = null;
+      // Au plus ~20 envois par seconde ; la fin du geste part toujours.
+      const wait = 50 - (Date.now() - rulerSentAt.current);
+      if (!line || wait <= 0) sendNow();
+      else rulerPending.current = setTimeout(sendNow, wait);
+    },
+    [currentMapId, send]
+  );
+  useEffect(() => setRulerActive(false), [currentMapId]);
+  useEffect(() => {
+    if (!rulerActive) return;
+    const onKey = (e: KeyboardEvent) =>
+      e.key === 'Escape' && setRulerActive(false);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [rulerActive]);
+
+  const remoteRulers: DrawnRuler[] = useMemo(
+    () =>
+      state.rulers.flatMap((r) => {
+        if (!r.from || !r.to) return [];
+        const who =
+          state.players.find((p) => p.userId === r.userId) ??
+          state.presence.find((p) => p.userId === r.userId);
+        const isMJ = who?.role === 'MJ';
+        return [
+          {
+            key: `u${r.userId}`,
+            from: r.from,
+            to: r.to,
+            color: isMJ
+              ? 'rgb(var(--c-accent))'
+              : colorForUser(r.userId, state.players).bg,
+            label: who ? (isMJ ? 'MJ' : displayNameOf(who)) : undefined,
+          },
+        ];
+      }),
+    [state.rulers, state.players, state.presence]
+  );
+  const myRulerColor =
+    you && you.role !== 'MJ'
+      ? colorForUser(you.userId, state.players).bg
+      : 'rgb(var(--c-accent))';
+
   // Échap quitte la vue joueur.
   useEffect(() => {
     if (!previewAsPlayer) return;
@@ -542,6 +630,35 @@ export function TabletopPage() {
       <MusicTab m={music} onOpenResources={isGM ? openResources : undefined} />
     ),
   };
+  const handoutsTab: SidePanelTab = {
+    id: 'docs',
+    label: 'Docs',
+    content: (
+      <HandoutsTab
+        isGM={isGM}
+        handouts={state.handouts}
+        onOpen={(id) => store.setOpenHandout(id)}
+        onCreate={isGM ? handleCreateHandout : undefined}
+        onShow={(id) =>
+          HandoutsAPI.show(gameId, id).catch((e) =>
+            fail(e, 'Document non montré')
+          )
+        }
+        onHide={(id) =>
+          HandoutsAPI.update(gameId, id, { shown: false })
+            .then(({ data }) =>
+              store.upsertHandoutLocally((data as { handout: Handout }).handout)
+            )
+            .catch((e) => fail(e, 'Document non caché'))
+        }
+        onDelete={(id) =>
+          HandoutsAPI.delete(gameId, id)
+            .then(() => store.removeHandoutLocally(id))
+            .catch((e) => fail(e, 'Suppression impossible'))
+        }
+      />
+    ),
+  };
   const tabs: SidePanelTab[] = isGM
     ? [
         chatTab,
@@ -580,6 +697,18 @@ export function TabletopPage() {
           ),
         },
         musicTab,
+        handoutsTab,
+        {
+          id: 'notes',
+          label: 'Notes',
+          content: (
+            <NotesTab
+              gameId={gameId}
+              mapId={currentMap?.id}
+              mapName={currentMap?.name}
+            />
+          ),
+        },
       ]
     : [
         chatTab,
@@ -615,7 +744,13 @@ export function TabletopPage() {
           ),
         },
         musicTab,
+        handoutsTab,
       ];
+
+  const openHandout =
+    state.openHandoutId != null
+      ? state.handouts.find((h) => h.id === state.openHandoutId)
+      : undefined;
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-fantasy-bg text-fantasy-text">
@@ -629,6 +764,10 @@ export function TabletopPage() {
           fog={fog}
           fogTool={viewAsGM ? fogTool : null}
           onFogDraw={handleFogDraw}
+          rulerActive={rulerActive}
+          remoteRulers={remoteRulers}
+          rulerColor={myRulerColor}
+          onRulerChange={handleRulerChange}
           onTokenFace={
             previewAsPlayer
               ? undefined
@@ -640,10 +779,19 @@ export function TabletopPage() {
           highlightedPlayerId={live.turnPlayerId}
           connectedUserIds={state.presence.map((u) => u.userId)}
           connectedUsers={state.presence}
-          onMapViewChange={handleMapViewChange}
+          onMapViewChange={
+            previewAsPlayer
+              ? (v) =>
+                  store.setLocalView({
+                    scale: v.scale,
+                    offsetX: v.offset.x,
+                    offsetY: v.offset.y,
+                  })
+              : handleMapViewChange
+          }
           hasSharedView={live.view != null}
           fitSignal={fitSignal}
-          onMapPanEnd={isGM ? flushMapView : undefined}
+          onMapPanEnd={viewAsGM ? flushMapView : undefined}
           onTokenMove={handleTokenMove}
           onTokenDragStart={handleTokenDragStart}
           onTokenDragEnd={handleTokenDragEnd}
@@ -692,6 +840,8 @@ export function TabletopPage() {
         onSelectMap={handleSelectMap}
         onOpenResources={openResources}
         onRetry={resync}
+        rulerActive={rulerActive}
+        onToggleRuler={currentMap ? () => setRulerActive((v) => !v) : undefined}
       />
 
       {actionError && (
@@ -818,6 +968,12 @@ export function TabletopPage() {
                   handlePlayerFieldsChange(monsterView.element.id, fields)
               : undefined
           }
+        />
+      )}
+      {openHandout && (
+        <HandoutViewer
+          handout={openHandout}
+          onClose={() => store.setOpenHandout(null)}
         />
       )}
       {playerSheet && (

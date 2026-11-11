@@ -346,3 +346,30 @@ func TestUpdateMemberBroadcastsPresence(t *testing.T) {
 	}
 	_ = player2
 }
+
+func TestRulerRelayedToOthersOnly(t *testing.T) {
+	h := newTestHub()
+	g := attach(h, 1, gm)
+	g.waitFor(t, EventSnapshot)
+	p := attach(h, 1, player)
+	p.waitFor(t, EventSnapshot)
+
+	// Un joueur peut mesurer : le MJ voit sa règle.
+	p.sendAction(t, map[string]any{"action": ActionRuler, "mapId": 5,
+		"from": map[string]float64{"x": 1, "y": 2}, "to": map[string]float64{"x": 3, "y": 4}})
+	l := payloadAs[RulerLine](t, g.waitFor(t, EventRuler))
+	if l.UserID != player.UserID || l.MapID != 5 || l.To == nil || l.To.X != 3 {
+		t.Fatalf("règle = %+v", l)
+	}
+	// Fin de mesure : segment vide.
+	p.sendAction(t, map[string]any{"action": ActionRuler, "mapId": 5})
+	if l := payloadAs[RulerLine](t, g.waitFor(t, EventRuler)); l.From != nil {
+		t.Fatalf("la règle doit être retirée : %+v", l)
+	}
+	time.Sleep(20 * time.Millisecond)
+	for _, typ := range p.types() {
+		if typ == EventRuler {
+			t.Fatal("la règle a été renvoyée à son auteur")
+		}
+	}
+}

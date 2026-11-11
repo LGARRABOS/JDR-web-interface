@@ -292,15 +292,21 @@ func (s *Server) broadcastToken(eventType string, t *domain.Token) {
 	deleted := map[string]int64{"id": t.ID, "mapId": t.MapID}
 	public := tokenForPlayers(t)
 	for _, gameID := range s.gamesShowingMap(t.MapID) {
+		// Caché par le MJ ou sous le brouillard : les joueurs ne le reçoivent pas.
+		seen := s.loadPlayerView(gameID, t.MapID).sees(t)
 		s.hub.BroadcastFunc(gameID, func(m realtime.Member) (string, any, bool) {
 			if m.IsGM() {
 				return eventType, t, true
 			}
-			if t.VisibleToPlayers {
+			if seen {
 				return eventType, public, true
 			}
 			return "token.deleted", deleted, true
 		})
+	}
+	// Un personnage qui bouge déplace sa zone de vision.
+	if t.Kind == "PJ" && eventType == "token.updated" {
+		s.refreshPlayerTokens(t.MapID, true)
 	}
 }
 

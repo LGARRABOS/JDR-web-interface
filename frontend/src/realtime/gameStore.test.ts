@@ -326,4 +326,61 @@ describe('applyEvent', () => {
     );
     expect(s.scene?.fog?.enabled).toBe(true);
   });
+
+  it('garde la mesure des autres et la retire en fin de geste', () => {
+    let s = ready();
+    const line = {
+      userId: 2,
+      mapId: 10,
+      from: { x: 0, y: 0 },
+      to: { x: 100, y: 0 },
+    };
+    s = applyEvent(s, env({ type: 'ruler', payload: line }));
+    s = applyEvent(
+      s,
+      env({ type: 'ruler', payload: { ...line, to: { x: 150, y: 0 } } })
+    );
+    expect(s.rulers).toHaveLength(1);
+    expect(s.rulers[0].to?.x).toBe(150);
+    s = applyEvent(
+      s,
+      env({ type: 'ruler', payload: { ...line, from: null, to: null } })
+    );
+    expect(s.rulers).toHaveLength(0);
+    // Une mesure sur une autre carte est ignorée.
+    s = applyEvent(s, env({ type: 'ruler', payload: { ...line, mapId: 99 } }));
+    expect(s.rulers).toHaveLength(0);
+  });
+
+  it('ouvre un document montré et le retire s’il est caché', () => {
+    let s = ready();
+    const doc = {
+      id: 1,
+      gameId: 1,
+      title: 'Lettre',
+      body: 'Rendez-vous à minuit',
+      imageUrl: '',
+      shown: true,
+      createdAt: '',
+    };
+    s = applyEvent(s, env({ type: 'handout.shown', payload: doc }));
+    expect(s.openHandoutId).toBe(1);
+    expect(s.handouts).toHaveLength(1);
+    s = applyEvent(
+      s,
+      env({ type: 'handout.updated', payload: { ...doc, shown: false } })
+    );
+    expect(s.handouts).toHaveLength(0);
+    expect(s.openHandoutId).toBeNull();
+  });
+
+  it('remplace les jetons visibles quand le brouillard change', () => {
+    let s = ready();
+    const keep = s.scene!.tokens[0];
+    s = applyEvent(
+      s,
+      env({ type: 'scene.tokens', payload: { mapId: 10, tokens: [keep] } })
+    );
+    expect(s.scene?.tokens.map((t) => t.id)).toEqual([keep.id]);
+  });
 });

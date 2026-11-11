@@ -32,7 +32,7 @@ export function SidePanel({
       <button
         type="button"
         onClick={() => onToggle(true)}
-        className="glass absolute top-[84px] right-4 z-20 h-11 pl-2 pr-3.5 rounded-xl flex items-center gap-1.5 text-sm hover:bg-fantasy-surface"
+        className="glass absolute bottom-20 right-2 sm:bottom-auto sm:top-[84px] sm:right-4 z-20 h-11 pl-2 pr-3.5 rounded-xl flex items-center gap-1.5 text-sm hover:bg-fantasy-surface"
         aria-label="Ouvrir le panneau"
       >
         <ChevronLeft size={18} />
@@ -49,10 +49,11 @@ export function SidePanel({
   const current = tabs.find((t) => t.id === active) ?? tabs[0];
 
   return (
-    <aside className="glass absolute top-[84px] right-4 bottom-4 z-20 w-[360px] rounded-2xl flex flex-col overflow-hidden">
+    // Téléphone : feuille en bas de l'écran ; ordinateur : colonne à droite.
+    <aside className="glass absolute inset-x-2 bottom-2 h-[62vh] sm:inset-x-auto sm:h-auto sm:top-[84px] sm:right-4 sm:bottom-4 sm:w-[360px] z-40 sm:z-20 rounded-2xl flex flex-col overflow-hidden">
       <div
         role="tablist"
-        className="flex gap-0.5 p-1.5 border-b border-fantasy-border-soft"
+        className="flex gap-0.5 p-1.5 border-b border-fantasy-border-soft overflow-x-auto"
       >
         {tabs.map((t) => {
           const selected = t.id === current.id;
@@ -65,7 +66,7 @@ export function SidePanel({
               aria-selected={selected}
               aria-controls={`tabpanel-${t.id}`}
               onClick={() => onChange(t.id)}
-              className={`tab-btn flex-1 h-10 rounded-lg text-sm ${
+              className={`tab-btn flex-1 shrink-0 min-w-[3.25rem] px-1 h-10 rounded-lg text-sm whitespace-nowrap ${
                 selected
                   ? 'bg-fantasy-surface text-fantasy-text font-bold'
                   : 'text-fantasy-muted hover:text-fantasy-text'

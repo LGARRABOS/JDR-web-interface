@@ -112,7 +112,7 @@ export function GmToolbar({
   return (
     <div
       ref={rootRef}
-      className="absolute left-4 top-1/2 -translate-y-1/2 z-20 flex items-start gap-2"
+      className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 flex items-start gap-2"
     >
       <nav
         aria-label="Outils du MJ"

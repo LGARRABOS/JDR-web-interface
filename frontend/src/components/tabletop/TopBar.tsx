@@ -3,7 +3,15 @@ import type { MapData } from '../../types/game';
 import type { ConnectionStatus } from '../../realtime/connection';
 import type { GameInfo, Member } from '../../realtime/protocol';
 import { colorForUser, displayNameOf, initials } from './presence';
-import { Check, ChevronDown, ChevronLeft, Copy, Flag, MapIcon } from './icons';
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  Copy,
+  Flag,
+  MapIcon,
+  Ruler,
+} from './icons';
 
 interface TopBarProps {
   game: GameInfo;
@@ -20,6 +28,9 @@ interface TopBarProps {
   onSelectMap: (mapId: number) => void;
   onOpenResources: () => void;
   onRetry: () => void;
+  /** Règle de mesure (absente sans carte). */
+  rulerActive?: boolean;
+  onToggleRuler?: () => void;
 }
 
 export function TopBar({
@@ -37,6 +48,8 @@ export function TopBar({
   onSelectMap,
   onOpenResources,
   onRetry,
+  rulerActive = false,
+  onToggleRuler,
 }: TopBarProps) {
   const [copied, setCopied] = useState(false);
   const onlineIds = new Set(presence.map((p) => p.userId));
@@ -60,7 +73,7 @@ export function TopBar({
   );
 
   return (
-    <header className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between gap-3 pointer-events-none">
+    <header className="absolute top-2 left-2 right-2 sm:top-4 sm:left-4 sm:right-4 z-30 flex flex-wrap items-center justify-between gap-2 sm:gap-3 pointer-events-none">
       <div className="glass pointer-events-auto flex items-center gap-1 rounded-2xl p-1 pr-2 min-w-0">
         <button
           type="button"
@@ -71,7 +84,7 @@ export function TopBar({
           <ChevronLeft />
         </button>
         <div className="flex flex-col leading-tight pr-3 mr-1 border-r border-fantasy-border-soft min-w-0">
-          <span className="font-heading font-semibold text-base tracking-wide truncate max-w-[16rem]">
+          <span className="font-heading font-semibold text-base tracking-wide truncate max-w-[7rem] sm:max-w-[16rem]">
             {game.name}
           </span>
           <span className="text-xs text-fantasy-muted">
@@ -89,7 +102,7 @@ export function TopBar({
             <select
               value={currentMap?.id ?? ''}
               onChange={(e) => onSelectMap(parseInt(e.target.value, 10))}
-              className="appearance-none bg-transparent text-fantasy-text pr-1 focus:outline-none cursor-pointer max-w-[14rem]"
+              className="appearance-none bg-transparent text-fantasy-text pr-1 focus:outline-none cursor-pointer max-w-[6rem] sm:max-w-[14rem]"
             >
               {!currentMap && (
                 <option value="">
@@ -109,6 +122,24 @@ export function TopBar({
               <ChevronDown size={16} />
             </span>
           </label>
+        )}
+        {onToggleRuler && (
+          <button
+            type="button"
+            onClick={onToggleRuler}
+            aria-pressed={rulerActive}
+            aria-label="Règle de mesure"
+            title={
+              rulerActive
+                ? 'Règle active : glissez sur la carte (cliquez pour arrêter)'
+                : 'Règle de mesure'
+            }
+            className={`icon-btn ml-1 ${
+              rulerActive ? '!bg-fantasy-accent !text-fantasy-bg' : ''
+            }`}
+          >
+            <Ruler />
+          </button>
         )}
       </div>
 
@@ -136,7 +167,7 @@ export function TopBar({
         ))}
 
       <div className="glass pointer-events-auto flex items-center gap-3 rounded-2xl py-1.5 pl-3.5 pr-1.5">
-        <ul className="flex items-center" aria-label="Participants">
+        <ul className="hidden md:flex items-center" aria-label="Participants">
           {people.map((p, i) => {
             const online = onlineIds.has(p.userId);
             const name =
@@ -170,7 +201,7 @@ export function TopBar({
         {connection === 'open' ? (
           <span className="flex items-center gap-1.5 text-[13px] text-fantasy-muted">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            Connecté
+            <span className="hidden sm:inline">Connecté</span>
           </span>
         ) : (
           <button
@@ -192,7 +223,9 @@ export function TopBar({
             title="Copier le code d'invitation"
           >
             {copied ? <Check size={16} /> : <Copy size={16} />}
-            {copied ? 'Copié !' : `Inviter · ${game.inviteCode}`}
+            <span className="hidden sm:inline">
+              {copied ? 'Copié !' : `Inviter · ${game.inviteCode}`}
+            </span>
           </button>
         )}
         {isGM && (

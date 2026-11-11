@@ -45,6 +45,7 @@ type gameSnapshot struct {
 	Messages []map[string]interface{} `json:"messages"`
 	Rolls    []map[string]interface{} `json:"rolls"`
 	Players  []snapshotPlayer         `json:"players"`
+	Handouts []*handout               `json:"handouts"`
 }
 
 func (s *Server) resolveMember(gameID, userID int64) (realtime.Member, bool) {
@@ -101,13 +102,16 @@ func (s *Server) buildSnapshot(gameID int64, m realtime.Member) (any, error) {
 				s.broadcastToken("token.created", t)
 			}
 		}
-		if snap.Scene, err = s.buildScene(sceneMapID, m.IsGM()); err != nil {
+		if snap.Scene, err = s.buildScene(gameID, sceneMapID, m.IsGM()); err != nil {
 			return nil, fmt.Errorf("scene: %w", err)
 		}
 	}
 
 	if snap.Messages, err = s.listRecentMessages(gameID); err != nil {
 		return nil, fmt.Errorf("messages: %w", err)
+	}
+	if snap.Handouts, err = s.listHandouts(gameID, m.IsGM()); err != nil {
+		return nil, fmt.Errorf("handouts: %w", err)
 	}
 	if snap.Rolls, err = s.listRecentRolls(gameID, m.IsGM()); err != nil {
 		return nil, fmt.Errorf("rolls: %w", err)
@@ -118,7 +122,7 @@ func (s *Server) buildSnapshot(gameID int64, m realtime.Member) (any, error) {
 	return snap, nil
 }
 
-func (s *Server) buildScene(mapID int64, forGM bool) (*mapScene, error) {
+func (s *Server) buildScene(gameID, mapID int64, forGM bool) (*mapScene, error) {
 	m, err := s.getMap(mapID)
 	if err != nil {
 		return nil, err
@@ -126,6 +130,9 @@ func (s *Server) buildScene(mapID int64, forGM bool) (*mapScene, error) {
 	tokens, err := s.listMapTokens(mapID, forGM)
 	if err != nil {
 		return nil, err
+	}
+	if !forGM {
+		tokens = s.filterTokensForPlayers(gameID, mapID, tokens)
 	}
 	elements, err := s.listMapElements(mapID)
 	if err != nil {
@@ -144,11 +151,11 @@ func (s *Server) broadcastMapDisplayed(gameID, mapID int64) {
 	s.ensurePlayerTokensForMap(mapID, gameID)
 	s.recenterPlayerTokens(mapID)
 	s.hub.ResetMapView(gameID)
-	gmScene, err := s.buildScene(mapID, true)
+	gmScene, err := s.buildScene(gameID, mapID, true)
 	if err != nil {
 		return
 	}
-	playerScene, err := s.buildScene(mapID, false)
+	playerScene, err := s.buildScene(gameID, mapID, false)
 	if err != nil {
 		return
 	}

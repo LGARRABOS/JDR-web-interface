@@ -28,6 +28,7 @@ const (
 	EventMapView        = "map.view"
 	EventMusicState     = "music.state"
 	EventTurnHighlight  = "turn.highlight"
+	EventRuler          = "ruler"
 )
 
 // Actions envoyées par les clients.
@@ -41,6 +42,8 @@ const (
 	ActionMusicVolume   = "music.volume"
 	ActionMusicStop     = "music.stop"
 	ActionTurnHighlight = "turn.highlight"
+	// Règle de mesure : ouverte à tous les membres, relayée aux autres.
+	ActionRuler = "ruler"
 )
 
 // Envelope est la forme de tout message envoyé par le serveur.
@@ -105,4 +108,22 @@ type clientMessage struct {
 	Position *float64 `json:"position"`
 	Volume   *float64 `json:"volume"`
 	PlayerID *int64   `json:"playerId"`
+	// Règle : segment en coordonnées de carte ; absent = règle retirée.
+	MapID *int64      `json:"mapId"`
+	From  *RulerPoint `json:"from"`
+	To    *RulerPoint `json:"to"`
+}
+
+// RulerPoint est un point de la carte.
+type RulerPoint struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// RulerLine est la mesure en cours d'un membre (From/To nuls : terminée).
+type RulerLine struct {
+	UserID int64       `json:"userId"`
+	MapID  int64       `json:"mapId"`
+	From   *RulerPoint `json:"from"`
+	To     *RulerPoint `json:"to"`
 }

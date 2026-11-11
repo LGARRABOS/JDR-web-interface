@@ -7,9 +7,11 @@ import {
   type DiceRoll,
   type Envelope,
   type GameInfo,
+  type Handout,
   type LiveState,
   type MapViewState,
   type Member,
+  type RulerLine,
   type Scene,
 } from './protocol';
 
@@ -43,6 +45,12 @@ export interface GameState {
   lastRollHidden: RollDisplay | null;
   /** Jeton en cours de déplacement local : ses x/y locaux priment sur ceux du serveur. */
   draggingTokenId: number | null;
+  /** Mesures en cours des autres participants. */
+  rulers: RulerLine[];
+  /** Documents visibles (tous pour le MJ). */
+  handouts: Handout[];
+  /** Document que le MJ vient de montrer : ouvert chez tout le monde. */
+  openHandoutId: number | null;
 }
 
 export const initialGameState: GameState = {
@@ -62,6 +70,9 @@ export const initialGameState: GameState = {
   lastRoll: null,
   lastRollHidden: null,
   draggingTokenId: null,
+  rulers: [],
+  handouts: [],
+  openHandoutId: null,
 };
 
 let rollKey = 0;
@@ -153,11 +164,70 @@ export function applyEvent(
         },
         serverOffsetMs,
         draggingTokenId: null,
+        rulers: [],
+        handouts: snap.handouts ?? [],
       };
     }
 
     case 'ping':
       return state;
+
+    // Joueurs : liste complète des jetons visibles (brouillard modifié…).
+    case 'scene.tokens': {
+      const { mapId, tokens } = env.payload;
+      if (!onCurrentMap(state, mapId)) return state;
+      return withScene(state, (sc) => ({
+        ...sc,
+        tokens: tokens.map((t) =>
+          // Le jeton qu'on fait glisser garde sa position locale.
+          t.id === state.draggingTokenId
+            ? (sc.tokens.find((x) => x.id === t.id) ?? t)
+            : t
+        ),
+      }));
+    }
+
+    case 'ruler': {
+      const line = env.payload;
+      const others = state.rulers.filter((r) => r.userId !== line.userId);
+      if (!line.from || !line.to || !onCurrentMap(state, line.mapId)) {
+        return others.length === state.rulers.length
+          ? state
+          : { ...state, rulers: others };
+      }
+      return { ...state, rulers: [...others, line] };
+    }
+
+    case 'handout.created':
+    case 'handout.updated': {
+      const h = env.payload;
+      const isGM = state.you?.role === 'MJ';
+      // Un document que le MJ cache disparaît chez les joueurs.
+      if (!isGM && !h.shown) {
+        return {
+          ...state,
+          handouts: state.handouts.filter((x) => x.id !== h.id),
+          openHandoutId:
+            state.openHandoutId === h.id ? null : state.openHandoutId,
+        };
+      }
+      return { ...state, handouts: upsertById(state.handouts, h) };
+    }
+    case 'handout.deleted':
+      return {
+        ...state,
+        handouts: state.handouts.filter((x) => x.id !== env.payload.id),
+        openHandoutId:
+          state.openHandoutId === env.payload.id ? null : state.openHandoutId,
+      };
+    case 'handout.shown':
+      return {
+        ...state,
+        handouts: upsertById(state.handouts, env.payload),
+        // Le MJ sait ce qu'il vient de montrer : seuls les joueurs le voient s'ouvrir.
+        openHandoutId:
+          state.you?.role === 'MJ' ? state.openHandoutId : env.payload.id,
+      };
 
     case 'fog.state': {
       const fog = env.payload;
@@ -182,6 +252,7 @@ export function applyEvent(
       return {
         ...state,
         presence: state.presence.filter((m) => m.userId !== env.payload.userId),
+        rulers: state.rulers.filter((r) => r.userId !== env.payload.userId),
       };
     case 'presence.updated': {
       const m = env.payload;
@@ -281,6 +352,7 @@ export function applyEvent(
           mapElements: scene.mapElements ?? [],
           fog: scene.fog ?? null,
         },
+        rulers: [],
         game: state.game
           ? { ...state.game, currentMapId: scene.map.id }
           : state.game,
@@ -382,6 +454,24 @@ export class GameStore {
   setDragging(id: number | null) {
     if (this.state.draggingTokenId === id) return;
     this.set({ ...this.state, draggingTokenId: id });
+  }
+
+  /** Ferme (ou ouvre) un document chez soi uniquement. */
+  setOpenHandout(id: number | null) {
+    if (this.state.openHandoutId === id) return;
+    this.set({ ...this.state, openHandoutId: id });
+  }
+
+  /** Document créé, modifié ou supprimé par soi-même (réponse HTTP). */
+  upsertHandoutLocally(h: Handout) {
+    this.set({ ...this.state, handouts: upsertById(this.state.handouts, h) });
+  }
+
+  removeHandoutLocally(id: number) {
+    this.set({
+      ...this.state,
+      handouts: this.state.handouts.filter((x) => x.id !== id),
+    });
   }
 
   setLocalView(view: MapViewState) {

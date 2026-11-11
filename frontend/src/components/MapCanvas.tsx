@@ -3,6 +3,12 @@ import { Link } from 'react-router-dom';
 
 import { FogDrawOverlay, FogLayer } from './FogLayer';
 import { CharacterFigure } from './tabletop/CharacterFigure';
+import {
+  RulerDrawOverlay,
+  RulerLayer,
+  type DrawnRuler,
+} from './tabletop/RulerLayer';
+import type { RulerPoint } from '../realtime/protocol';
 import { facingFromKey } from './tabletop/character';
 import {
   clientToMapCoords,
@@ -62,6 +68,13 @@ interface MapCanvasProps {
   fog?: FogState | null;
   /** Outil de brouillard actif (MJ) : glisser sur la carte dessine une zone. */
   fogTool?: { shape: FogShape; reveal: boolean } | null;
+  /** Règle de mesure active : glisser sur la carte mesure une distance. */
+  rulerActive?: boolean;
+  /** Mesures des autres participants. */
+  remoteRulers?: DrawnRuler[];
+  /** Couleur de sa propre règle. */
+  rulerColor?: string;
+  onRulerChange?: (line: { from: RulerPoint; to: RulerPoint } | null) => void;
   /** Tourner un personnage (flèches du clavier sur le jeton sélectionné). */
   onTokenFace?: (id: number, facing: number) => void;
   onFogDraw?: (zone: {
@@ -104,7 +117,15 @@ export function MapCanvas({
   fogTool = null,
   onFogDraw,
   onTokenFace,
+  rulerActive = false,
+  remoteRulers = [],
+  rulerColor = 'rgb(var(--c-accent))',
+  onRulerChange,
 }: MapCanvasProps) {
+  const [myRuler, setMyRuler] = useState<{
+    from: RulerPoint;
+    to: RulerPoint;
+  } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const { scale, offset } = mapView;
@@ -123,6 +144,8 @@ export function MapCanvas({
     startOffset: { x: number; y: number };
   } | null>(null);
   const didPanRef = useRef(false);
+  /** Pincement à deux doigts en cours (écran tactile). */
+  const pinchRef = useRef<{ dist: number; scale: number } | null>(null);
   const didDragRef = useRef(false);
   const lastTokenClickRef = useRef<{ tokenId: number; time: number } | null>(
     null
@@ -231,16 +254,18 @@ export function MapCanvas({
     [onMapViewChange, scale, offset]
   );
 
+  // Zoom et déplacement : pour le MJ, la vue est partagée avec les joueurs ;
+  // un joueur peut ajuster sa propre vue (utile sur téléphone), jusqu'au
+  // prochain recadrage du MJ.
   const handleWheel = (e: React.WheelEvent) => {
-    if (!isGM) return;
     e.preventDefault();
     const newScale = Math.max(0.25, Math.min(3, scale - e.deltaY * 0.002));
     updateView({ scale: newScale });
   };
 
-  const handleMapMouseDown = (e: React.MouseEvent) => {
-    if (!isGM) return;
+  const handleMapMouseDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('[data-token]')) return;
+    if (pinchRef.current) return;
     if (e.button === 0) {
       didPanRef.current = false;
       setIsPanning(true);
@@ -254,7 +279,7 @@ export function MapCanvas({
 
   const handleMapMouseMove = useCallback(
     (e: MouseEvent) => {
-      if (panRef.current && isGM && onMapViewChange) {
+      if (panRef.current && onMapViewChange && !pinchRef.current) {
         didPanRef.current = true;
         const dx = e.clientX - panRef.current.startX;
         const dy = e.clientY - panRef.current.startY;
@@ -267,7 +292,7 @@ export function MapCanvas({
         });
       }
     },
-    [isGM, onMapViewChange, scale]
+    [onMapViewChange, scale]
   );
 
   const handleMapMouseUp = useCallback(() => {
@@ -278,7 +303,7 @@ export function MapCanvas({
     setIsPanning(false);
   }, [onMapPanEnd]);
 
-  const handleTokenMouseDown = (e: React.MouseEvent, token: Token) => {
+  const handleTokenMouseDown = (e: React.PointerEvent, token: Token) => {
     if (!canMove(token) || !onTokenMove) return;
     e.stopPropagation();
     setIsDragging(true);
@@ -360,23 +385,71 @@ export function MapCanvas({
     }, 0);
   }, [onTokenDragEnd]);
 
+  // Événements « pointeur » : souris, doigt et stylet de la même façon.
   useEffect(() => {
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handleMouseMove);
+    window.addEventListener('pointerup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handleMouseMove);
+      window.removeEventListener('pointerup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
-    window.addEventListener('mousemove', handleMapMouseMove);
-    window.addEventListener('mouseup', handleMapMouseUp);
+    window.addEventListener('pointermove', handleMapMouseMove);
+    window.addEventListener('pointerup', handleMapMouseUp);
+    window.addEventListener('pointercancel', handleMapMouseUp);
     return () => {
-      window.removeEventListener('mousemove', handleMapMouseMove);
-      window.removeEventListener('mouseup', handleMapMouseUp);
+      window.removeEventListener('pointermove', handleMapMouseMove);
+      window.removeEventListener('pointerup', handleMapMouseUp);
+      window.removeEventListener('pointercancel', handleMapMouseUp);
     };
   }, [handleMapMouseMove, handleMapMouseUp]);
+
+  // Pincer à deux doigts pour zoomer (écrans tactiles).
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+  const updateViewRef = useRef(updateView);
+  updateViewRef.current = updateView;
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const dist = (t: TouchList) =>
+      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchRef.current = { dist: dist(e.touches), scale: scaleRef.current };
+        panRef.current = null;
+        setIsPanning(false);
+      }
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!pinchRef.current || e.touches.length !== 2) return;
+      e.preventDefault();
+      const ratio = dist(e.touches) / (pinchRef.current.dist || 1);
+      updateViewRef.current({
+        scale: Math.max(0.25, Math.min(3, pinchRef.current.scale * ratio)),
+      });
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2 && pinchRef.current) {
+        pinchRef.current = null;
+        onMapPanEnd?.();
+      }
+    };
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
+    el.addEventListener('touchcancel', onEnd);
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+    };
+  }, [map?.id, onMapPanEnd]);
 
   const placementClickRef = useRef(false);
   // Flèches du clavier : le personnage sélectionné regarde dans cette direction
@@ -476,13 +549,13 @@ export function MapCanvas({
       className="flex-1 overflow-hidden relative bg-fantasy-bg select-none"
       onWheel={handleWheel}
       style={{
-        cursor:
-          isDragging || isPanning ? 'grabbing' : isGM ? 'grab' : 'default',
+        cursor: isDragging || isPanning ? 'grabbing' : 'grab',
+        touchAction: 'none',
       }}
     >
       {isGM && (
         <div
-          className="glass absolute bottom-4 left-4 z-10 flex items-center gap-0.5 rounded-xl p-1"
+          className="glass absolute bottom-4 left-4 z-10 hidden sm:flex items-center gap-0.5 rounded-xl p-1"
           onMouseDown={(e) => e.stopPropagation()}
         >
           <button
@@ -549,7 +622,7 @@ export function MapCanvas({
           ref={mapContainerRef}
           className="relative"
           style={{ width: map.width, height: map.height }}
-          onMouseDown={handleMapMouseDown}
+          onPointerDown={handleMapMouseDown}
           onClick={handleCanvasClick}
           title={
             isGM && onTokenCreate ? 'Cliquez pour placer le token' : undefined
@@ -633,6 +706,46 @@ export function MapCanvas({
             zIndex={isGM ? 5 : 12}
             maskId={fogMaskId}
           />
+          <RulerLayer
+            mapW={map.width}
+            mapH={map.height}
+            gridSize={map.gridSize}
+            viewScale={scale}
+            rulers={
+              myRuler
+                ? [
+                    ...remoteRulers,
+                    { key: 'me', ...myRuler, color: rulerColor },
+                  ]
+                : remoteRulers
+            }
+            toContainer={(p) =>
+              mapCoordsToContainer(p.x, p.y, map.width, map.height, imgW, imgH)
+            }
+          />
+          {rulerActive && (
+            <RulerDrawOverlay
+              mapW={map.width}
+              mapH={map.height}
+              toMap={(cx, cy) => {
+                const rect = mapContainerRef.current?.getBoundingClientRect();
+                if (!rect) return { x: 0, y: 0 };
+                return clientToMapCoords(
+                  cx,
+                  cy,
+                  rect,
+                  map.width,
+                  map.height,
+                  imgW,
+                  imgH
+                );
+              }}
+              onChange={(line) => {
+                setMyRuler(line);
+                onRulerChange?.(line);
+              }}
+            />
+          )}
           {isGM && fogTool && onFogDraw && (
             <FogDrawOverlay
               mapW={map.width}
@@ -688,8 +801,7 @@ export function MapCanvas({
                   minHeight: t.height ?? 56,
                   zIndex: t.kind === 'PJ' ? 14 : 10,
                 }}
-                onMouseDown={(e) => {
-                  e.preventDefault();
+                onPointerDown={(e) => {
                   e.stopPropagation();
                   handleTokenMouseDown(e, t);
                 }}

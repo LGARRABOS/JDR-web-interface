@@ -89,6 +89,33 @@ export interface GameSnapshot {
   messages: ChatMessage[];
   rolls?: DiceRoll[];
   players: Member[];
+  /** Documents : tous pour le MJ, seulement ceux montrés pour un joueur. */
+  handouts?: Handout[];
+}
+
+/** Point de la carte (mêmes unités que les jetons). */
+export interface RulerPoint {
+  x: number;
+  y: number;
+}
+
+/** Mesure en cours d'un participant (from/to nuls : terminée). */
+export interface RulerLine {
+  userId: number;
+  mapId: number;
+  from: RulerPoint | null;
+  to: RulerPoint | null;
+}
+
+/** Document que le MJ peut montrer aux joueurs (lettre, plan, portrait…). */
+export interface Handout {
+  id: number;
+  gameId: number;
+  title: string;
+  body: string;
+  imageUrl: string;
+  shown: boolean;
+  createdAt: string;
 }
 
 export interface SnapshotPayload {
@@ -127,7 +154,13 @@ export type ServerEvent =
   | { type: 'dice.rolled'; payload: DiceRoll }
   | { type: 'dice.rolled.hidden'; payload: DiceRoll }
   | { type: 'fog.state'; payload: FogState }
-  | { type: 'fog.patch'; payload: FogPatch };
+  | { type: 'fog.patch'; payload: FogPatch }
+  | { type: 'ruler'; payload: RulerLine }
+  | { type: 'scene.tokens'; payload: { mapId: number; tokens: Token[] } }
+  | { type: 'handout.created'; payload: Handout }
+  | { type: 'handout.updated'; payload: Handout }
+  | { type: 'handout.deleted'; payload: { id: number } }
+  | { type: 'handout.shown'; payload: Handout };
 
 export type ServerEventType = ServerEvent['type'];
 
@@ -143,7 +176,13 @@ export type ClientAction =
   | { action: 'music.seek'; position: number }
   | { action: 'music.volume'; volume: number }
   | { action: 'music.stop' }
-  | { action: 'turn.highlight'; playerId: number | null };
+  | { action: 'turn.highlight'; playerId: number | null }
+  | {
+      action: 'ruler';
+      mapId: number;
+      from?: RulerPoint;
+      to?: RulerPoint;
+    };
 
 const KNOWN_TYPES: ReadonlySet<string> = new Set<ServerEventType>([
   'sync.snapshot',
@@ -170,6 +209,12 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set<ServerEventType>([
   'dice.rolled.hidden',
   'fog.state',
   'fog.patch',
+  'ruler',
+  'scene.tokens',
+  'handout.created',
+  'handout.updated',
+  'handout.deleted',
+  'handout.shown',
 ]);
 
 /** Décode un message serveur ; retourne null s'il est invalide ou inconnu. */

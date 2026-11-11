@@ -76,6 +76,7 @@ func (s *Server) broadcastFogState(mapID int64) *fogState {
 		return nil
 	}
 	s.broadcastMapEvent(mapID, "fog.state", st)
+	s.refreshPlayerTokens(mapID, false)
 	return st
 }
 
@@ -161,6 +162,7 @@ func (s *Server) handleAddFogPatch(w http.ResponseWriter, r *http.Request) {
 	p := &fogPatch{ID: id, MapID: mapID, Shape: req.Shape, X: x, Y: y, W: wd, H: ht, Reveal: req.Reveal}
 	writeJSON(w, http.StatusCreated, map[string]any{"patch": p})
 	s.broadcastMapEvent(mapID, "fog.patch", p)
+	s.refreshPlayerTokens(mapID, false)
 }
 
 // handleUndoFog retire la dernière zone dessinée.

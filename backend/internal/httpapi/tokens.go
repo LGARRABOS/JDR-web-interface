@@ -60,6 +60,9 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tokens, err := s.listMapTokens(mapID, role == "MJ")
+	if err == nil && role != "MJ" {
+		tokens = s.filterTokensForPlayers(gameID, mapID, tokens)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
