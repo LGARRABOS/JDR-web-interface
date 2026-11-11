@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { MapData } from '../../types/game';
 import type { ConnectionStatus } from '../../realtime/connection';
 import type { GameInfo, Member } from '../../realtime/protocol';
-import { colorForUser, displayNameOf, initials } from './presence';
+import { displayNameOf } from './presence';
 import {
   Check,
   ChevronDown,
@@ -11,7 +11,9 @@ import {
   Flag,
   MapIcon,
   Ruler,
+  HelpCircle,
 } from './icons';
+import { PresenceMenu } from './PresenceMenu';
 
 interface TopBarProps {
   game: GameInfo;
@@ -31,6 +33,8 @@ interface TopBarProps {
   /** Règle de mesure (absente sans carte). */
   rulerActive?: boolean;
   onToggleRuler?: () => void;
+  /** Ouvre le guide du jeu. */
+  onOpenGuide?: () => void;
 }
 
 export function TopBar({
@@ -50,9 +54,9 @@ export function TopBar({
   onRetry,
   rulerActive = false,
   onToggleRuler,
+  onOpenGuide,
 }: TopBarProps) {
   const [copied, setCopied] = useState(false);
-  const onlineIds = new Set(presence.map((p) => p.userId));
   const turnPlayer = players.find((p) => p.userId === turnPlayerId);
   const myTurn = turnPlayerId != null && turnPlayerId === you?.userId;
 
@@ -68,9 +72,6 @@ export function TopBar({
   };
 
   // Le MJ apparaît en premier, puis les joueurs.
-  const people = [...players].sort(
-    (a, b) => Number(b.role === 'MJ') - Number(a.role === 'MJ')
-  );
 
   return (
     <header className="absolute top-2 left-2 right-2 sm:top-4 sm:left-4 sm:right-4 z-30 flex flex-wrap items-center justify-between gap-2 sm:gap-3 pointer-events-none">
@@ -167,36 +168,11 @@ export function TopBar({
         ))}
 
       <div className="glass pointer-events-auto flex items-center gap-3 rounded-2xl py-1.5 pl-3.5 pr-1.5">
-        <ul className="hidden md:flex items-center" aria-label="Participants">
-          {people.map((p, i) => {
-            const online = onlineIds.has(p.userId);
-            const name =
-              p.role === 'MJ' ? `${displayNameOf(p)} (MJ)` : displayNameOf(p);
-            const color =
-              p.role === 'MJ'
-                ? { bg: 'rgb(var(--c-accent))' }
-                : colorForUser(p.userId, players);
-            return (
-              <li
-                key={p.userId}
-                title={`${name}${online ? '' : ' — hors ligne'}`}
-                className={`w-8 h-8 rounded-full border-2 border-fantasy-bg flex items-center justify-center text-[13px] font-bold ${
-                  i > 0 ? '-ml-2' : ''
-                } ${online ? 'text-fantasy-text' : 'text-fantasy-muted opacity-50'}`}
-                style={{
-                  backgroundColor: online ? color.bg : 'rgb(var(--c-input))',
-                  color:
-                    online && p.role === 'MJ' ? 'rgb(var(--c-bg))' : undefined,
-                }}
-              >
-                {p.role === 'MJ' ? 'MJ' : initials(displayNameOf(p))}
-                <span className="sr-only">
-                  {name} {online ? 'connecté' : 'hors ligne'}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        <PresenceMenu
+          players={players}
+          presence={presence}
+          youId={you?.userId}
+        />
 
         {connection === 'open' ? (
           <span className="flex items-center gap-1.5 text-[13px] text-fantasy-muted">
@@ -226,6 +202,17 @@ export function TopBar({
             <span className="hidden sm:inline">
               {copied ? 'Copié !' : `Inviter · ${game.inviteCode}`}
             </span>
+          </button>
+        )}
+        {onOpenGuide && (
+          <button
+            type="button"
+            onClick={onOpenGuide}
+            className="icon-btn !w-9 !h-9"
+            aria-label="Guide du jeu"
+            title="Guide du jeu"
+          >
+            <HelpCircle size={18} />
           </button>
         )}
         {isGM && (

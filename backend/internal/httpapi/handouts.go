@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"jdr-backend/internal/docimport"
 	"jdr-backend/internal/realtime"
 )
 
@@ -21,21 +24,28 @@ import (
 
 const (
 	uploadsHandoutsBase = "uploads/handouts"
-	maxHandoutSize      = 10 << 20
+	maxHandoutSize      = 20 << 20
 	maxHandoutBody      = 20000
 )
 
 type handout struct {
-	ID        int64  `json:"id"`
-	GameID    int64  `json:"gameId"`
-	Title     string `json:"title"`
-	Body      string `json:"body"`
-	ImageURL  string `json:"imageUrl"`
-	Shown     bool   `json:"shown"`
-	CreatedAt string `json:"createdAt"`
+	ID       int64  `json:"id"`
+	GameID   int64  `json:"gameId"`
+	Title    string `json:"title"`
+	Body     string `json:"body"`
+	ImageURL string `json:"imageUrl"`
+	// Kind : text (texte et/ou image), document, sheet ou pdf (fichier importé).
+	Kind string `json:"kind"`
+	// Fichier d'origine, téléchargeable.
+	FileURL  string `json:"fileUrl"`
+	FileName string `json:"fileName"`
+	// HasContent : contenu converti disponible via /content.
+	HasContent bool   `json:"hasContent"`
+	Shown      bool   `json:"shown"`
+	CreatedAt  string `json:"createdAt"`
 }
 
-const handoutColumns = "id, game_id, title, body, image_url, shown, created_at"
+const handoutColumns = "id, game_id, title, body, image_url, kind, file_url, file_name, content IS NOT NULL, shown, created_at"
 
 // isGMRequest : l'auteur de la requête est-il MJ de la partie ?
 func (s *Server) isGMRequest(r *http.Request) bool {
@@ -51,7 +61,8 @@ func scanHandout(sc rowScanner) (*handout, error) {
 	var h handout
 	var shown int
 	var created time.Time
-	if err := sc.Scan(&h.ID, &h.GameID, &h.Title, &h.Body, &h.ImageURL, &shown, &created); err != nil {
+	if err := sc.Scan(&h.ID, &h.GameID, &h.Title, &h.Body, &h.ImageURL, &h.Kind, &h.FileURL, &h.FileName,
+		&h.HasContent, &shown, &created); err != nil {
 		return nil, err
 	}
 	h.Shown = shown == 1
@@ -68,6 +79,7 @@ func (s *Server) registerHandoutRoutes() {
 		r.With(s.requireGM).Patch("/{id}", s.handleUpdateHandout)
 		r.With(s.requireGM).Post("/{id}/show", s.handleShowHandout)
 		r.With(s.requireGM).Delete("/{id}", s.handleDeleteHandout)
+		r.Get("/{id}/content", s.handleGetHandoutContent)
 		r.Get("/file/{filename}", s.handleGetHandoutFile)
 	})
 }
@@ -123,45 +135,68 @@ func (s *Server) handleListHandouts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"handouts": list})
 }
 
-// saveHandoutImage enregistre l'image envoyée et retourne son URL ("" sans image).
-func saveHandoutImage(gameID int64, r *http.Request) (string, string) {
+// uploadedHandout : fichier envoyé avec un document.
+type uploadedHandout struct {
+	kind     string // image, document, sheet, pdf
+	url      string
+	name     string // nom d'origine
+	content  *string
+	errorMsg string
+}
+
+// saveHandoutFile enregistre le fichier envoyé (image, document, tableur ou
+// PDF) et convertit textes et tableurs pour qu'ils se lisent dans la partie.
+func saveHandoutFile(gameID int64, r *http.Request) *uploadedHandout {
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		return "", ""
+		return nil
 	}
 	defer file.Close()
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".gif" && ext != ".webp" {
-		return "", "Format non autorisé (png, jpg, gif, webp)"
+	kind := docimport.Kind(header.Filename)
+	switch kind {
+	case "":
+		return &uploadedHandout{errorMsg: "Format non pris en charge. Images, PDF, Word (.docx), LibreOffice (.odt, .ods), Excel (.xlsx), CSV, texte ou Markdown."}
+	case "legacy":
+		return &uploadedHandout{errorMsg: "Ancien format Office : enregistrez le fichier en .docx ou .xlsx (Fichier > Enregistrer sous), ou exportez-le depuis Google Docs / Sheets."}
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxHandoutSize+1))
+	if err != nil || len(data) > maxHandoutSize {
+		return &uploadedHandout{errorMsg: "Fichier trop volumineux (max 20 Mo)"}
+	}
+	up := &uploadedHandout{kind: kind, name: filepath.Base(header.Filename)}
+	if kind == "document" || kind == "sheet" {
+		c, err := docimport.Parse(header.Filename, data)
+		if err != nil {
+			return &uploadedHandout{errorMsg: "Impossible de lire ce fichier : " + err.Error()}
+		}
+		raw, _ := json.Marshal(c)
+		str := string(raw)
+		up.content = &str
 	}
 	dir := filepath.Join(uploadsHandoutsBase, strconv.FormatInt(gameID, 10))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", "Erreur serveur"
+		return &uploadedHandout{errorMsg: "Erreur serveur"}
 	}
-	name := strconv.FormatInt(time.Now().UnixNano(), 10) + ext
-	dst, err := os.Create(filepath.Join(dir, name))
-	if err != nil {
-		return "", "Erreur serveur"
+	name := strconv.FormatInt(time.Now().UnixNano(), 10) + strings.ToLower(filepath.Ext(header.Filename))
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+		return &uploadedHandout{errorMsg: "Erreur serveur"}
 	}
-	defer dst.Close()
-	if _, err := io.Copy(dst, file); err != nil {
-		return "", "Erreur serveur"
-	}
-	return "/api/games/" + strconv.FormatInt(gameID, 10) + "/handouts/file/" + name, ""
+	up.url = "/api/games/" + strconv.FormatInt(gameID, 10) + "/handouts/file/" + name
+	return up
 }
 
 func (s *Server) handleCreateHandout(w http.ResponseWriter, r *http.Request) {
 	gameID := getGameIDFromContext(r)
-	var title, body, imageURL string
+	var title, body string
+	var up *uploadedHandout
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		if err := r.ParseMultipartForm(maxHandoutSize); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Fichier trop volumineux (max 10 Mo)"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Fichier trop volumineux (max 20 Mo)"})
 			return
 		}
 		title, body = r.FormValue("title"), r.FormValue("body")
-		var msg string
-		if imageURL, msg = saveHandoutImage(gameID, r); msg != "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"message": msg})
+		if up = saveHandoutFile(gameID, r); up != nil && up.errorMsg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"message": up.errorMsg})
 			return
 		}
 	} else {
@@ -173,6 +208,9 @@ func (s *Server) handleCreateHandout(w http.ResponseWriter, r *http.Request) {
 		title, body = req.Title, req.Body
 	}
 	title = strings.TrimSpace(title)
+	if title == "" && up != nil && up.kind != "image" {
+		title = strings.TrimSuffix(up.name, filepath.Ext(up.name))
+	}
 	if title == "" {
 		title = "Document"
 	}
@@ -180,14 +218,24 @@ func (s *Server) handleCreateHandout(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Texte trop long"})
 		return
 	}
-	if strings.TrimSpace(body) == "" && imageURL == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Ajoutez un texte ou une image"})
+	if strings.TrimSpace(body) == "" && up == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Ajoutez un texte, une image ou un fichier"})
 		return
+	}
+	kind, imageURL, fileURL, fileName := "text", "", "", ""
+	var content *string
+	if up != nil {
+		if up.kind == "image" {
+			imageURL = up.url
+		} else {
+			kind, fileURL, fileName, content = up.kind, up.url, up.name, up.content
+		}
 	}
 	var id int64
 	if err := s.db.QueryRow(
-		"INSERT INTO handouts (game_id, title, body, image_url) VALUES (?, ?, ?, ?) RETURNING id",
-		gameID, title, body, imageURL,
+		`INSERT INTO handouts (game_id, title, body, image_url, kind, file_url, file_name, content)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+		gameID, title, body, imageURL, kind, fileURL, fileName, content,
 	).Scan(&id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
@@ -305,8 +353,10 @@ func (s *Server) handleDeleteHandout(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-	if h.ImageURL != "" {
-		_ = os.Remove(filepath.Join(uploadsHandoutsBase, strconv.FormatInt(gameID, 10), filepath.Base(h.ImageURL)))
+	for _, u := range []string{h.ImageURL, h.FileURL} {
+		if u != "" {
+			_ = os.Remove(filepath.Join(uploadsHandoutsBase, strconv.FormatInt(gameID, 10), filepath.Base(u)))
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Document supprimé"})
 	s.hub.Broadcast(gameID, "handout.deleted", map[string]int64{"id": id})
@@ -323,8 +373,8 @@ func (s *Server) handleGetHandoutFile(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.isGMRequest(r) {
 		var ok int
-		_ = s.db.QueryRow("SELECT 1 FROM handouts WHERE game_id = ? AND shown = 1 AND image_url LIKE ? LIMIT 1",
-			gameID, "%/file/"+name).Scan(&ok)
+		_ = s.db.QueryRow("SELECT 1 FROM handouts WHERE game_id = ? AND shown = 1 AND (image_url LIKE ? OR file_url LIKE ?) LIMIT 1",
+			gameID, "%/file/"+name, "%/file/"+name).Scan(&ok)
 		if ok != 1 {
 			http.Error(w, "Document non montré", http.StatusForbidden)
 			return
@@ -341,5 +391,32 @@ func (s *Server) handleGetHandoutFile(w http.ResponseWriter, r *http.Request) {
 		mod = st.ModTime()
 	}
 	w.Header().Set("Cache-Control", "private, max-age=3600")
+	// ?download=<nom> : téléchargement sous le nom d'origine.
+	if dl := r.URL.Query().Get("download"); dl != "" {
+		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(filepath.Base(dl)))
+	}
 	http.ServeContent(w, r, name, mod, f)
+}
+
+// handleGetHandoutContent : contenu converti d'un document ou d'un tableur
+// (pour un joueur, seulement s'il lui a été montré).
+func (s *Server) handleGetHandoutContent(w http.ResponseWriter, r *http.Request) {
+	gameID := getGameIDFromContext(r)
+	id, ok := handoutID(w, r)
+	if !ok {
+		return
+	}
+	var content sql.NullString
+	var shown int
+	err := s.db.QueryRow("SELECT content, shown FROM handouts WHERE id = ? AND game_id = ?", id, gameID).Scan(&content, &shown)
+	if err != nil || (shown != 1 && !s.isGMRequest(r)) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Document introuvable"})
+		return
+	}
+	if !content.Valid {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Pas de contenu à afficher"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write([]byte(`{"content":` + content.String + `}`))
 }

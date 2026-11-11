@@ -33,6 +33,8 @@ import { MonsterSheetView } from '../components/tabletop/MonsterSheetView';
 import { HandoutsTab } from '../components/tabletop/HandoutsTab';
 import { HandoutViewer } from '../components/tabletop/HandoutViewer';
 import { NotesTab } from '../components/tabletop/NotesTab';
+import { GuideDrawer } from '../components/guide/GuideDrawer';
+import { PresenceToasts } from '../components/tabletop/PresenceMenu';
 import type { Handout } from '../realtime/protocol';
 import { MiniPlayer, MusicTab } from '../components/tabletop/MusicControls';
 import { useAmbientMusic } from '../hooks/useAmbientMusic';
@@ -288,6 +290,7 @@ export function TabletopPage() {
   );
 
   const [playerSheet, setPlayerSheet] = useState<GameElementFull | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   // Vue « comme un joueur » : le MJ voit la table telle que ses joueurs la voient.
   const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
   const viewAsGM = isGM && !previewAsPlayer;
@@ -644,6 +647,13 @@ export function TabletopPage() {
             fail(e, 'Document non montré')
           )
         }
+        onShare={(id) =>
+          HandoutsAPI.update(gameId, id, { shown: true })
+            .then(({ data }) =>
+              store.upsertHandoutLocally((data as { handout: Handout }).handout)
+            )
+            .catch((e) => fail(e, 'Document non partagé'))
+        }
         onHide={(id) =>
           HandoutsAPI.update(gameId, id, { shown: false })
             .then(({ data }) =>
@@ -840,6 +850,7 @@ export function TabletopPage() {
         onSelectMap={handleSelectMap}
         onOpenResources={openResources}
         onRetry={resync}
+        onOpenGuide={() => setGuideOpen(true)}
         rulerActive={rulerActive}
         onToggleRuler={currentMap ? () => setRulerActive((v) => !v) : undefined}
       />
@@ -970,8 +981,18 @@ export function TabletopPage() {
           }
         />
       )}
+      <PresenceToasts
+        players={state.players}
+        presence={state.presence}
+        youId={you?.userId}
+        ready={state.ready}
+      />
+      {guideOpen && (
+        <GuideDrawer isGM={isGM} onClose={() => setGuideOpen(false)} />
+      )}
       {openHandout && (
         <HandoutViewer
+          gameId={gameId}
           handout={openHandout}
           onClose={() => store.setOpenHandout(null)}
         />

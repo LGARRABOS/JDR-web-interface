@@ -195,3 +195,16 @@ export const Ruler = (p: IconProps) => (
     <path d="M7.5 10.5l2 2M10.5 7.5l2 2M13.5 4.5l2 2M4.5 13.5l2 2" />
   </Svg>
 );
+export const Users = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+  </Svg>
+);
+export const HelpCircle = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01" />
+  </Svg>
+);

@@ -1,10 +1,14 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -105,5 +109,77 @@ func TestGMNotesArePrivate(t *testing.T) {
 	}
 	if rr := doJSON(t, sess.Handler, sess.Cookies, http.MethodPut, base+"?mapId=999999", map[string]string{"body": "x"}); rr.Code != http.StatusNotFound {
 		t.Fatalf("carte inconnue : %d", rr.Code)
+	}
+}
+
+func TestHandoutImportedSheet(t *testing.T) {
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	sess := setupAuthAndGame(t)
+	base := "/api/games/" + strconv.FormatInt(sess.GameID, 10) + "/handouts"
+	player := joinAsPlayer(t, sess, "Ines")
+
+	upload := func(name, content string) *httptest.ResponseRecorder {
+		body := &bytes.Buffer{}
+		w := multipart.NewWriter(body)
+		part, _ := w.CreateFormFile("file", name)
+		_, _ = part.Write([]byte(content))
+		w.Close()
+		req := httptest.NewRequest(http.MethodPost, base, body)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		sess.addCookies(req)
+		rr := httptest.NewRecorder()
+		sess.Handler.ServeHTTP(rr, req)
+		return rr
+	}
+
+	if rr := upload("vieux.xls", "x"); rr.Code != http.StatusBadRequest {
+		t.Fatalf("ancien format refusé attendu : %d", rr.Code)
+	}
+	rr := upload("Butin du donjon.csv", "Objet;Prix\nPotion;5\n")
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("import : %d %s", rr.Code, rr.Body.String())
+	}
+	var created struct {
+		Handout handout `json:"handout"`
+	}
+	_ = json.NewDecoder(rr.Body).Decode(&created)
+	h := created.Handout
+	if h.Kind != "sheet" || !h.HasContent || h.Title != "Butin du donjon" || h.FileName != "Butin du donjon.csv" {
+		t.Fatalf("document importé : %+v", h)
+	}
+	contentPath := base + "/" + strconv.FormatInt(h.ID, 10) + "/content"
+	if rr := doJSON(t, sess.Handler, player, http.MethodGet, contentPath, nil); rr.Code != http.StatusNotFound {
+		t.Fatalf("contenu non partagé : %d, attendu 404", rr.Code)
+	}
+	if rr := doJSON(t, sess.Handler, player, http.MethodGet, h.FileURL, nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("fichier non partagé : %d, attendu 403", rr.Code)
+	}
+
+	// Partagé sans l'ouvrir chez tout le monde.
+	if rr := doJSON(t, sess.Handler, sess.Cookies, http.MethodPatch, base+"/"+strconv.FormatInt(h.ID, 10),
+		map[string]bool{"shown": true}); rr.Code != http.StatusOK {
+		t.Fatalf("partage : %d", rr.Code)
+	}
+	rr = doJSON(t, sess.Handler, player, http.MethodGet, contentPath, nil)
+	var got struct {
+		Content struct {
+			Kind   string `json:"kind"`
+			Sheets []struct {
+				Rows [][]string `json:"rows"`
+			} `json:"sheets"`
+		} `json:"content"`
+	}
+	_ = json.NewDecoder(rr.Body).Decode(&got)
+	if rr.Code != http.StatusOK || got.Content.Kind != "sheet" || got.Content.Sheets[0].Rows[1][0] != "Potion" {
+		t.Fatalf("contenu : %d %+v", rr.Code, got)
+	}
+	if rr := doJSON(t, sess.Handler, player, http.MethodGet, h.FileURL+"?download=Butin.csv", nil); rr.Code != http.StatusOK ||
+		!strings.Contains(rr.Header().Get("Content-Disposition"), "attachment") {
+		t.Fatalf("téléchargement : %d %v", rr.Code, rr.Header())
 	}
 }

@@ -2,12 +2,35 @@ import { useRef, useState } from 'react';
 import type { Handout } from '../../realtime/protocol';
 import { Eye, EyeOff, Trash } from './icons';
 
+const ACCEPTED = [
+  'image/png,image/jpeg,image/gif,image/webp',
+  '.pdf',
+  '.docx,.odt,.txt,.md',
+  '.xlsx,.ods,.csv,.tsv',
+].join(',');
+
+const KIND_ICON: Record<string, string> = {
+  text: '📜',
+  document: '📄',
+  sheet: '📊',
+  pdf: '📕',
+};
+
+const KIND_LABEL: Record<string, string> = {
+  text: 'Texte',
+  document: 'Document',
+  sheet: 'Tableau',
+  pdf: 'PDF',
+};
+
 interface HandoutsTabProps {
   isGM: boolean;
   handouts: Handout[];
   onOpen: (id: number) => void;
   onCreate?: (title: string, body: string, file?: File) => Promise<boolean>;
   onShow?: (id: number) => void;
+  /** Rendre disponible aux joueurs sans l'ouvrir chez eux. */
+  onShare?: (id: number) => void;
   onHide?: (id: number) => void;
   onDelete?: (id: number) => void;
 }
@@ -22,6 +45,7 @@ export function HandoutsTab({
   onOpen,
   onCreate,
   onShow,
+  onShare,
   onHide,
   onDelete,
 }: HandoutsTabProps) {
@@ -59,13 +83,14 @@ export function HandoutsTab({
           }}
         >
           <p className="text-sm text-fantasy-muted">
-            Préparez une lettre, un plan ou un portrait, puis montrez-le : il
-            s&apos;ouvre chez tous les joueurs.
+            Écrivez un texte ou importez un fichier fait ailleurs (Word, Excel,
+            LibreOffice, Google Docs exporté, PDF, image…). Il reste caché
+            jusqu&apos;à ce que vous le partagiez.
           </p>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Titre (ex. Lettre du baron)"
+            placeholder="Titre (facultatif avec un fichier)"
             aria-label="Titre du document"
             className={`${input} h-10`}
           />
@@ -78,11 +103,11 @@ export function HandoutsTab({
             className={`${input} py-2 resize-y`}
           />
           <label className="text-sm text-fantasy-text-soft flex items-center gap-2">
-            <span className="shrink-0">Image</span>
+            <span className="shrink-0">Fichier</span>
             <input
               ref={fileRef}
               type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
+              accept={ACCEPTED}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               className="min-w-0 text-[13px] file:mr-2 file:px-2.5 file:h-8 file:rounded-lg file:border-0 file:bg-fantasy-input-soft file:text-fantasy-text"
             />
@@ -124,24 +149,38 @@ export function HandoutsTab({
                   />
                 ) : (
                   <span className="w-11 h-11 rounded-lg bg-fantasy-bg flex items-center justify-center text-xl shrink-0">
-                    📜
+                    {KIND_ICON[h.kind ?? 'text']}
                   </span>
                 )}
                 <span className="min-w-0">
                   <span className="block font-semibold truncate">
                     {h.title}
                   </span>
-                  {isGM && (
-                    <span
-                      className={`text-xs ${h.shown ? 'text-fantasy-accent' : 'text-fantasy-muted'}`}
-                    >
-                      {h.shown ? 'Montré aux joueurs' : 'Caché'}
-                    </span>
-                  )}
+                  <span className="block text-xs text-fantasy-muted truncate">
+                    {KIND_LABEL[h.kind ?? 'text']}
+                    {isGM && (
+                      <span
+                        className={h.shown ? 'text-fantasy-accent' : undefined}
+                      >
+                        {' · '}
+                        {h.shown ? 'Partagé' : 'Caché'}
+                      </span>
+                    )}
+                  </span>
                 </span>
               </button>
               {isGM && (
                 <>
+                  {!h.shown && (
+                    <button
+                      type="button"
+                      onClick={() => onShare?.(h.id)}
+                      className="h-9 px-2.5 rounded-lg border border-fantasy-border-soft text-[13px] shrink-0 hover:bg-fantasy-input-soft"
+                      title="Le rendre disponible dans l'onglet Docs des joueurs, sans l'ouvrir chez eux"
+                    >
+                      Partager
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => onShow?.(h.id)}

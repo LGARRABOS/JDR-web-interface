@@ -235,6 +235,10 @@ func AutoMigrate(db *sql.DB) error {
 			shown INTEGER NOT NULL DEFAULT 0,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`ALTER TABLE handouts ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'`,
+		`ALTER TABLE handouts ADD COLUMN file_url TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE handouts ADD COLUMN file_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE handouts ADD COLUMN content TEXT`,
 		`CREATE TABLE IF NOT EXISTS game_notes (
 			id SERIAL PRIMARY KEY,
 			game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,

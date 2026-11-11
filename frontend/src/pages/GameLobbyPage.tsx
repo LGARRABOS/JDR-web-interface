@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   Copy,
+  HelpCircle,
   Library,
   LogOut,
   Trash,
@@ -107,7 +108,7 @@ function AccountMenu({
           </button>
           <Link
             role="menuitem"
-            to="/games/wiki"
+            to="/guide"
             className={`${item} flex items-center`}
           >
             Guide du jeu
@@ -372,14 +373,23 @@ export function GameLobbyPage() {
         <section className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="font-heading font-bold text-2xl">Mes parties</h1>
-            <button
-              type="button"
-              onClick={() => navigate('/library')}
-              className="h-10 px-3.5 rounded-lg border border-fantasy-border text-sm text-fantasy-text hover:bg-fantasy-surface flex items-center gap-2"
-            >
-              <Library size={16} />
-              Ma bibliothèque
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/guide"
+                className="h-10 px-3.5 rounded-lg border border-fantasy-border text-sm text-fantasy-text hover:bg-fantasy-surface flex items-center gap-2"
+              >
+                <HelpCircle size={16} />
+                Guide du jeu
+              </Link>
+              <button
+                type="button"
+                onClick={() => navigate('/library')}
+                className="h-10 px-3.5 rounded-lg border border-fantasy-border text-sm text-fantasy-text hover:bg-fantasy-surface flex items-center gap-2"
+              >
+                <Library size={16} />
+                Ma bibliothèque
+              </button>
+            </div>
           </div>
           {loading ? (
             <p className="text-fantasy-muted">Chargement…</p>

@@ -114,8 +114,38 @@ export interface Handout {
   title: string;
   body: string;
   imageUrl: string;
+  /** text (texte/image) ou fichier importé : document, sheet, pdf. */
+  kind?: 'text' | 'document' | 'sheet' | 'pdf';
+  /** Fichier d'origine (téléchargeable) et son nom. */
+  fileUrl?: string;
+  fileName?: string;
+  /** Contenu converti disponible (documents et tableurs). */
+  hasContent?: boolean;
   shown: boolean;
   createdAt: string;
+}
+
+/** Morceau de texte d'un document importé. */
+export interface DocRun {
+  t: string;
+  b?: boolean;
+  i?: boolean;
+}
+
+export interface DocBlock {
+  type: 'heading' | 'paragraph' | 'list' | 'table';
+  level?: number;
+  runs?: DocRun[];
+  items?: DocRun[][];
+  rows?: string[][];
+}
+
+/** Contenu d'un document ou d'un tableur importé. */
+export interface ImportedContent {
+  kind: 'document' | 'sheet';
+  blocks?: DocBlock[];
+  sheets?: { name: string; rows: string[][] }[];
+  truncated?: boolean;
 }
 
 export interface SnapshotPayload {

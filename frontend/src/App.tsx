@@ -100,13 +100,14 @@ export const App = () => {
           }
         />
         <Route
-          path="/games/wiki"
+          path="/guide"
           element={
             <ProtectedRoute>
               <WikiPage />
             </ProtectedRoute>
           }
         />
+        <Route path="/games/wiki" element={<Navigate to="/guide" replace />} />
         <Route path="/404" element={<NotFoundPage />} />
         <Route path="/403" element={<ForbiddenPage />} />
         <Route path="/500" element={<ServerErrorPage />} />

@@ -232,6 +232,9 @@ export const HandoutsAPI = {
   ) => api.patch(`/games/${gameId}/handouts/${id}`, data),
   show: (gameId: number, id: number) =>
     api.post(`/games/${gameId}/handouts/${id}/show`),
+  /** Contenu converti d'un document ou tableur importé. */
+  content: (gameId: number, id: number) =>
+    api.get(`/games/${gameId}/handouts/${id}/content`),
   delete: (gameId: number, id: number) =>
     api.delete(`/games/${gameId}/handouts/${id}`),
 };
