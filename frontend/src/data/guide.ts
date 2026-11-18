@@ -93,7 +93,7 @@ Votre nom d'affichage est celui que voient les autres à la table. Vous pouvez l
     audience: 'mj',
     keywords: ['nouvelle partie', 'MJ', 'code', 'invitation', 'GEMMA'],
     body: `1. Sur « Mes parties », remplissez le cadre « Créer une partie » (le nom est facultatif).
-2. Cochez « Univers GEMMA » si vous jouez dans cet univers : ce choix ne se change plus ensuite (voir [[gemma|Univers GEMMA]]).
+2. Cochez « Univers GEMMA » si vous jouez dans cet univers : ce choix ne se change plus ensuite (voir [[gemma|Univers GEMMA]]). Choisissez alors « GEMMA classique » ou « GEMMA Arpenteur » ([[arpenteur|le vaisseau des sables]]).
 3. Cliquez sur « Créer » : vous êtes le MJ de la partie.
 
 Un code d'invitation est créé. Copiez-le depuis la carte de la partie ou, à la table, avec le bouton « Inviter » en haut à droite, puis envoyez-le à vos joueurs.
@@ -586,7 +586,8 @@ Tout est enregistré automatiquement (« Enregistré » s'affiche).`,
 - une [[fiche-gemma|fiche de personnage]] à remplir dans l'application, synchronisée avec le personnage sur la carte ;
 - la jauge **Aether** à la place du mana ;
 - la [[portee|portée d'attaque]] affichée autour des personnages ;
-- l'affichage des lancers au centre de la carte.
+- l'affichage des lancers au centre de la carte ;
+- en option, le [[arpenteur|mode Arpenteur]] : le vaisseau des sables du groupe.
 
 Tout le reste (brouillard, documents, règle…) est disponible dans toutes les parties.`,
   },
@@ -618,6 +619,149 @@ Enregistrez : le nom, les PV, l'Aether et la portée passent sur votre personnag
     body: `Renseignez la portée dans la fiche GEMMA (Identité), ou sur une arme : la première arme avec une portée est utilisée si aucune n'est saisie.
 
 Cliquez sur un personnage qui a une portée : un cercle jaune montre sa zone d'attaque, en cases. Pour une distance précise, utilisez [[regle|la règle]].`,
+  },
+  {
+    id: 'arpenteur',
+    chapter: 'gemma',
+    title: 'Le mode Arpenteur',
+    summary: 'Le vaisseau des sables du groupe, sur sa propre page.',
+    audience: 'tous',
+    keywords: ['arpenteur', 'vaisseau', 'navire', 'désert', 'GEMMA', 'Keld'],
+    body: `Une partie **GEMMA Arpenteur** ajoute un vaisseau des sables commun à tout le groupe. Le bouton « Arpenteur » en haut de la table ouvre sa page ; « Table » revient à la carte. Le chat, les dés et la musique restent disponibles.
+
+En haut de la page, l'arpenteur glisse sur les dunes du désert où il se trouve : son allure, ses matériaux, ses mâts, sa proue et ses couleurs suivent ses améliorations, ses canons apparaissent aux sabords, et la fumée monte quand la coque est abîmée. Le bouton « Coupe » montre l'intérieur : cliquez sur une salle pour la gérer.
+
+Les onglets :
+
+- **Navire** : expédition, coupons, évolution du navire et journal de bord ;
+- **Équipage** : fiches, postes, soins, équipage de sortie ([[arpenteur-postes|qui modifie quoi]]) ;
+- **Combat** : coque, canons, munitions, poudre, déroulé de la mise à feu et schéma des portées ([[arpenteur-combat|en détail]]) ;
+- **Cale & cave** : les inventaires, avec poids, valeur et coupons ;
+- **Carte** : les déserts de Keld, le cap et les déplacements ([[arpenteur-carte|en détail]]) ;
+- **Atelier** : les améliorations ([[arpenteur-atelier|en détail]]).`,
+    related: [
+      'arpenteur-postes',
+      'arpenteur-combat',
+      'arpenteur-carte',
+      'arpenteur-atelier',
+      'arpenteur-mj',
+    ],
+  },
+  {
+    id: 'arpenteur-postes',
+    chapter: 'gemma',
+    title: 'Arpenteur : qui modifie quoi',
+    summary: 'Chaque poste gère sa partie du navire.',
+    audience: 'tous',
+    keywords: [
+      'poste',
+      'capitaine',
+      'contremaître',
+      'canonnier',
+      'chirurgien',
+      'guetteur',
+      'droits',
+    ],
+    body: `Le MJ peut tout modifier. Un joueur reçoit les droits du poste occupé par son personnage, quand le MJ a relié le personnage à lui (fiche de l'équipage, « Incarné par »).
+
+Par défaut :
+
+- **Capitaine** : expédition et coupons, équipage, cale, cave, carte, ordres de tir ;
+- **Contremaître** : équipage, cale, ordres de tir ;
+- **Maître canonnier** : canons, munitions et poudre. Si aucun joueur n'est maître canonnier, le Capitaine ou le Contremaître prennent la relève ;
+- **Chirurgien** : vie et fatigue de l'équipage ;
+- **Guetteur** : carte, ordres de tir ;
+- **Mousse** : cale.
+
+Le MJ change cette répartition dans l'onglet Réglages. Sans les droits, une partie reste consultable : la page indique qui peut la modifier.`,
+  },
+  {
+    id: 'arpenteur-combat',
+    chapter: 'gemma',
+    title: 'Arpenteur : le combat',
+    summary: 'Préparer les canons, tirer, suivre munitions et poudre.',
+    audience: 'tous',
+    keywords: [
+      'canon',
+      'tir',
+      'poudre',
+      'munitions',
+      'portée',
+      'salve',
+      'baril',
+    ],
+    body: `## Le déroulé de la mise à feu
+« Commencer » lance les sept étapes de la feuille de combat : le guetteur donne la position, le capitaine choisit la zone et la munition, le contremaître repositionne, le canonnier prépare, puis l'ordre de tir. L'étape en cours est visible de tous.
+
+## Préparer et tirer
+« Préparer les canons » charge chaque canon installé avec la munition choisie et l'amorce avec la poudre des barils montés sur le pont (5 utilisations par baril). « Feu ! » tire les canons prêts : la salve s'anime sur le navire chez tout le monde, les dégâts (2D6 par boulet) sont lancés dans le chat, et la feuille se décompte toute seule.
+
+## Les portées
+Cliquez sur le schéma pour placer la cible : la distance, le côté du navire (A avant, B arrière, C bâbord, D tribord) et le couloir de tir s'affichent.
+
+> Les compteurs restent modifiables à la main, comme sur la feuille.`,
+  },
+  {
+    id: 'arpenteur-carte',
+    chapter: 'gemma',
+    title: 'Arpenteur : la carte des déserts',
+    summary: 'Suivre l’arpenteur entre Mahibori, Palubori et Forabori.',
+    audience: 'tous',
+    keywords: [
+      'carte',
+      'désert',
+      'secteur',
+      'cap',
+      'Mahibori',
+      'Palubori',
+      'Forabori',
+      'ville',
+    ],
+    body: `Le « Réseau des déserts » montre les sous-régions (M1 à F4), les traversées possibles et les trajets entre les villes et les déserts. Cliquez sur une sous-région ou une ville : ses accès s'affichent.
+
+Depuis la position actuelle, les destinations directes sont entourées. « Mettre le cap » trace la route ; « Arriver ici » déplace l'arpenteur et l'ajoute au sillage. Le MJ peut placer le navire n'importe où.
+
+Vous pouvez nommer une sous-région (« Le Désert du phare vert ») et y poser des repères : mission, danger, trésor… Le MJ peut en cacher aux joueurs.
+
+La « Carte illustrée » accueille l'image de votre choix (le MJ l'ajoute) : on y fait glisser l'arpenteur et on y pose des repères.`,
+  },
+  {
+    id: 'arpenteur-atelier',
+    chapter: 'gemma',
+    title: 'Arpenteur : l’atelier',
+    summary: 'Améliorer le navire et voir son évolution.',
+    audience: 'tous',
+    keywords: [
+      'amélioration',
+      'atelier',
+      'allure',
+      'coque',
+      'quille',
+      'mâts',
+      'proue',
+      'travaux',
+    ],
+    body: `L'atelier suit l'arbre des choix : allure, quille, coque, mâts, ponts, poupe et proue chez le constructeur ; voiles, drapeau, bandes de couleur et dorures chez le décorateur ; la tenue de l'équipage chez le tailleur ; et les pièces à ajouter (salle de jeux, fumoir, sauna…).
+
+L'aperçu change à chaque choix. Ensuite :
+
+- **Appliquer maintenant** : le navire change aussitôt ;
+- **Lancer les travaux** : avec une durée, le navire est en chantier (échafaudages) jusqu'à « Terminer les travaux ».
+
+Un coût en coupons peut être déduit de l'expédition. Chaque amélioration s'ajoute à l'**évolution** (onglet Navire) : cliquez une étape pour revoir le navire tel qu'il était.`,
+  },
+  {
+    id: 'arpenteur-mj',
+    chapter: 'gemma',
+    title: 'Arpenteur : mise en place (MJ)',
+    summary: 'Activer le mode, importer le classeur, relier les joueurs.',
+    audience: 'mj',
+    keywords: ['arpenteur', 'import', 'excel', 'classeur', 'activer'],
+    body: `1. Créez une partie « GEMMA Arpenteur », ou activez le mode sur une partie GEMMA existante avec le bouton en forme de navire sur sa carte (« Mes parties »).
+2. Dans l'onglet Réglages de l'arpenteur, importez votre classeur (Excel, LibreOffice ou CSV) : équipage, combat, cale, cave et expédition sont repris.
+3. Dans l'onglet Équipage, reliez chaque personnage joueur à son joueur (« Incarné par ») : ses droits suivent son poste.
+
+> Retirer le mode Arpenteur ne supprime pas le navire : il revient tel quel si vous le réactivez.`,
   },
 
   // --- Compte ----------------------------------------------------------------------------

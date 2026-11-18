@@ -7,6 +7,7 @@ import {
   type GameState,
 } from './gameStore';
 import type { Envelope, ServerEvent, SnapshotPayload } from './protocol';
+import { emptyArpenteur } from '../arpenteur/defaults';
 
 function env(e: ServerEvent, serverTime = 1_000): Envelope {
   return { ...e, gameId: 1, serverTime } as Envelope;
@@ -382,5 +383,39 @@ describe('applyEvent', () => {
       env({ type: 'scene.tokens', payload: { mapId: 10, tokens: [keep] } })
     );
     expect(s.scene?.tokens.map((t) => t.id)).toEqual([keep.id]);
+  });
+});
+
+describe('arpenteur', () => {
+  it('arrive avec l’instantané puis suit les versions les plus récentes', () => {
+    const doc = emptyArpenteur();
+    let s = applyEvent(
+      initialGameState,
+      snapshot({ arpenteur: { arpenteur: doc, version: 3 } }),
+      1_000
+    );
+    expect(s.arpenteur?.version).toBe(3);
+    s = applyEvent(
+      s,
+      env({
+        type: 'arpenteur.state',
+        payload: { arpenteur: { ...doc, name: 'Darrak-Varis' }, version: 5 },
+      })
+    );
+    expect(s.arpenteur?.arpenteur.name).toBe('Darrak-Varis');
+    // Une réponse plus ancienne arrivée en retard ne revient pas en arrière.
+    s = applyEvent(
+      s,
+      env({ type: 'arpenteur.state', payload: { arpenteur: doc, version: 4 } })
+    );
+    expect(s.arpenteur?.arpenteur.name).toBe('Darrak-Varis');
+  });
+
+  it('ignore une réponse locale plus ancienne', () => {
+    const store = new GameStore();
+    const doc = emptyArpenteur();
+    store.setArpenteurLocally({ arpenteur: { ...doc, number: 2 }, version: 7 });
+    store.setArpenteurLocally({ arpenteur: doc, version: 6 });
+    expect(store.getState().arpenteur?.arpenteur.number).toBe(2);
   });
 });

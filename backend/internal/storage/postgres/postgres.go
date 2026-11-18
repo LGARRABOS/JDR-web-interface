@@ -247,6 +247,13 @@ func AutoMigrate(db *sql.DB) error {
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS game_notes_scope ON game_notes (game_id, COALESCE(map_id, 0))`,
+		`ALTER TABLE games ADD COLUMN gemma_variant TEXT NOT NULL DEFAULT ''`,
+		`CREATE TABLE IF NOT EXISTS arpenteurs (
+			game_id INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
+			data JSONB NOT NULL,
+			version INTEGER NOT NULL DEFAULT 1,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
 		`ALTER TABLE fog_patches DROP CONSTRAINT IF EXISTS fog_patches_shape_type_check`,
 		`ALTER TABLE fog_patches ADD CONSTRAINT fog_patches_shape_type_check CHECK (shape_type IN ('rect','polygon','ellipse'))`,
 	}

@@ -216,3 +216,68 @@ input[type='number'] {
     transform: none;
   }
 }
+
+/* --- Arpenteur ------------------------------------------------------------ */
+.arp-input {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border-radius: 0.6rem;
+  background: rgb(var(--c-bg) / 0.7);
+  border: 1px solid rgb(var(--c-border-soft));
+  color: rgb(var(--c-text));
+  font-size: 14px;
+}
+.arp-input:focus {
+  outline: none;
+  border-color: rgb(var(--c-accent));
+}
+.arp-input:disabled {
+  opacity: 0.7;
+}
+.arp-step {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.5rem;
+  background: rgb(var(--c-input-soft));
+  border: 1px solid rgb(var(--c-border-soft));
+  color: rgb(var(--c-text-soft));
+  font-weight: 700;
+  line-height: 1;
+}
+.arp-step:hover:not(:disabled) {
+  background: rgb(var(--c-input-hover));
+  color: rgb(var(--c-text));
+}
+.arp-step:disabled {
+  opacity: 0.35;
+}
+.arp-tab {
+  white-space: nowrap;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: 0.75rem;
+  font-family: Cinzel, serif;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: rgb(var(--c-text-soft));
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+.arp-tab:hover {
+  background: rgb(var(--c-input-soft));
+}
+.arp-tab[aria-selected='true'] {
+  background: rgb(var(--c-accent));
+  color: rgb(var(--c-bg));
+  font-weight: 700;
+}
+.arp-plate {
+  background: linear-gradient(
+    135deg,
+    rgb(20 14 10 / 0.78),
+    rgb(20 14 10 / 0.45)
+  );
+  backdrop-filter: blur(6px);
+  border: 1px solid rgb(var(--c-accent) / 0.35);
+}

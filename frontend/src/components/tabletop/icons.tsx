@@ -208,3 +208,10 @@ export const HelpCircle = (p: IconProps) => (
     <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01" />
   </Svg>
 );
+export const Ship = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2 17l1.5 3.5h17L22 17" />
+    <path d="M3 17h18l-2-5H5z" />
+    <path d="M12 3v9M12 4l6 6h-6M12 6l-5 5h5" />
+  </Svg>
+);

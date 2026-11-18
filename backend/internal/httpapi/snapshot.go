@@ -18,6 +18,7 @@ type snapshotGame struct {
 	InviteCode          string `json:"inviteCode,omitempty"`
 	OwnerID             int64  `json:"ownerId"`
 	IsGemma             bool   `json:"isGemma"`
+	GemmaVariant        string `json:"gemmaVariant"`
 	TokenMovementLocked bool   `json:"tokenMovementLocked"`
 	FogVisionRadius     int    `json:"fogVisionRadius"`
 	CurrentMapID        *int64 `json:"currentMapId"`
@@ -46,6 +47,8 @@ type gameSnapshot struct {
 	Rolls    []map[string]interface{} `json:"rolls"`
 	Players  []snapshotPlayer         `json:"players"`
 	Handouts []*handout               `json:"handouts"`
+	// Arpenteur : seulement pour une partie GEMMA en mode Arpenteur.
+	Arpenteur *arpenteurPayload `json:"arpenteur,omitempty"`
 }
 
 func (s *Server) resolveMember(gameID, userID int64) (realtime.Member, bool) {
@@ -69,10 +72,10 @@ func (s *Server) buildSnapshot(gameID int64, m realtime.Member) (any, error) {
 	var isGemma, locked int
 	var currentMapID sql.NullInt64
 	err := s.db.QueryRow(
-		`SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(token_movement_locked, 0),
+		`SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(gemma_variant, ''), COALESCE(token_movement_locked, 0),
 		        COALESCE(fog_vision_radius, 0), current_map_id
 		 FROM games WHERE id = ?`, gameID,
-	).Scan(&snap.Game.ID, &snap.Game.Name, &snap.Game.InviteCode, &snap.Game.OwnerID, &isGemma, &locked,
+	).Scan(&snap.Game.ID, &snap.Game.Name, &snap.Game.InviteCode, &snap.Game.OwnerID, &isGemma, &snap.Game.GemmaVariant, &locked,
 		&snap.Game.FogVisionRadius, &currentMapID)
 	if err != nil {
 		return nil, fmt.Errorf("game: %w", err)
@@ -118,6 +121,14 @@ func (s *Server) buildSnapshot(gameID int64, m realtime.Member) (any, error) {
 	}
 	if snap.Players, err = s.listSnapshotPlayers(gameID); err != nil {
 		return nil, fmt.Errorf("players: %w", err)
+	}
+	if snap.Game.IsGemma && snap.Game.GemmaVariant == gemmaVariantArpenteur {
+		d, version, err := s.loadArpenteur(gameID)
+		if err != nil {
+			return nil, fmt.Errorf("arpenteur: %w", err)
+		}
+		p := arpenteurFor(d, version, m.IsGM())
+		snap.Arpenteur = &p
 	}
 	return snap, nil
 }

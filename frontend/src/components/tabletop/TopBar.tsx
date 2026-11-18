@@ -12,6 +12,7 @@ import {
   MapIcon,
   Ruler,
   HelpCircle,
+  Ship,
 } from './icons';
 import { PresenceMenu } from './PresenceMenu';
 
@@ -35,6 +36,9 @@ interface TopBarProps {
   onToggleRuler?: () => void;
   /** Ouvre le guide du jeu. */
   onOpenGuide?: () => void;
+  /** Mode Arpenteur : bascule entre la table et la page du navire. */
+  viewMode?: 'table' | 'arpenteur';
+  onViewMode?: (mode: 'table' | 'arpenteur') => void;
 }
 
 export function TopBar({
@@ -55,6 +59,8 @@ export function TopBar({
   rulerActive = false,
   onToggleRuler,
   onOpenGuide,
+  viewMode,
+  onViewMode,
 }: TopBarProps) {
   const [copied, setCopied] = useState(false);
   const turnPlayer = players.find((p) => p.userId === turnPlayerId);
@@ -123,6 +129,36 @@ export function TopBar({
               <ChevronDown size={16} />
             </span>
           </label>
+        )}
+        {viewMode && onViewMode && (
+          <div
+            className="ml-1 flex rounded-lg bg-fantasy-surface p-0.5"
+            role="tablist"
+            aria-label="Vue"
+          >
+            {(
+              [
+                ['table', 'Table', <MapIcon key="m" size={16} />],
+                ['arpenteur', 'Arpenteur', <Ship key="s" size={16} />],
+              ] as const
+            ).map(([id, label, icon]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={viewMode === id}
+                onClick={() => onViewMode(id)}
+                className={`h-9 px-2.5 sm:px-3 rounded-md flex items-center gap-1.5 text-sm transition-colors ${
+                  viewMode === id
+                    ? 'bg-fantasy-accent text-fantasy-bg font-semibold'
+                    : 'text-fantasy-text-soft hover:bg-fantasy-input-soft'
+                }`}
+              >
+                {icon}
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
         )}
         {onToggleRuler && (
           <button

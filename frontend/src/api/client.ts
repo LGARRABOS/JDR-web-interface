@@ -55,7 +55,7 @@ export const AuthAPI = {
 
 export const GamesAPI = {
   list: () => api.get('/games'),
-  create: (data: { name?: string; isGemma?: boolean }) =>
+  create: (data: { name?: string; isGemma?: boolean; gemmaVariant?: string }) =>
     api.post('/games', data),
   join: (data: { inviteCode: string }) => api.post('/games/join', data),
   get: (id: number) => api.get(`/games/${id}`),
@@ -66,7 +66,11 @@ export const GamesAPI = {
     api.patch(`/games/${gameId}/current-map`, { mapId }),
   update: (
     gameId: number,
-    data: { tokenMovementLocked?: boolean; fogVisionRadius?: number }
+    data: {
+      tokenMovementLocked?: boolean;
+      fogVisionRadius?: number;
+      gemmaVariant?: string;
+    }
   ) => api.patch(`/games/${gameId}`, data),
   delete: (id: number) => api.delete(`/games/${id}`),
   /** Un joueur quitte la partie (le MJ, lui, la supprime). */
@@ -74,6 +78,24 @@ export const GamesAPI = {
 };
 
 /** Bibliothèque personnelle (ressources hors partie). */
+/** Arpenteur du groupe (parties GEMMA en mode Arpenteur). */
+export const ArpenteurAPI = {
+  get: (gameId: number) => api.get(`/games/${gameId}/arpenteur`),
+  patch: (gameId: number, section: string, value: unknown, log?: string) =>
+    api.patch(`/games/${gameId}/arpenteur`, { section, value, log }),
+  importSheet: (gameId: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/games/${gameId}/arpenteur/import`, form);
+  },
+  uploadImage: (gameId: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/games/${gameId}/arpenteur/image`, form);
+  },
+  reset: (gameId: number) => api.post(`/games/${gameId}/arpenteur/reset`),
+};
+
 export const LibraryAPI = {
   get: () => api.get('/library'),
 };

@@ -13,6 +13,7 @@ import {
   Library,
   LogOut,
   Trash,
+  Ship,
 } from '../components/tabletop/icons';
 import { initials } from '../components/tabletop/presence';
 import { D20Logo } from './AuthPage';
@@ -24,6 +25,8 @@ interface Game {
   ownerId: number;
   role: string;
   isGemma?: boolean;
+  /** Sous-type GEMMA (« arpenteur »). */
+  gemmaVariant?: string;
   characterName?: string;
   currentMapName?: string;
   currentMapImageUrl?: string;
@@ -136,6 +139,7 @@ export function GameLobbyPage() {
   const [loading, setLoading] = useState(true);
   const [createName, setCreateName] = useState('');
   const [isGemma, setIsGemma] = useState(false);
+  const [gemmaVariant, setGemmaVariant] = useState<'' | 'arpenteur'>('');
   const [joinCode, setJoinCode] = useState('');
   const [err, setErr] = useState('');
   const [deleteGameId, setDeleteGameId] = useState<number | null>(null);
@@ -169,17 +173,33 @@ export function GameLobbyPage() {
     setErr('');
     setBusy('create');
     try {
+      const variant = isGemma ? gemmaVariant : '';
       const { data } = await GamesAPI.create({
         name: createName.trim() || undefined,
         isGemma,
+        gemmaVariant: variant || undefined,
       });
       setCreateName('');
-      if (data.game?.id) navigate(`/table/${data.game.id}`);
+      if (data.game?.id)
+        navigate(
+          `/table/${data.game.id}${variant === 'arpenteur' ? '?vue=arpenteur' : ''}`
+        );
       else loadGames();
     } catch (e: unknown) {
       setErr(getErrorMessage(e, 'Création impossible'));
     } finally {
       setBusy(null);
+    }
+  };
+
+  const toggleArpenteur = async (g: Game) => {
+    try {
+      await GamesAPI.update(g.id, {
+        gemmaVariant: g.gemmaVariant === 'arpenteur' ? '' : 'arpenteur',
+      });
+      loadGames();
+    } catch (e) {
+      setErr(getErrorMessage(e, 'Changement impossible'));
     }
   };
 
@@ -333,6 +353,47 @@ export function GameLobbyPage() {
               />
               Univers GEMMA (règles et fiches dédiées, non modifiable ensuite)
             </label>
+            {isGemma && (
+              <div
+                className="flex flex-col gap-2 pl-7"
+                role="radiogroup"
+                aria-label="Type de partie GEMMA"
+              >
+                {(
+                  [
+                    [
+                      '',
+                      'GEMMA classique',
+                      'La table, les fiches et les règles GEMMA.',
+                    ],
+                    [
+                      'arpenteur',
+                      'GEMMA Arpenteur',
+                      'En plus : le vaisseau des sables du groupe, son équipage, ses canons, sa cale et la carte des déserts.',
+                    ],
+                  ] as const
+                ).map(([id, label, hint]) => (
+                  <label
+                    key={id}
+                    className="flex items-start gap-2.5 text-sm cursor-pointer select-none"
+                  >
+                    <input
+                      type="radio"
+                      name="gemma-variant"
+                      checked={gemmaVariant === id}
+                      onChange={() => setGemmaVariant(id)}
+                      className="mt-0.5 w-4 h-4 accent-fantasy-accent"
+                    />
+                    <span>
+                      <span className="text-fantasy-text">{label}</span>
+                      <span className="block text-xs text-fantasy-muted">
+                        {hint}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
           </form>
 
           <form
@@ -442,7 +503,9 @@ export function GameLobbyPage() {
                         </span>
                         {g.isGemma && (
                           <span className="px-2.5 py-0.5 rounded-full text-xs bg-black/60 text-white">
-                            GEMMA
+                            {g.gemmaVariant === 'arpenteur'
+                              ? 'GEMMA · Arpenteur'
+                              : 'GEMMA'}
                           </span>
                         )}
                       </div>
@@ -462,7 +525,11 @@ export function GameLobbyPage() {
                       <div className="flex gap-2">
                         <button
                           type="button"
-                          onClick={() => navigate(`/table/${g.id}`)}
+                          onClick={() =>
+                            navigate(
+                              `/table/${g.id}${g.gemmaVariant === 'arpenteur' ? '?vue=arpenteur' : ''}`
+                            )
+                          }
                           className="flex-1 h-11 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold hover:bg-fantasy-accent-hover"
                         >
                           Entrer
@@ -483,6 +550,30 @@ export function GameLobbyPage() {
                               )}
                               {copiedId === g.id ? 'Copié' : g.inviteCode}
                             </button>
+                            {g.isGemma && (
+                              <button
+                                type="button"
+                                onClick={() => toggleArpenteur(g)}
+                                title={
+                                  g.gemmaVariant === 'arpenteur'
+                                    ? 'Retirer le mode Arpenteur (le navire est conservé)'
+                                    : 'Activer le mode Arpenteur'
+                                }
+                                aria-label={
+                                  g.gemmaVariant === 'arpenteur'
+                                    ? `Retirer le mode Arpenteur de ${g.name}`
+                                    : `Activer le mode Arpenteur pour ${g.name}`
+                                }
+                                aria-pressed={g.gemmaVariant === 'arpenteur'}
+                                className={`w-11 h-11 rounded-lg border flex items-center justify-center ${
+                                  g.gemmaVariant === 'arpenteur'
+                                    ? 'border-fantasy-accent text-fantasy-accent bg-fantasy-accent/10'
+                                    : 'border-fantasy-border text-fantasy-muted hover:text-fantasy-text'
+                                }`}
+                              >
+                                <Ship size={16} />
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => setDeleteGameId(g.id)}

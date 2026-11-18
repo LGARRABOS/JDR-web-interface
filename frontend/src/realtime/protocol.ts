@@ -1,3 +1,4 @@
+import type { ArpenteurPayload } from '../arpenteur/types';
 /**
  * Protocole WebSocket entre le serveur et les clients.
  * Doit rester aligné avec backend/internal/realtime/protocol.go et
@@ -48,6 +49,8 @@ export interface GameInfo {
   inviteCode?: string;
   ownerId: number;
   isGemma: boolean;
+  /** Sous-type GEMMA : « arpenteur » ou vide (absent des anciens serveurs). */
+  gemmaVariant?: string;
   tokenMovementLocked: boolean;
   fogVisionRadius: number;
   currentMapId: number | null;
@@ -91,6 +94,8 @@ export interface GameSnapshot {
   players: Member[];
   /** Documents : tous pour le MJ, seulement ceux montrés pour un joueur. */
   handouts?: Handout[];
+  /** Arpenteur du groupe (parties GEMMA en mode Arpenteur). */
+  arpenteur?: ArpenteurPayload;
 }
 
 /** Point de la carte (mêmes unités que les jetons). */
@@ -156,7 +161,7 @@ export interface SnapshotPayload {
 }
 
 export type GameSettings = Partial<
-  Pick<GameInfo, 'tokenMovementLocked' | 'fogVisionRadius'>
+  Pick<GameInfo, 'tokenMovementLocked' | 'fogVisionRadius' | 'gemmaVariant'>
 >;
 
 /** Événements envoyés par le serveur. */
@@ -190,7 +195,8 @@ export type ServerEvent =
   | { type: 'handout.created'; payload: Handout }
   | { type: 'handout.updated'; payload: Handout }
   | { type: 'handout.deleted'; payload: { id: number } }
-  | { type: 'handout.shown'; payload: Handout };
+  | { type: 'handout.shown'; payload: Handout }
+  | { type: 'arpenteur.state'; payload: ArpenteurPayload };
 
 export type ServerEventType = ServerEvent['type'];
 
@@ -245,6 +251,7 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set<ServerEventType>([
   'handout.updated',
   'handout.deleted',
   'handout.shown',
+  'arpenteur.state',
 ]);
 
 /** Décode un message serveur ; retourne null s'il est invalide ou inconnu. */

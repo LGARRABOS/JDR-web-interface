@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
   ElementsAPI,
@@ -34,6 +34,7 @@ import { HandoutsTab } from '../components/tabletop/HandoutsTab';
 import { HandoutViewer } from '../components/tabletop/HandoutViewer';
 import { NotesTab } from '../components/tabletop/NotesTab';
 import { GuideDrawer } from '../components/guide/GuideDrawer';
+import { ArpenteurView } from '../components/arpenteur/ArpenteurView';
 import { PresenceToasts } from '../components/tabletop/PresenceMenu';
 import type { Handout } from '../realtime/protocol';
 import { MiniPlayer, MusicTab } from '../components/tabletop/MusicControls';
@@ -291,6 +292,39 @@ export function TabletopPage() {
 
   const [playerSheet, setPlayerSheet] = useState<GameElementFull | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  // Mode Arpenteur : la page du navire remplace la carte (?vue=arpenteur),
+  // sans quitter la partie (même connexion, chat et dés toujours là).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isArpenteur = !!game?.isGemma && game?.gemmaVariant === 'arpenteur';
+  const arpenteurView = isArpenteur && searchParams.get('vue') === 'arpenteur';
+  const setViewMode = useCallback(
+    (mode: 'table' | 'arpenteur') => {
+      const next = new URLSearchParams(searchParams);
+      if (mode === 'arpenteur') next.set('vue', 'arpenteur');
+      else next.delete('vue');
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+  // Un joueur sur la page de l'arpenteur est prévenu quand le MJ affiche une carte.
+  const [mapNotice, setMapNotice] = useState<string | null>(null);
+  const lastMapId = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    const id = currentMap?.id ?? null;
+    if (
+      lastMapId.current !== undefined &&
+      id !== lastMapId.current &&
+      id != null &&
+      arpenteurView &&
+      !isGM
+    ) {
+      setMapNotice(currentMap?.name ?? 'une carte');
+    }
+    lastMapId.current = id;
+  }, [currentMap?.id, currentMap?.name, arpenteurView, isGM]);
+  useEffect(() => {
+    if (!arpenteurView) setMapNotice(null);
+  }, [arpenteurView]);
   // Vue « comme un joueur » : le MJ voit la table telle que ses joueurs la voient.
   const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
   const viewAsGM = isGM && !previewAsPlayer;
@@ -764,7 +798,24 @@ export function TabletopPage() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-fantasy-bg text-fantasy-text">
-      <div className="absolute inset-0 flex">
+      {arpenteurView && (
+        <>
+          <ArpenteurView
+            gameId={gameId}
+            isGM={isGM}
+            userId={user?.id ?? 0}
+            players={gamePlayers}
+            payload={state.arpenteur}
+            store={store}
+            panelOpen={panelOpen}
+            onRoll={(expr) => handleRoll(expr)}
+          />
+          {game.isGemma && (
+            <DiceRollOverlay roll={state.lastRoll} durationMs={2500} />
+          )}
+        </>
+      )}
+      <div className={`absolute inset-0 flex ${arpenteurView ? 'hidden' : ''}`}>
         <MapCanvas
           map={currentMap}
           tokens={previewAsPlayer ? tokensForPlayers(tokens) : tokens}
@@ -779,7 +830,7 @@ export function TabletopPage() {
           rulerColor={myRulerColor}
           onRulerChange={handleRulerChange}
           onTokenFace={
-            previewAsPlayer
+            previewAsPlayer || arpenteurView
               ? undefined
               : (id, facing) => handleTokenUpdate(id, { facing })
           }
@@ -852,8 +903,39 @@ export function TabletopPage() {
         onRetry={resync}
         onOpenGuide={() => setGuideOpen(true)}
         rulerActive={rulerActive}
-        onToggleRuler={currentMap ? () => setRulerActive((v) => !v) : undefined}
+        onToggleRuler={
+          currentMap && !arpenteurView
+            ? () => setRulerActive((v) => !v)
+            : undefined
+        }
+        viewMode={
+          isArpenteur ? (arpenteurView ? 'arpenteur' : 'table') : undefined
+        }
+        onViewMode={isArpenteur ? setViewMode : undefined}
       />
+
+      {mapNotice && (
+        <div className="glass absolute top-[124px] sm:top-20 left-1/2 -translate-x-1/2 z-40 rounded-xl pl-4 pr-1.5 py-1.5 flex items-center gap-3 text-sm max-w-[94vw]">
+          <span className="truncate">
+            Le MJ affiche <strong>{mapNotice}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            className="h-8 px-3 rounded-lg bg-fantasy-accent text-fantasy-bg font-semibold whitespace-nowrap"
+          >
+            Voir la table
+          </button>
+          <button
+            type="button"
+            onClick={() => setMapNotice(null)}
+            className="h-8 px-2 rounded-lg text-fantasy-muted hover:text-fantasy-text"
+            aria-label="Fermer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {actionError && (
         <div
@@ -864,7 +946,7 @@ export function TabletopPage() {
         </div>
       )}
 
-      {placementData && (
+      {placementData && !arpenteurView && (
         <div className="glass absolute top-20 left-1/2 -translate-x-1/2 z-30 rounded-xl pl-4 pr-1.5 py-1.5 flex items-center gap-3 text-sm">
           Cliquez sur la carte pour placer <strong>{placementData.name}</strong>
           <button
@@ -892,7 +974,7 @@ export function TabletopPage() {
         </div>
       )}
 
-      {viewAsGM && (
+      {viewAsGM && !arpenteurView && (
         <GmToolbar
           placementActive={placementData != null}
           enemyPanelOpen={panelOpen && activeTab === 'tokens'}

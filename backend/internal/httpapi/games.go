@@ -39,7 +39,7 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 
 	// Une seule requête : rôle, carte affichée (nom + image) et nombre de joueurs.
 	rows, err := s.db.Query(`
-		SELECT g.id, g.name, g.invite_code, g.owner_id, COALESCE(g.is_gemma, 0),
+		SELECT g.id, g.name, g.invite_code, g.owner_id, COALESCE(g.is_gemma, 0), COALESCE(g.gemma_variant, ''),
 			COALESCE(gp.character_name, ''), gp.role,
 			COALESCE(m.name, ''), COALESCE(m.image_url, ''),
 			(SELECT COUNT(*) FROM game_players p WHERE p.game_id = g.id AND p.role = 'PLAYER')
@@ -59,8 +59,8 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var g domain.Game
 		var isGemma, playerCount int
-		var charName, role, mapName, mapImage string
-		if err := rows.Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &charName, &role, &mapName, &mapImage, &playerCount); err != nil {
+		var variant, charName, role, mapName, mapImage string
+		if err := rows.Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &variant, &charName, &role, &mapName, &mapImage, &playerCount); err != nil {
 			continue
 		}
 		if g.OwnerID == u.ID {
@@ -73,6 +73,7 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 			"ownerId":            g.OwnerID,
 			"role":               role,
 			"isGemma":            isGemma == 1,
+			"gemmaVariant":       variant,
 			"characterName":      charName,
 			"currentMapName":     mapName,
 			"currentMapImageUrl": mapImage,
@@ -86,6 +87,8 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 type createGameReq struct {
 	Name    string `json:"name"`
 	IsGemma bool   `json:"isGemma"`
+	// GemmaVariant : sous-type GEMMA (« arpenteur »), vide pour une partie classique.
+	GemmaVariant string `json:"gemmaVariant"`
 }
 
 func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +112,10 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 	if req.IsGemma {
 		isGemma = 1
 	}
+	variant := ""
+	if req.IsGemma && req.GemmaVariant == gemmaVariantArpenteur {
+		variant = gemmaVariantArpenteur
+	}
 	var id int64
 	var err error
 	for attempt := 0; attempt < 5; attempt++ {
@@ -116,8 +123,8 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 			code = generateInviteCode()
 		}
 		err = s.db.QueryRow(
-			"INSERT INTO games (name, invite_code, owner_id, is_gemma) VALUES (?, ?, ?, ?) RETURNING id",
-			req.Name, code, u.ID, isGemma,
+			"INSERT INTO games (name, invite_code, owner_id, is_gemma, gemma_variant) VALUES (?, ?, ?, ?, ?) RETURNING id",
+			req.Name, code, u.ID, isGemma, variant,
 		).Scan(&id)
 		if err == nil {
 			break
@@ -136,12 +143,13 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"game": map[string]interface{}{
-			"id":         id,
-			"name":       req.Name,
-			"inviteCode": code,
-			"ownerId":    u.ID,
-			"role":       "MJ",
-			"isGemma":    req.IsGemma,
+			"id":           id,
+			"name":         req.Name,
+			"inviteCode":   code,
+			"ownerId":      u.ID,
+			"role":         "MJ",
+			"isGemma":      req.IsGemma,
+			"gemmaVariant": variant,
 		},
 	})
 }
@@ -214,13 +222,14 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 
 	var g domain.Game
 	var isGemma int
+	var variant string
 	var tokenMovementLocked int
 	var fogVisionRadius int
 	var currentMapID sql.NullInt64
 	err = s.db.QueryRow(
-		"SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(token_movement_locked, 0), COALESCE(fog_vision_radius, 0), current_map_id FROM games WHERE id = ?",
+		"SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(gemma_variant, ''), COALESCE(token_movement_locked, 0), COALESCE(fog_vision_radius, 0), current_map_id FROM games WHERE id = ?",
 		id,
-	).Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &tokenMovementLocked, &fogVisionRadius, &currentMapID)
+	).Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &variant, &tokenMovementLocked, &fogVisionRadius, &currentMapID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Partie introuvable"})
 		return
@@ -237,6 +246,7 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 		"ownerId":             g.OwnerID,
 		"role":                role,
 		"isGemma":             isGemma == 1,
+		"gemmaVariant":        variant,
 		"tokenMovementLocked": tokenMovementLocked == 1,
 		"fogVisionRadius":     fogVisionRadius,
 		"characterName":       cn,
@@ -248,8 +258,9 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateGameReq struct {
-	TokenMovementLocked *bool `json:"tokenMovementLocked"`
-	FogVisionRadius     *int  `json:"fogVisionRadius"`
+	TokenMovementLocked *bool   `json:"tokenMovementLocked"`
+	FogVisionRadius     *int    `json:"fogVisionRadius"`
+	GemmaVariant        *string `json:"gemmaVariant"`
 }
 
 func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
@@ -306,6 +317,30 @@ func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
 		var current *int64
 		if s.db.QueryRow("SELECT current_map_id FROM games WHERE id = ?", gameID).Scan(&current) == nil && current != nil {
 			s.refreshPlayerTokens(*current, false)
+		}
+	}
+
+	// Sous-type GEMMA : activer (ou retirer) le mode Arpenteur d'une partie GEMMA.
+	// Le document de l'arpenteur est conservé si le mode est retiré puis remis.
+	if req.GemmaVariant != nil {
+		variant := ""
+		if *req.GemmaVariant == gemmaVariantArpenteur {
+			variant = gemmaVariantArpenteur
+		}
+		res, err := s.db.Exec("UPDATE games SET gemma_variant = ? WHERE id = ? AND COALESCE(is_gemma, 0) = 1", variant, gameID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Le mode Arpenteur est réservé aux parties GEMMA"})
+			return
+		}
+		s.hub.Broadcast(gameID, "game.settings", map[string]interface{}{"gemmaVariant": variant})
+		if variant == gemmaVariantArpenteur {
+			if d, version, err := s.loadArpenteur(gameID); err == nil {
+				s.broadcastArpenteur(gameID, d, version)
+			}
 		}
 	}
 

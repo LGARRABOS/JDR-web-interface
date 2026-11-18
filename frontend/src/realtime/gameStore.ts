@@ -1,3 +1,4 @@
+import type { ArpenteurPayload } from '../arpenteur/types';
 import { addPatch } from '../fog/fog';
 import type { MapData, Token } from '../types/game';
 import type { ConnectionStatus } from './connection';
@@ -51,6 +52,8 @@ export interface GameState {
   handouts: Handout[];
   /** Document que le MJ vient de montrer : ouvert chez tout le monde. */
   openHandoutId: number | null;
+  /** Arpenteur du groupe (mode Arpenteur), avec sa version serveur. */
+  arpenteur: ArpenteurPayload | null;
 }
 
 export const initialGameState: GameState = {
@@ -73,6 +76,7 @@ export const initialGameState: GameState = {
   rulers: [],
   handouts: [],
   openHandoutId: null,
+  arpenteur: null,
 };
 
 let rollKey = 0;
@@ -166,6 +170,7 @@ export function applyEvent(
         draggingTokenId: null,
         rulers: [],
         handouts: snap.handouts ?? [],
+        arpenteur: snap.arpenteur ?? null,
       };
     }
 
@@ -361,6 +366,13 @@ export function applyEvent(
       };
     }
 
+    // Arpenteur : on garde la version la plus récente (les réponses HTTP
+    // et les événements peuvent arriver dans le désordre).
+    case 'arpenteur.state':
+      if (state.arpenteur && env.payload.version < state.arpenteur.version)
+        return state;
+      return { ...state, arpenteur: env.payload };
+
     case 'game.settings':
       return state.game
         ? { ...state, game: { ...state.game, ...env.payload } }
@@ -460,6 +472,13 @@ export class GameStore {
   setOpenHandout(id: number | null) {
     if (this.state.openHandoutId === id) return;
     this.set({ ...this.state, openHandoutId: id });
+  }
+
+  /** Arpenteur renvoyé par une requête (modification, import) : gardé s'il est plus récent. */
+  setArpenteurLocally(p: ArpenteurPayload) {
+    const cur = this.state.arpenteur;
+    if (cur && p.version < cur.version) return;
+    this.set({ ...this.state, arpenteur: p });
   }
 
   /** Document créé, modifié ou supprimé par soi-même (réponse HTTP). */
