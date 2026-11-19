@@ -91,15 +91,16 @@ Votre nom d'affichage est celui que voient les autres à la table. Vous pouvez l
     title: 'Créer une partie',
     summary: 'Ouvrir une table dont vous êtes le Maître du Jeu.',
     audience: 'mj',
-    keywords: ['nouvelle partie', 'MJ', 'code', 'invitation', 'GEMMA'],
+    keywords: ['nouvelle partie', 'MJ', 'code', 'invitation', 'GEMMA', 'test'],
     body: `1. Sur « Mes parties », remplissez le cadre « Créer une partie » (le nom est facultatif).
 2. Cochez « Univers GEMMA » si vous jouez dans cet univers : ce choix ne se change plus ensuite (voir [[gemma|Univers GEMMA]]). Choisissez alors « GEMMA classique » ou « GEMMA Arpenteur » ([[arpenteur|le vaisseau des sables]]).
-3. Cliquez sur « Créer » : vous êtes le MJ de la partie.
+3. Pour essayer les mécaniques seul, cochez « Partie test » : vous y incarnez des joueurs fictifs (voir [[partie-test|Partie test]]).
+4. Cliquez sur « Créer » : vous êtes le MJ de la partie.
 
 Un code d'invitation est créé. Copiez-le depuis la carte de la partie ou, à la table, avec le bouton « Inviter » en haut à droite, puis envoyez-le à vos joueurs.
 
 > Préparez vos cartes et monstres à l'avance dans [[bibliotheque|Ma bibliothèque]] : ils seront disponibles dans toutes vos parties.`,
-    related: ['rejoindre-partie', 'preparer', 'bibliotheque'],
+    related: ['rejoindre-partie', 'preparer', 'bibliotheque', 'partie-test'],
   },
   {
     id: 'rejoindre-partie',
@@ -351,6 +352,42 @@ La même page existe hors partie : [[bibliotheque|Ma bibliothèque]].`,
     related: ['cartes', 'monstres', 'musique-mj'],
   },
   {
+    id: 'partie-test',
+    chapter: 'mj-preparer',
+    title: 'Partie test : essayer sans joueurs',
+    summary: 'Incarner des joueurs fictifs pour tester les mécaniques.',
+    audience: 'mj',
+    keywords: [
+      'test',
+      'essai',
+      'joueur fictif',
+      'incarner',
+      'simuler',
+      'réinitialiser',
+      'exemple',
+    ],
+    body: `Une partie test sert à essayer la table, les règles ou l'arpenteur sans réunir vos joueurs. Elle porte le badge **TEST** et personne ne peut la rejoindre : il n'y a pas de code d'invitation.
+
+## Créer une partie test
+
+1. Sur « Mes parties », cochez « Partie test » dans le cadre « Créer une partie ».
+2. Laissez « Remplir avec des données d'exemple » coché pour partir avec trois joueurs fictifs, une carte avec leurs jetons, deux monstres, un document et, en mode Arpenteur, un navire avec son équipage.
+3. Cliquez sur « Créer ».
+
+## Le bouton « Test »
+
+À la table, le bouton jaune « Test » en haut à droite ouvre les outils :
+
+- **Joueurs fictifs** : ajoutez-en (huit au plus), changez leur nom ou leur personnage, supprimez-les.
+- **Incarner** : la page se recharge et vous jouez à la place de ce joueur, avec exactement ses droits : brouillard, jetons visibles, fiche, dés, poste sur l'arpenteur. Un bandeau jaune le rappelle ; « Revenir au MJ » reprend la main.
+- **Nouvel onglet** (icône à côté d'« Incarner ») : ouvre un onglet au nom de ce joueur. Gardez le MJ dans un onglet et chaque joueur dans le sien pour voir les actions passer en direct.
+- **Ajouter des données d'exemple** : remet trois joueurs, une carte et des monstres.
+- **Réinitialiser la partie** (deux clics) : efface cartes, jetons, monstres, messages, dés, documents et navire. Les joueurs fictifs restent, et les onglets ouverts se rechargent.
+
+> L'incarnation ne vaut que dans l'onglet où vous l'avez lancée ; revenir à « Mes parties » vous rend votre compte. Supprimer une partie test ne range rien dans votre bibliothèque.`,
+    related: ['creer-partie', 'vue-joueur', 'arpenteur-mj'],
+  },
+  {
     id: 'bibliotheque',
     chapter: 'mj-preparer',
     title: 'Ma bibliothèque',
@@ -508,7 +545,9 @@ Les ennemis hors de ce cercle sont cachés aux joueurs ; ils apparaissent quand 
     keywords: ['vue joueur', 'aperçu', 'vérifier'],
     body: `L'œil, en bas de la barre d'outils, affiche la table telle que la voient vos joueurs : jetons cachés absents, brouillard opaque, PV des ennemis masqués, fiches des monstres vaincus réduites à ce qui est visible.
 
-Rien ne peut être modifié dans ce mode, et vos joueurs ne voient pas la différence. « Revenir en MJ » ou Échap pour reprendre la main.`,
+Rien ne peut être modifié dans ce mode, et vos joueurs ne voient pas la différence. « Revenir en MJ » ou Échap pour reprendre la main.
+
+> Pour agir vraiment comme un joueur (lancer ses dés, déplacer son jeton, modifier sa fiche), utilisez une [[partie-test|partie test]].`,
   },
   {
     id: 'documents-mj',
@@ -626,10 +665,20 @@ Cliquez sur un personnage qui a une portée : un cercle jaune montre sa zone d'a
     title: 'Le mode Arpenteur',
     summary: 'Le vaisseau des sables du groupe, sur sa propre page.',
     audience: 'tous',
-    keywords: ['arpenteur', 'vaisseau', 'navire', 'désert', 'GEMMA', 'Keld'],
+    keywords: [
+      'arpenteur',
+      'vaisseau',
+      'navire',
+      'désert',
+      'GEMMA',
+      'Keld',
+      '3D',
+    ],
     body: `Une partie **GEMMA Arpenteur** ajoute un vaisseau des sables commun à tout le groupe. Le bouton « Arpenteur » en haut de la table ouvre sa page ; « Table » revient à la carte. Le chat, les dés et la musique restent disponibles.
 
-En haut de la page, l'arpenteur glisse sur les dunes du désert où il se trouve : son allure, ses matériaux, ses mâts, sa proue et ses couleurs suivent ses améliorations, ses canons apparaissent aux sabords, et la fumée monte quand la coque est abîmée. Le bouton « Coupe » montre l'intérieur : cliquez sur une salle pour la gérer.
+En haut de la page, l'arpenteur apparaît en 3D, vu de trois-quarts, survolant les dunes du désert où il se trouve. Son allure, ses matériaux, ses mâts, sa proue, ses éclairages et ses couleurs suivent ses améliorations, et ses canons sortent des sabords. Les réacteurs soulèvent le sable, les cheminées fument, et la scène passe de nuit entre 20 h et 7 h. Le bouton « Coupe » montre le plan de l'intérieur : cliquez sur une salle pour la gérer.
+
+> Sur un appareil trop ancien pour la 3D, une version dessinée s'affiche à la place.
 
 Les onglets :
 
@@ -761,7 +810,9 @@ Un coût en coupons peut être déduit de l'expédition. Chaque amélioration s'
 2. Dans l'onglet Réglages de l'arpenteur, importez votre classeur (Excel, LibreOffice ou CSV) : équipage, combat, cale, cave et expédition sont repris.
 3. Dans l'onglet Équipage, reliez chaque personnage joueur à son joueur (« Incarné par ») : ses droits suivent son poste.
 
-> Retirer le mode Arpenteur ne supprime pas le navire : il revient tel quel si vous le réactivez.`,
+> Retirer le mode Arpenteur ne supprime pas le navire : il revient tel quel si vous le réactivez.
+
+> Pour essayer les postes avant la séance, créez une [[partie-test|partie test]] en mode Arpenteur : ses joueurs fictifs sont déjà placés dans l'équipage.`,
   },
 
   // --- Compte ----------------------------------------------------------------------------
