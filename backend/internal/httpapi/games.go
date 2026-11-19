@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
+	"log"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -39,7 +40,7 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 
 	// Une seule requête : rôle, carte affichée (nom + image) et nombre de joueurs.
 	rows, err := s.db.Query(`
-		SELECT g.id, g.name, g.invite_code, g.owner_id, COALESCE(g.is_gemma, 0), COALESCE(g.gemma_variant, ''),
+		SELECT g.id, g.name, g.invite_code, g.owner_id, COALESCE(g.is_gemma, 0), COALESCE(g.gemma_variant, ''), COALESCE(g.is_test, 0),
 			COALESCE(gp.character_name, ''), gp.role,
 			COALESCE(m.name, ''), COALESCE(m.image_url, ''),
 			(SELECT COUNT(*) FROM game_players p WHERE p.game_id = g.id AND p.role = 'PLAYER')
@@ -58,9 +59,9 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 	games := []map[string]interface{}{}
 	for rows.Next() {
 		var g domain.Game
-		var isGemma, playerCount int
+		var isGemma, isTest, playerCount int
 		var variant, charName, role, mapName, mapImage string
-		if err := rows.Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &variant, &charName, &role, &mapName, &mapImage, &playerCount); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &variant, &isTest, &charName, &role, &mapName, &mapImage, &playerCount); err != nil {
 			continue
 		}
 		if g.OwnerID == u.ID {
@@ -74,6 +75,7 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 			"role":               role,
 			"isGemma":            isGemma == 1,
 			"gemmaVariant":       variant,
+			"isTest":             isTest == 1,
 			"characterName":      charName,
 			"currentMapName":     mapName,
 			"currentMapImageUrl": mapImage,
@@ -89,6 +91,10 @@ type createGameReq struct {
 	IsGemma bool   `json:"isGemma"`
 	// GemmaVariant : sous-type GEMMA (« arpenteur »), vide pour une partie classique.
 	GemmaVariant string `json:"gemmaVariant"`
+	// IsTest : partie test (joueurs fictifs, pas d'invitation).
+	IsTest bool `json:"isTest"`
+	// Sample : remplit la partie test avec des données d'exemple.
+	Sample bool `json:"sample"`
 }
 
 func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +122,10 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 	if req.IsGemma && req.GemmaVariant == gemmaVariantArpenteur {
 		variant = gemmaVariantArpenteur
 	}
+	isTest := 0
+	if req.IsTest {
+		isTest = 1
+	}
 	var id int64
 	var err error
 	for attempt := 0; attempt < 5; attempt++ {
@@ -123,8 +133,8 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 			code = generateInviteCode()
 		}
 		err = s.db.QueryRow(
-			"INSERT INTO games (name, invite_code, owner_id, is_gemma, gemma_variant) VALUES (?, ?, ?, ?, ?) RETURNING id",
-			req.Name, code, u.ID, isGemma, variant,
+			"INSERT INTO games (name, invite_code, owner_id, is_gemma, gemma_variant, is_test) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+			req.Name, code, u.ID, isGemma, variant, isTest,
 		).Scan(&id)
 		if err == nil {
 			break
@@ -140,6 +150,11 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, _ = s.db.Exec("INSERT INTO game_players (game_id, user_id, role) VALUES (?, ?, 'MJ')", id, u.ID)
+	if req.IsTest && req.Sample {
+		if err := s.seedTestGame(id, u.ID); err != nil {
+			log.Printf("partie test %d : données d'exemple : %v", id, err)
+		}
+	}
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"game": map[string]interface{}{
@@ -150,6 +165,7 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 			"role":         "MJ",
 			"isGemma":      req.IsGemma,
 			"gemmaVariant": variant,
+			"isTest":       req.IsTest,
 		},
 	})
 }
@@ -172,12 +188,17 @@ func (s *Server) handleJoinByCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var game domain.Game
+	var isTest int
 	err := s.db.QueryRow(
-		"SELECT id, name, invite_code, owner_id FROM games WHERE invite_code = ? AND COALESCE(is_library, 0) = 0",
+		"SELECT id, name, invite_code, owner_id, COALESCE(is_test, 0) FROM games WHERE invite_code = ? AND COALESCE(is_library, 0) = 0",
 		req.InviteCode,
-	).Scan(&game.ID, &game.Name, &game.InviteCode, &game.OwnerID)
+	).Scan(&game.ID, &game.Name, &game.InviteCode, &game.OwnerID, &isTest)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Partie introuvable ou code invalide"})
+		return
+	}
+	if isTest == 1 {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Partie test : les invitations sont désactivées"})
 		return
 	}
 
@@ -223,13 +244,14 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 	var g domain.Game
 	var isGemma int
 	var variant string
+	var isTest int
 	var tokenMovementLocked int
 	var fogVisionRadius int
 	var currentMapID sql.NullInt64
 	err = s.db.QueryRow(
-		"SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(gemma_variant, ''), COALESCE(token_movement_locked, 0), COALESCE(fog_vision_radius, 0), current_map_id FROM games WHERE id = ?",
+		"SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(gemma_variant, ''), COALESCE(is_test, 0), COALESCE(token_movement_locked, 0), COALESCE(fog_vision_radius, 0), current_map_id FROM games WHERE id = ?",
 		id,
-	).Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &variant, &tokenMovementLocked, &fogVisionRadius, &currentMapID)
+	).Scan(&g.ID, &g.Name, &g.InviteCode, &g.OwnerID, &isGemma, &variant, &isTest, &tokenMovementLocked, &fogVisionRadius, &currentMapID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Partie introuvable"})
 		return
@@ -247,6 +269,7 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 		"role":                role,
 		"isGemma":             isGemma == 1,
 		"gemmaVariant":        variant,
+		"isTest":              isTest == 1,
 		"tokenMovementLocked": tokenMovementLocked == 1,
 		"fogVisionRadius":     fogVisionRadius,
 		"characterName":       cn,
@@ -428,7 +451,7 @@ func (s *Server) handleListGamePlayers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT u.id, u.display_name, COALESCE(gp.character_name, '')
+		SELECT u.id, u.display_name, COALESCE(gp.character_name, ''), u.bot_game_id IS NOT NULL
 		FROM game_players gp
 		INNER JOIN users u ON u.id = gp.user_id
 		WHERE gp.game_id = ? AND gp.role = 'PLAYER'
@@ -444,13 +467,15 @@ func (s *Server) handleListGamePlayers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var userID int64
 		var displayName, charName string
-		if err := rows.Scan(&userID, &displayName, &charName); err != nil {
+		var isBot bool
+		if err := rows.Scan(&userID, &displayName, &charName, &isBot); err != nil {
 			continue
 		}
 		players = append(players, map[string]interface{}{
 			"userId":        userID,
 			"displayName":   displayName,
 			"characterName": charName,
+			"isBot":         isBot,
 		})
 	}
 
@@ -529,8 +554,11 @@ func (s *Server) handleDeleteGame(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "La bibliothèque ne peut pas être supprimée"})
 		return
 	}
-	// Cartes, monstres, décors et musiques rejoignent la bibliothèque du MJ.
-	if err := s.moveGameAssetsToLibrary(id, ownerID); err != nil {
+	// Cartes, monstres, décors et musiques rejoignent la bibliothèque du MJ,
+	// sauf pour une partie test : tout y est jetable.
+	if s.isTestGame(id) {
+		removeGameUploads(id)
+	} else if err := s.moveGameAssetsToLibrary(id, ownerID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}

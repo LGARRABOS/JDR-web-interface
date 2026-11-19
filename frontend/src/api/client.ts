@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { activeActAs } from '../auth/actAs';
 
 export const api = axios.create({
   baseURL: '/api',
@@ -9,6 +10,11 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   if (config.data instanceof FormData && config.headers) {
     delete (config.headers as Record<string, unknown>)['Content-Type'];
+  }
+  // Partie test : le MJ agit au nom du joueur fictif qu'il incarne.
+  const as = activeActAs();
+  if (as && config.headers) {
+    (config.headers as Record<string, unknown>)['X-Act-As'] = String(as.userId);
   }
   return config;
 });
@@ -55,8 +61,13 @@ export const AuthAPI = {
 
 export const GamesAPI = {
   list: () => api.get('/games'),
-  create: (data: { name?: string; isGemma?: boolean; gemmaVariant?: string }) =>
-    api.post('/games', data),
+  create: (data: {
+    name?: string;
+    isGemma?: boolean;
+    gemmaVariant?: string;
+    isTest?: boolean;
+    sample?: boolean;
+  }) => api.post('/games', data),
   join: (data: { inviteCode: string }) => api.post('/games/join', data),
   get: (id: number) => api.get(`/games/${id}`),
   players: (id: number) => api.get(`/games/${id}/players`),
@@ -336,4 +347,28 @@ export const MusicAPI = {
   },
   delete: (gameId: number, trackId: number) =>
     api.delete(`/games/${gameId}/music/${trackId}`),
+};
+
+export interface TestPlayer {
+  userId: number;
+  displayName: string;
+  characterName: string;
+}
+
+/** Outils des parties test (réservés au MJ, même quand il incarne un joueur). */
+export const TestAPI = {
+  state: (gameId: number) => api.get(`/games/${gameId}/test`),
+  addPlayer: (
+    gameId: number,
+    data: { displayName?: string; characterName?: string }
+  ) => api.post(`/games/${gameId}/test/players`, data),
+  updatePlayer: (
+    gameId: number,
+    userId: number,
+    data: { displayName?: string; characterName?: string }
+  ) => api.patch(`/games/${gameId}/test/players/${userId}`, data),
+  removePlayer: (gameId: number, userId: number) =>
+    api.delete(`/games/${gameId}/test/players/${userId}`),
+  reset: (gameId: number) => api.post(`/games/${gameId}/test/reset`),
+  sample: (gameId: number) => api.post(`/games/${gameId}/test/sample`),
 };

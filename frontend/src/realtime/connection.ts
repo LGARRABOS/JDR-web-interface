@@ -1,4 +1,5 @@
 import { parseEnvelope, type ClientAction, type Envelope } from './protocol';
+import { activeActAs } from '../auth/actAs';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting';
 
@@ -85,7 +86,9 @@ export class GameConnection {
     if (this.opts.url) return this.opts.url;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     // Même hôte que la page pour que le cookie de session soit envoyé.
-    return `${protocol}//${window.location.host}/api/ws?gameId=${this.opts.gameId}`;
+    const as = activeActAs();
+    const actAs = as ? `&actAs=${as.userId}` : '';
+    return `${protocol}//${window.location.host}/api/ws?gameId=${this.opts.gameId}${actAs}`;
   }
 
   private connect() {

@@ -20,6 +20,8 @@ import {
 import { CharacterSheetPanel } from '../components/CharacterSheetPanel';
 import { DiceRollOverlay } from '../components/DiceRollOverlay';
 import { TopBar } from '../components/tabletop/TopBar';
+import { TestPanel } from '../components/tabletop/TestPanel';
+import { activeActAs, switchActAs } from '../auth/actAs';
 import { GmToolbar, type FogTool } from '../components/tabletop/GmToolbar';
 import {
   elementForPlayers,
@@ -73,6 +75,9 @@ export function TabletopPage() {
   const { game, you, scene, live } = state;
 
   const isGM = you?.role === 'MJ';
+  // Partie test : joueur fictif incarné dans cet onglet (fixe jusqu'au rechargement).
+  const [actingAs] = useState(activeActAs);
+  const [testOpen, setTestOpen] = useState(false);
   const currentMap = scene?.map ?? null;
   const tokens = useMemo(() => scene?.tokens ?? [], [scene]);
   const mapElements = useMemo(() => scene?.mapElements ?? [], [scene]);
@@ -912,7 +917,30 @@ export function TabletopPage() {
           isArpenteur ? (arpenteurView ? 'arpenteur' : 'table') : undefined
         }
         onViewMode={isArpenteur ? setViewMode : undefined}
+        onOpenTest={
+          game.isTest && (isGM || actingAs)
+            ? () => setTestOpen(true)
+            : undefined
+        }
       />
+
+      {actingAs && (
+        <div className="absolute bottom-3 left-3 z-40 flex items-center gap-2 rounded-xl bg-amber-400 text-black pl-3 pr-1.5 py-1.5 text-sm shadow-lg max-w-[92vw]">
+          <span className="truncate">
+            Test : vous jouez <strong>{actingAs.name}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => switchActAs(null)}
+            className="h-8 px-3 rounded-lg bg-black/80 text-amber-200 font-semibold whitespace-nowrap"
+          >
+            Revenir au MJ
+          </button>
+        </div>
+      )}
+      {testOpen && game.isTest && (
+        <TestPanel gameId={gameId} onClose={() => setTestOpen(false)} />
+      )}
 
       {mapNotice && (
         <div className="glass absolute top-[124px] sm:top-20 left-1/2 -translate-x-1/2 z-40 rounded-xl pl-4 pr-1.5 py-1.5 flex items-center gap-3 text-sm max-w-[94vw]">

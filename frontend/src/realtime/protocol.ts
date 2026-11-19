@@ -51,6 +51,8 @@ export interface GameInfo {
   isGemma: boolean;
   /** Sous-type GEMMA : « arpenteur » ou vide (absent des anciens serveurs). */
   gemmaVariant?: string;
+  /** Partie test (joueurs fictifs). */
+  isTest?: boolean;
   tokenMovementLocked: boolean;
   fogVisionRadius: number;
   currentMapId: number | null;
@@ -196,7 +198,9 @@ export type ServerEvent =
   | { type: 'handout.updated'; payload: Handout }
   | { type: 'handout.deleted'; payload: { id: number } }
   | { type: 'handout.shown'; payload: Handout }
-  | { type: 'arpenteur.state'; payload: ArpenteurPayload };
+  | { type: 'arpenteur.state'; payload: ArpenteurPayload }
+  /** Partie test : le MJ a changé les joueurs fictifs ou remis à zéro. */
+  | { type: 'game.reload'; payload: { reason: string } };
 
 export type ServerEventType = ServerEvent['type'];
 
@@ -252,6 +256,7 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set<ServerEventType>([
   'handout.deleted',
   'handout.shown',
   'arpenteur.state',
+  'game.reload',
 ]);
 
 /** Décode un message serveur ; retourne null s'il est invalide ou inconnu. */

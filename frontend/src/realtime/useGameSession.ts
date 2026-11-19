@@ -30,7 +30,14 @@ export function useGameSession(gameId: number): GameSession {
     if (!gameId) return;
     const conn = new GameConnection({
       gameId,
-      onMessage: store.dispatch,
+      onMessage: (env) => {
+        // Partie test : joueurs fictifs modifiés ou partie remise à zéro.
+        if (env.type === 'game.reload') {
+          window.location.reload();
+          return;
+        }
+        store.dispatch(env);
+      },
       onStatus: (status, attempts) => store.setConnection(status, attempts),
     });
     connRef.current = conn;

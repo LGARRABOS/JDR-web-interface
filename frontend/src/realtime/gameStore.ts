@@ -373,6 +373,9 @@ export function applyEvent(
         return state;
       return { ...state, arpenteur: env.payload };
 
+    case 'game.reload':
+      return state;
+
     case 'game.settings':
       return state.game
         ? { ...state, game: { ...state.game, ...env.payload } }

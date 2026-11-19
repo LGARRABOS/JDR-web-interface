@@ -256,6 +256,10 @@ func AutoMigrate(db *sql.DB) error {
 		)`,
 		`ALTER TABLE fog_patches DROP CONSTRAINT IF EXISTS fog_patches_shape_type_check`,
 		`ALTER TABLE fog_patches ADD CONSTRAINT fog_patches_shape_type_check CHECK (shape_type IN ('rect','polygon','ellipse'))`,
+		// Parties test : joueurs fictifs (comptes sans connexion, supprimés avec la partie).
+		`ALTER TABLE games ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN bot_game_id INTEGER REFERENCES games(id) ON DELETE CASCADE`,
+		`ALTER TABLE users ADD COLUMN bot_owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE`,
 	}
 
 	for _, stmt := range orderedStmts {

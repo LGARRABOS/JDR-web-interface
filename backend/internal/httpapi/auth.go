@@ -142,7 +142,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
-	u := s.getSessionUser(r)
+	u := s.getRealSessionUser(r)
 	if u == nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Non authentifié"})
 		return
@@ -220,7 +220,7 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePurgeAssets(w http.ResponseWriter, r *http.Request) {
-	u := s.getSessionUser(r)
+	u := s.getRealSessionUser(r)
 	if u == nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Non authentifié"})
 		return
@@ -234,7 +234,7 @@ func (s *Server) handlePurgeAssets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
-	u := s.getSessionUser(r)
+	u := s.getRealSessionUser(r)
 	if u == nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Non authentifié"})
 		return

@@ -39,6 +39,8 @@ interface TopBarProps {
   /** Mode Arpenteur : bascule entre la table et la page du navire. */
   viewMode?: 'table' | 'arpenteur';
   onViewMode?: (mode: 'table' | 'arpenteur') => void;
+  /** Partie test : ouvre les outils de test (MJ, même incarné). */
+  onOpenTest?: () => void;
 }
 
 export function TopBar({
@@ -61,6 +63,7 @@ export function TopBar({
   onOpenGuide,
   viewMode,
   onViewMode,
+  onOpenTest,
 }: TopBarProps) {
   const [copied, setCopied] = useState(false);
   const turnPlayer = players.find((p) => p.userId === turnPlayerId);
@@ -227,7 +230,17 @@ export function TopBar({
           </button>
         )}
 
-        {isGM && game.inviteCode && (
+        {onOpenTest && (
+          <button
+            type="button"
+            onClick={onOpenTest}
+            className="h-9 px-3 rounded-lg bg-amber-400 text-black text-sm font-bold hover:bg-amber-300"
+            title="Outils de la partie test"
+          >
+            Test
+          </button>
+        )}
+        {isGM && game.inviteCode && !game.isTest && (
           <button
             type="button"
             onClick={copyInvite}

@@ -19,6 +19,7 @@ type snapshotGame struct {
 	OwnerID             int64  `json:"ownerId"`
 	IsGemma             bool   `json:"isGemma"`
 	GemmaVariant        string `json:"gemmaVariant"`
+	IsTest              bool   `json:"isTest"`
 	TokenMovementLocked bool   `json:"tokenMovementLocked"`
 	FogVisionRadius     int    `json:"fogVisionRadius"`
 	CurrentMapID        *int64 `json:"currentMapId"`
@@ -69,18 +70,19 @@ func (s *Server) resolveMember(gameID, userID int64) (realtime.Member, bool) {
 
 func (s *Server) buildSnapshot(gameID int64, m realtime.Member) (any, error) {
 	var snap gameSnapshot
-	var isGemma, locked int
+	var isGemma, locked, isTest int
 	var currentMapID sql.NullInt64
 	err := s.db.QueryRow(
 		`SELECT id, name, invite_code, owner_id, COALESCE(is_gemma, 0), COALESCE(gemma_variant, ''), COALESCE(token_movement_locked, 0),
-		        COALESCE(fog_vision_radius, 0), current_map_id
+		        COALESCE(fog_vision_radius, 0), current_map_id, COALESCE(is_test, 0)
 		 FROM games WHERE id = ?`, gameID,
 	).Scan(&snap.Game.ID, &snap.Game.Name, &snap.Game.InviteCode, &snap.Game.OwnerID, &isGemma, &snap.Game.GemmaVariant, &locked,
-		&snap.Game.FogVisionRadius, &currentMapID)
+		&snap.Game.FogVisionRadius, &currentMapID, &isTest)
 	if err != nil {
 		return nil, fmt.Errorf("game: %w", err)
 	}
 	snap.Game.IsGemma = isGemma == 1
+	snap.Game.IsTest = isTest == 1
 	snap.Game.TokenMovementLocked = locked == 1
 	if !m.IsGM() {
 		snap.Game.InviteCode = ""

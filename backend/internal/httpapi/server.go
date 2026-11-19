@@ -101,6 +101,7 @@ func NewServer(db storage.DB, staticDir string) (http.Handler, error) {
 	s.registerHandoutRoutes()
 	s.registerNoteRoutes()
 	s.registerArpenteurRoutes()
+	s.registerTestRoutes()
 	s.mux.Handle("/api/ws", s.wsHandler())
 
 	if staticDir != "" {

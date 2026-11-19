@@ -27,6 +27,8 @@ interface Game {
   isGemma?: boolean;
   /** Sous-type GEMMA (« arpenteur »). */
   gemmaVariant?: string;
+  /** Partie test : joueurs fictifs, pas d'invitation. */
+  isTest?: boolean;
   characterName?: string;
   currentMapName?: string;
   currentMapImageUrl?: string;
@@ -140,6 +142,8 @@ export function GameLobbyPage() {
   const [createName, setCreateName] = useState('');
   const [isGemma, setIsGemma] = useState(false);
   const [gemmaVariant, setGemmaVariant] = useState<'' | 'arpenteur'>('');
+  const [isTest, setIsTest] = useState(false);
+  const [sample, setSample] = useState(true);
   const [joinCode, setJoinCode] = useState('');
   const [err, setErr] = useState('');
   const [deleteGameId, setDeleteGameId] = useState<number | null>(null);
@@ -178,8 +182,11 @@ export function GameLobbyPage() {
         name: createName.trim() || undefined,
         isGemma,
         gemmaVariant: variant || undefined,
+        isTest: isTest || undefined,
+        sample: isTest ? sample : undefined,
       });
       setCreateName('');
+      setIsTest(false);
       if (data.game?.id)
         navigate(
           `/table/${data.game.id}${variant === 'arpenteur' ? '?vue=arpenteur' : ''}`
@@ -394,6 +401,28 @@ export function GameLobbyPage() {
                 ))}
               </div>
             )}
+            <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isTest}
+                onChange={(e) => setIsTest(e.target.checked)}
+                className="w-[18px] h-[18px] accent-fantasy-accent"
+              />
+              Partie test (joueurs fictifs que vous incarnez, sans invitation)
+            </label>
+            {isTest && (
+              <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none pl-7">
+                <input
+                  type="checkbox"
+                  checked={sample}
+                  onChange={(e) => setSample(e.target.checked)}
+                  className="w-4 h-4 accent-fantasy-accent"
+                />
+                Remplir avec des données d&apos;exemple (3 joueurs, une carte,
+                des monstres
+                {gemmaVariant === 'arpenteur' && isGemma ? ', un navire' : ''})
+              </label>
+            )}
           </form>
 
           <form
@@ -508,6 +537,11 @@ export function GameLobbyPage() {
                               : 'GEMMA'}
                           </span>
                         )}
+                        {g.isTest && (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-400 text-black">
+                            TEST
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="p-4 flex flex-col gap-3">
@@ -536,20 +570,22 @@ export function GameLobbyPage() {
                         </button>
                         {isGM && (
                           <>
-                            <button
-                              type="button"
-                              onClick={() => copyCode(g)}
-                              title="Copier le code d'invitation"
-                              aria-label={`Copier le code d'invitation ${g.inviteCode}`}
-                              className="h-11 px-3 rounded-lg border border-fantasy-border text-sm tracking-wider text-fantasy-muted hover:text-fantasy-text flex items-center gap-1.5"
-                            >
-                              {copiedId === g.id ? (
-                                <Check size={14} />
-                              ) : (
-                                <Copy size={14} />
-                              )}
-                              {copiedId === g.id ? 'Copié' : g.inviteCode}
-                            </button>
+                            {!g.isTest && (
+                              <button
+                                type="button"
+                                onClick={() => copyCode(g)}
+                                title="Copier le code d'invitation"
+                                aria-label={`Copier le code d'invitation ${g.inviteCode}`}
+                                className="h-11 px-3 rounded-lg border border-fantasy-border text-sm tracking-wider text-fantasy-muted hover:text-fantasy-text flex items-center gap-1.5"
+                              >
+                                {copiedId === g.id ? (
+                                  <Check size={14} />
+                                ) : (
+                                  <Copy size={14} />
+                                )}
+                                {copiedId === g.id ? 'Copié' : g.inviteCode}
+                              </button>
+                            )}
                             {g.isGemma && (
                               <button
                                 type="button"

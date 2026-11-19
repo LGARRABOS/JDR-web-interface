@@ -1,4 +1,6 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { getActAs, switchActAs, tableGameId } from './auth/actAs';
 import { AuthPage } from './pages/AuthPage';
 import { GameLobbyPage } from './pages/GameLobbyPage';
 import { TabletopPage } from './pages/TabletopPage';
@@ -39,9 +41,23 @@ const AuthRedirect = ({ children }: { children: JSX.Element }) => {
   return children;
 };
 
+/**
+ * Partie test : en quittant la table de la partie où l'on incarne un joueur
+ * fictif, on redevient soi-même (rechargement pour repartir du bon compte).
+ */
+function ActAsGuard() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const a = getActAs();
+    if (a && tableGameId(pathname) !== a.gameId) switchActAs(null);
+  }, [pathname]);
+  return null;
+}
+
 export const App = () => {
   return (
     <AuthProvider>
+      <ActAsGuard />
       <Routes>
         <Route
           path="/"
