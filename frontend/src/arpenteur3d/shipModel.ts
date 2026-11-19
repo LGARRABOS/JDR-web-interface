@@ -361,7 +361,7 @@ export class Hull {
   keelY(s: number) {
     const D = this.D;
     const { bow, sternRise } = this.s;
-    let y = -D + sternRise * (1 - smooth(0, 0.2, s));
+    const y = -D + sternRise * (1 - smooth(0, 0.2, s));
     const t = this.bowT(s);
     const rise =
       bow === 'horn'
@@ -815,8 +815,10 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       const ids = ring.map((p) =>
         b.vertex(p, [dir, 0, 0], [p[2], p[1]], castleMat)
       );
-      for (let i = 0; i < ids.length - 1; i++)
-        dir > 0 ? b.tri(ci, ids[i], ids[i + 1]) : b.tri(ci, ids[i + 1], ids[i]);
+      for (let i = 0; i < ids.length - 1; i++) {
+        if (dir > 0) b.tri(ci, ids[i], ids[i + 1]);
+        else b.tri(ci, ids[i + 1], ids[i]);
+      }
       // Fenêtres du mur arrière / avant.
       const w = width(s);
       const n = Math.max(1, Math.floor((w * 2 - 1.2) / 1.6));
