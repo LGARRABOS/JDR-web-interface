@@ -14,7 +14,7 @@ import { MapPanel } from './MapPanel';
 import { OverviewPanel } from './OverviewPanel';
 import { SettingsPanel } from './SettingsPanel';
 import type { CutawayTarget } from './ShipCutaway';
-import { ShipScene } from './ShipScene';
+import { ShipScene3D } from './ShipScene3D';
 import { healthColor } from './ui';
 
 type Tab =
@@ -149,7 +149,7 @@ export function ArpenteurView({
     >
       <div className="mx-auto max-w-[1400px] flex flex-col gap-4">
         <section className="relative w-full rounded-3xl overflow-hidden border border-fantasy-border-soft shadow-2xl bg-black aspect-[4/3] sm:aspect-[5/2] max-h-[62vh] min-h-[230px]">
-          <ShipScene
+          <ShipScene3D
             doc={doc}
             build={shownBuild}
             view={view}

@@ -1,0 +1,108 @@
+import { useEffect, useRef, useState } from 'react';
+import { installedGuns } from '../../arpenteur/logic';
+import type { Mood } from '../../arpenteur3d/environment';
+import { Stage } from '../../arpenteur3d/stage';
+import { desertOf, ShipScene, type ShipSceneProps } from './ShipScene';
+
+// Scène 3D de l'arpenteur (WebGL2). La vue en coupe reste le plan 2D ; sans
+// WebGL2, on retombe sur l'ancienne scène dessinée.
+
+function moodNow(): Mood {
+  const h = new Date().getHours();
+  return h >= 20 || h < 7 ? 'night' : 'dusk';
+}
+
+function supportsWebGL2() {
+  try {
+    return !!document.createElement('canvas').getContext('webgl2');
+  } catch {
+    return false;
+  }
+}
+
+export function ShipScene3D(props: ShipSceneProps) {
+  const { doc, build, view, animate = true, className } = props;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<Stage | null>(null);
+  const [failed, setFailed] = useState(
+    () => typeof document !== 'undefined' && !supportsWebGL2()
+  );
+  const [mood] = useState(moodNow);
+  const guns = installedGuns(doc.combat).installed;
+  const crew = doc.crew.members.length;
+  const desert = desertOf(doc.map.sector);
+  const use3D = view === 'profil' && !failed;
+
+  // Création du moteur, boucle d'animation et redimensionnement.
+  useEffect(() => {
+    if (!use3D) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let stage: Stage;
+    try {
+      stage = new Stage(canvas);
+    } catch {
+      setFailed(true);
+      return;
+    }
+    stageRef.current = stage;
+    const still =
+      !animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let raf = 0;
+    let dirty = true;
+    const t0 = performance.now();
+    const resize = () => {
+      const r = canvas.getBoundingClientRect();
+      const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+      stage.setSize(r.width * dpr, r.height * dpr);
+      dirty = true;
+    };
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    resize();
+    const frame = () => {
+      raf = requestAnimationFrame(frame);
+      if (still && !dirty) return;
+      if (document.hidden) return;
+      dirty = false;
+      const wide = canvas.clientWidth / Math.max(1, canvas.clientHeight) > 1.8;
+      stage.render(still ? 2 : (performance.now() - t0) / 1000, {
+        yaw: 0.4,
+        elevation: 0.09,
+        margin: wide ? 1.2 : 1.05,
+        lift: wide ? -0.07 : 0,
+      });
+    };
+    raf = requestAnimationFrame(frame);
+    const onShip = () => {
+      dirty = true;
+    };
+    canvas.addEventListener('arp-ship', onShip);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      canvas.removeEventListener('arp-ship', onShip);
+      stage.dispose();
+      stageRef.current = null;
+    };
+  }, [use3D, animate]);
+
+  // Mise à jour du navire quand sa construction change.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!use3D || !stage) return;
+    stage.setEnvironment(desert, mood);
+    stage.setShip(build, { guns, crew });
+    canvasRef.current?.dispatchEvent(new Event('arp-ship'));
+  }, [use3D, animate, build, guns, crew, desert, mood]);
+
+  if (!use3D) return <ShipScene {...props} />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className={className}
+      role="img"
+      aria-label={`Arpenteur ${doc.name}`}
+    />
+  );
+}
