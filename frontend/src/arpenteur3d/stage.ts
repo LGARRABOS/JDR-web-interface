@@ -33,6 +33,8 @@ import { transformPoint } from './math';
 export interface StageOptions {
   guns?: number;
   crew?: number;
+  damage?: number;
+  scaffolding?: boolean;
 }
 
 export interface ViewOptions {

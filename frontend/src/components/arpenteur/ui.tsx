@@ -19,25 +19,25 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-2xl border border-fantasy-border-soft bg-fantasy-surface/80 p-4 sm:p-5 ${className}`}
+      className={`arp-card px-4 pt-5 pb-4 sm:px-6 sm:pt-6 sm:pb-5 ${className}`}
     >
       {(title || actions) && (
-        <header className="flex flex-wrap items-start justify-between gap-2 mb-3">
-          <div className="min-w-0">
-            {title && (
-              <h3 className="font-heading text-[15px] tracking-wide text-fantasy-text">
-                {title}
-              </h3>
-            )}
-            {subtitle && (
-              <p className="text-xs text-fantasy-muted mt-0.5">{subtitle}</p>
-            )}
+        <header className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex items-start gap-2">
+            {title && <Cog size={20} className="mt-0.5 shrink-0" />}
+            <div className="min-w-0">
+              {title && <h3 className="arp-card-title text-[16px]">{title}</h3>}
+              {subtitle && (
+                <p className="text-xs text-[#b59a70] mt-0.5">{subtitle}</p>
+              )}
+            </div>
           </div>
           {actions && (
             <div className="flex flex-wrap items-center gap-1.5">{actions}</div>
           )}
         </header>
       )}
+      {title && <div className="arp-rule" aria-hidden="true" />}
       {children}
     </section>
   );
@@ -115,12 +115,16 @@ export function Meter({
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   return (
     <div
-      className={`w-full rounded-full bg-black/35 overflow-hidden ${className}`}
-      style={{ height }}
+      className={`w-full arp-tube ${className}`}
+      style={{ height: Math.max(height, 10), padding: 2 }}
     >
       <div
         className="h-full rounded-full transition-[width] duration-500"
-        style={{ width: `${pct}%`, background: color }}
+        style={{
+          width: `${pct}%`,
+          color,
+          background: `linear-gradient(180deg, color-mix(in srgb, ${color} 55%, white), ${color} 45%, color-mix(in srgb, ${color} 70%, black))`,
+        }}
       />
     </div>
   );
@@ -398,12 +402,10 @@ export function Dialog({
         role="dialog"
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className={`w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92vh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-fantasy-border-soft bg-fantasy-surface shadow-2xl`}
+        className={`arp-card w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92vh] flex flex-col !rounded-b-none sm:!rounded-2xl`}
       >
-        <header className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-fantasy-border-soft">
-          <h2 className="font-heading text-lg text-fantasy-text truncate">
-            {title}
-          </h2>
+        <header className="flex items-center justify-between gap-3 px-5 pt-5 pb-3 border-b border-[#4a3216]">
+          <h2 className="arp-card-title text-lg truncate">{title}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -415,7 +417,7 @@ export function Dialog({
         </header>
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <footer className="flex flex-wrap justify-end gap-2 px-5 py-3 border-t border-fantasy-border-soft">
+          <footer className="flex flex-wrap justify-end gap-2 px-5 py-3 border-t border-[#4a3216]">
             {footer}
           </footer>
         )}
@@ -470,9 +472,8 @@ export function Btn({
   className?: string;
 }) {
   const styles = {
-    soft: 'bg-fantasy-input-soft hover:bg-fantasy-input-hover text-fantasy-text-soft border border-fantasy-border-soft',
-    primary:
-      'bg-fantasy-accent hover:bg-fantasy-accent-hover text-fantasy-bg font-bold',
+    soft: 'arp-btn-iron',
+    primary: 'arp-btn-brass',
     danger: 'bg-fantasy-danger/90 hover:bg-fantasy-danger text-white',
     ghost: 'hover:bg-fantasy-input-soft text-fantasy-text-soft',
   };
@@ -534,5 +535,75 @@ export function LiveField({
         />
       )}
     </label>
+  );
+}
+
+/** Engrenage de laiton (ornement des panneaux et du cadre). */
+export function Cog({
+  size = 24,
+  teeth = 10,
+  className = '',
+}: {
+  size?: number;
+  teeth?: number;
+  className?: string;
+}) {
+  const r1 = 40;
+  const r2 = 50;
+  const pts: string[] = [];
+  for (let i = 0; i < teeth; i++) {
+    const st = (Math.PI * 2) / teeth;
+    const a = i * st;
+    const p = (ang: number, r: number) =>
+      `${(Math.cos(ang) * r).toFixed(1)},${(Math.sin(ang) * r).toFixed(1)}`;
+    pts.push(
+      `${i ? 'L' : 'M'}${p(a, r1)}`,
+      `L${p(a + st * 0.12, r2)}`,
+      `L${p(a + st * 0.42, r2)}`,
+      `L${p(a + st * 0.54, r1)}`
+    );
+  }
+  const id = `cog${teeth}`;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="-52 -52 104 104"
+      className={className}
+      aria-hidden="true"
+    >
+      <defs>
+        <radialGradient id={id} cx="40%" cy="35%">
+          <stop offset="0" stopColor="#fbe2a4" />
+          <stop offset=".55" stopColor="#c08a3a" />
+          <stop offset="1" stopColor="#5a3610" />
+        </radialGradient>
+      </defs>
+      <path
+        d={`${pts.join(' ')} Z`}
+        fill={`url(#${id})`}
+        stroke="#2a1806"
+        strokeWidth={3}
+      />
+      <circle
+        r={26}
+        fill="none"
+        stroke="#2a1806"
+        strokeWidth={4}
+        opacity={0.6}
+      />
+      {[0, 60, 120].map((a) => (
+        <rect
+          key={a}
+          x={-4}
+          y={-30}
+          width={8}
+          height={60}
+          fill="#6b4210"
+          transform={`rotate(${a})`}
+        />
+      ))}
+      <circle r={9} fill="#2a1806" />
+    </svg>
   );
 }

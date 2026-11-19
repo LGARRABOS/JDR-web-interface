@@ -22,7 +22,7 @@ import type {
   Material,
   Room,
 } from '../../arpenteur/types';
-import { ShipThumb } from './ShipProfile';
+import { ShipThumb3D } from './ShipThumb3D';
 import {
   Btn,
   Card,
@@ -228,9 +228,11 @@ export function AtelierPanel({ doc, rights, update }: Props) {
               'radial-gradient(ellipse at 50% 85%, #e2bb7a 0%, #9a6a3c 35%, #2a1d14 75%)',
           }}
         >
-          <ShipThumb
+          <ShipThumb3D
             build={p ? p.build : draft}
-            animate
+            width={960}
+            height={420}
+            scaffolding={!!p}
             className="w-full h-auto"
           />
         </div>
@@ -365,7 +367,7 @@ export function AtelierPanel({ doc, rights, update }: Props) {
                     className={`rounded-xl border p-1.5 text-left transition-colors ${draft.allure === a.id ? 'border-fantasy-accent bg-fantasy-accent/10' : 'border-fantasy-border-soft hover:bg-black/20'}`}
                     title={a.hint}
                   >
-                    <ShipThumb
+                    <ShipThumb3D
                       build={{ ...draft, allure: a.id }}
                       className="w-full h-auto"
                     />

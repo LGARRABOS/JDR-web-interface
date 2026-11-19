@@ -446,6 +446,10 @@ export interface ShipOptions {
   guns?: number;
   crew?: number;
   night?: boolean;
+  /** Dégâts de la coque, de 0 (intacte) à 1. */
+  damage?: number;
+  /** Échafaudages du chantier en cours. */
+  scaffolding?: boolean;
 }
 
 export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
@@ -1383,6 +1387,8 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
   });
   crew(b, hull, roofs, opts.crew ?? 0, build);
   deckGear(b, hull, roofs, iron, brass);
+  if (opts.scaffolding) scaffold(b, hull, iron);
+  damage(b, hull, opts.damage ?? 0, stacks);
 
   const bottom = hull.keelY(0.5) - 10;
   return {
@@ -2317,3 +2323,150 @@ function features(
 }
 
 export { SPECS as ALLURE_SPECS };
+
+/** Échafaudages de bois sur tribord et grue de chantier. */
+function scaffold(b: MeshBuilder, hull: Hull, iron: Mat) {
+  const wood: Mat = {
+    p: P.WOOD,
+    color: linear('#b08a5a'),
+    metal: 0,
+    rough: 0.85,
+  };
+  const s0 = 0.34;
+  const s1 = 0.74;
+  const yb = hull.keelY(0.5) - 0.5;
+  const yt = hull.deckY(0.5) + 6;
+  for (const side of [1, -1]) {
+    const zAt = (s: number) => (hull.halfBeam(s) + 1.3) * side;
+    const poles: number[] = [];
+    for (let s = s0; s <= s1 + 1e-6; s += 3.2 / hull.L) poles.push(s);
+    for (const s of poles) {
+      b.push(translation(hull.x(s), yb, zAt(s)));
+      b.cylinder(0.12, yt - yb, 6, wood, false);
+      b.pop();
+    }
+    for (let y = yb + 1.5; y < yt; y += 2.6) {
+      for (let i = 0; i < poles.length - 1; i++) {
+        const sa = poles[i];
+        const sb = poles[i + 1];
+        const x = (hull.x(sa) + hull.x(sb)) / 2;
+        b.push(translation(x, y, (zAt(sa) + zAt(sb)) / 2));
+        b.box(hull.x(sb) - hull.x(sa) + 0.4, 0.14, 0.9, wood);
+        b.pop();
+      }
+    }
+    for (let i = 0; i < poles.length - 1; i++) {
+      const up = i % 2 === 0;
+      b.tube(
+        [
+          [hull.x(poles[i]), up ? yb + 1.5 : yt - 1, zAt(poles[i])],
+          [hull.x(poles[i + 1]), up ? yt - 1 : yb + 1.5, zAt(poles[i + 1])],
+        ],
+        0.06,
+        4,
+        iron
+      );
+    }
+  }
+  // Grue de chantier.
+  const cs = s1 + 0.04;
+  const base: [number, number, number] = [hull.x(cs), hull.deckY(cs), 0];
+  b.push(translation(base[0], base[1], 0));
+  b.cylinder(0.25, 13, 8, iron, false);
+  b.pop();
+  const tip: [number, number, number] = [base[0] - 9, base[1] + 13.5, 5];
+  b.tube([[base[0], base[1] + 12.5, 0], tip], 0.18, 6, iron);
+  b.tube([tip, [tip[0], tip[1] - 7, tip[2]]], 0.03, 3, {
+    p: P.PLAIN,
+    color: linear('#3a2c1e'),
+    metal: 0,
+    rough: 0.9,
+  });
+  b.push(translation(tip[0], tip[1] - 8.4, tip[2]));
+  b.box(1.4, 1.2, 1.4, wood);
+  b.pop();
+}
+
+/** Brèches dans la coque, feux et fumées selon les dégâts. */
+function damage(b: MeshBuilder, hull: Hull, amount: number, stacks: Vec3[]) {
+  const n = Math.round(Math.max(0, Math.min(1, amount)) * 8);
+  if (!n) return;
+  const charred: Mat = {
+    p: P.IRON,
+    color: linear('#0c0a09'),
+    metal: 0,
+    rough: 1,
+  };
+  const splinter: Mat = {
+    p: P.WOOD,
+    color: linear('#3a2616'),
+    metal: 0,
+    rough: 0.95,
+  };
+  const fire: Mat = {
+    p: P.EMIT,
+    color: linear('#ff7a2a'),
+    metal: 0,
+    rough: 1,
+    emit: 6,
+  };
+  for (let i = 0; i < n; i++) {
+    const side = i % 2 === 0 ? 1 : -1;
+    const s = 0.2 + rand(i * 7 + 3) * 0.62;
+    const v = 0.5 + rand(i * 13 + 5) * 0.38;
+    const p = hull.point(s, v);
+    const nn = hull.normal(s, v);
+    const pos: Vec3 = [
+      p[0] + nn[0] * 0.03,
+      p[1] + nn[1] * 0.03,
+      (p[2] + nn[2] * 0.03) * side,
+    ];
+    const dir: Vec3 = [nn[0], nn[1], nn[2] * side];
+    const r = 0.6 + rand(i * 3) * 0.6;
+    b.push(alignY(pos, dir));
+    b.push(scaling(1.3, 1, 1));
+    b.cylinder(r, 0.04, 12, charred);
+    for (let k = 0; k < 7; k++) {
+      const a = (k / 7) * Math.PI * 2 + rand(i + k);
+      b.push(
+        chain(
+          rotationY(a),
+          translation(r * 0.9, 0.05, 0),
+          rotationZ(0.5 + rand(k + i) * 0.6)
+        )
+      );
+      b.lathe(
+        [
+          [0.1, 0],
+          [0.04, 0.5 + rand(i * 5 + k) * 0.5],
+          [0, 0.9],
+        ],
+        4,
+        splinter
+      );
+      b.pop();
+    }
+    b.pop();
+    b.pop();
+    if (amount >= 0.5 && i % 2 === 0) {
+      const d: Vec3 = [
+        hull.x(s),
+        hull.deckY(s) + 0.4,
+        (hull.halfBeam(s) - 1.4) * side,
+      ];
+      b.push(translation(d[0], d[1], d[2]));
+      b.sphere(0.45, 8, fire);
+      b.push(translation(0.2, 0.5, 0));
+      b.sphere(0.3, 8, fire);
+      b.pop();
+      b.pop();
+      stacks.push([d[0], d[1] + 0.8, d[2]]);
+    } else if (amount >= 0.3 && i < 3) {
+      stacks.push([
+        hull.x(s),
+        hull.deckY(s) + 0.5,
+        (hull.halfBeam(s) - 1.5) * side,
+      ]);
+    }
+  }
+}

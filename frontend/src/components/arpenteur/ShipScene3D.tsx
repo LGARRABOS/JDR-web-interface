@@ -21,7 +21,14 @@ function supportsWebGL2() {
 }
 
 export function ShipScene3D(props: ShipSceneProps) {
-  const { doc, build, view, animate = true, className } = props;
+  const {
+    doc,
+    build,
+    view,
+    animate = true,
+    scaffolding = false,
+    className,
+  } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<Stage | null>(null);
   const [failed, setFailed] = useState(
@@ -31,6 +38,12 @@ export function ShipScene3D(props: ShipSceneProps) {
   const guns = installedGuns(doc.combat).installed;
   const crew = doc.crew.members.length;
   const desert = desertOf(doc.map.sector);
+  // Dégâts arrondis au huitième pour ne pas reconstruire le navire à chaque point.
+  const damage =
+    Math.round(
+      (1 - doc.combat.constitution / Math.max(1, doc.combat.constitutionMax)) *
+        8
+    ) / 8;
   const use3D = view === 'profil' && !failed;
 
   // Création du moteur, boucle d'animation et redimensionnement.
@@ -92,9 +105,9 @@ export function ShipScene3D(props: ShipSceneProps) {
     const stage = stageRef.current;
     if (!use3D || !stage) return;
     stage.setEnvironment(desert, mood);
-    stage.setShip(build, { guns, crew });
+    stage.setShip(build, { guns, crew, damage, scaffolding });
     canvasRef.current?.dispatchEvent(new Event('arp-ship'));
-  }, [use3D, animate, build, guns, crew, desert, mood]);
+  }, [use3D, animate, build, guns, crew, damage, scaffolding, desert, mood]);
 
   if (!use3D) return <ShipScene {...props} />;
   return (

@@ -15,7 +15,7 @@ import { OverviewPanel } from './OverviewPanel';
 import { SettingsPanel } from './SettingsPanel';
 import type { CutawayTarget } from './ShipCutaway';
 import { ShipScene3D } from './ShipScene3D';
-import { healthColor } from './ui';
+import { Cog, healthColor } from './ui';
 
 type Tab =
   | 'navire'
@@ -148,70 +148,90 @@ export function ArpenteurView({
       className={`absolute inset-0 overflow-y-auto overscroll-contain pt-[118px] sm:pt-[88px] pb-28 px-2 sm:px-4 ${panelOpen ? 'sm:pr-[392px]' : 'sm:pr-4'}`}
     >
       <div className="mx-auto max-w-[1400px] flex flex-col gap-4">
-        <section className="relative w-full rounded-3xl overflow-hidden border border-fantasy-border-soft shadow-2xl bg-black aspect-[4/3] sm:aspect-[5/2] max-h-[62vh] min-h-[230px]">
-          <ShipScene3D
-            doc={doc}
-            build={shownBuild}
-            view={view}
-            scaffolding={!preview && !!doc.pending}
-            onRoom={goTo}
-            className="absolute inset-0 w-full h-full"
+        <div className="arp-bezel">
+          <Cog
+            size={46}
+            className="absolute -left-4 -top-4 z-10 hidden sm:block"
           />
+          <Cog
+            size={34}
+            teeth={9}
+            className="absolute left-7 -top-4 z-10 hidden sm:block"
+          />
+          <Cog
+            size={46}
+            className="absolute -right-4 -bottom-4 z-10 hidden sm:block"
+          />
+          <Cog
+            size={30}
+            teeth={8}
+            className="absolute right-8 -bottom-4 z-10 hidden sm:block"
+          />
+          <section className="relative w-full rounded-3xl overflow-hidden border border-fantasy-border-soft shadow-2xl bg-black aspect-[4/3] sm:aspect-[5/2] max-h-[62vh] min-h-[230px]">
+            <ShipScene3D
+              doc={doc}
+              build={shownBuild}
+              view={view}
+              scaffolding={!preview && !!doc.pending}
+              onRoom={goTo}
+              className="absolute inset-0 w-full h-full"
+            />
 
-          <div
-            className={`absolute top-3 left-3 sm:top-5 sm:left-5 arp-plate rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 max-w-[62%] pointer-events-none transition-opacity ${view === 'coupe' ? 'opacity-0' : ''}`}
-          >
-            <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.3em] text-fantasy-accent">
-              Arpenteur {doc.number || ''}
-            </p>
-            <h1 className="font-heading text-xl sm:text-3xl text-fantasy-text leading-tight truncate">
-              {doc.name}
-            </h1>
-            {doc.formerOwner && (
-              <p className="hidden sm:block text-xs italic text-fantasy-text-soft">
-                Anciennement sous le contrôle de {doc.formerOwner}
+            <div
+              className={`absolute top-3 left-3 sm:top-5 sm:left-5 arp-nameplate rounded-lg px-4 sm:px-6 py-2 sm:py-3 max-w-[62%] pointer-events-none transition-opacity ${view === 'coupe' ? 'opacity-0' : ''}`}
+            >
+              <p className="font-heading text-[10px] sm:text-[11px] uppercase tracking-[0.3em] opacity-80">
+                Arpenteur {doc.number || ''}
               </p>
+              <h1 className="arp-np-title font-heading text-xl sm:text-3xl leading-tight truncate">
+                {doc.name}
+              </h1>
+              {doc.formerOwner && (
+                <p className="hidden sm:block text-xs italic opacity-80">
+                  Anciennement sous le contrôle de {doc.formerOwner}
+                </p>
+              )}
+            </div>
+
+            <div className="absolute top-3 right-3 sm:top-5 sm:right-5 arp-lever rounded-full p-1 flex">
+              {(['profil', 'coupe'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  aria-pressed={view === v}
+                  className={`h-8 px-3.5 rounded-full text-xs font-heading tracking-wide ${view === v ? 'arp-lever-on font-bold' : 'text-[#cdb68c] hover:bg-white/10'}`}
+                >
+                  {v === 'profil' ? 'Profil' : 'Coupe'}
+                </button>
+              ))}
+            </div>
+
+            {preview ? (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 arp-plate rounded-xl pl-4 pr-1.5 py-1.5 flex items-center gap-3 text-sm max-w-[94%]">
+                <span className="truncate">
+                  <span className="text-fantasy-muted">Évolution :</span>{' '}
+                  {preview.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPreview(null)}
+                  className="h-8 px-3 rounded-lg arp-btn-brass text-xs whitespace-nowrap"
+                >
+                  Revenir au présent
+                </button>
+              </div>
+            ) : view === 'coupe' ? (
+              <p className="absolute bottom-3 left-1/2 -translate-x-1/2 arp-plate rounded-xl px-3 py-1.5 text-xs text-fantasy-text-soft">
+                Cliquez sur une salle pour la gérer
+              </p>
+            ) : (
+              <div className="hidden sm:flex absolute bottom-5 left-5 right-5 flex-wrap gap-2 pointer-events-none">
+                {chips}
+              </div>
             )}
-          </div>
-
-          <div className="absolute top-3 right-3 sm:top-5 sm:right-5 arp-plate rounded-xl p-1 flex">
-            {(['profil', 'coupe'] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                aria-pressed={view === v}
-                className={`h-8 px-3 rounded-lg text-xs font-heading tracking-wide ${view === v ? 'bg-fantasy-accent text-fantasy-bg font-bold' : 'text-fantasy-text-soft hover:bg-white/10'}`}
-              >
-                {v === 'profil' ? 'Profil' : 'Coupe'}
-              </button>
-            ))}
-          </div>
-
-          {preview ? (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 arp-plate rounded-xl pl-4 pr-1.5 py-1.5 flex items-center gap-3 text-sm max-w-[94%]">
-              <span className="truncate">
-                <span className="text-fantasy-muted">Évolution :</span>{' '}
-                {preview.label}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPreview(null)}
-                className="h-8 px-3 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold text-xs whitespace-nowrap"
-              >
-                Revenir au présent
-              </button>
-            </div>
-          ) : view === 'coupe' ? (
-            <p className="absolute bottom-3 left-1/2 -translate-x-1/2 arp-plate rounded-xl px-3 py-1.5 text-xs text-fantasy-text-soft">
-              Cliquez sur une salle pour la gérer
-            </p>
-          ) : (
-            <div className="hidden sm:flex absolute bottom-5 left-5 right-5 flex-wrap gap-2 pointer-events-none">
-              {chips}
-            </div>
-          )}
-        </section>
+          </section>
+        </div>
         {!preview && view === 'profil' && (
           <div className="sm:hidden flex flex-wrap gap-1.5 -mt-1">{chips}</div>
         )}
@@ -219,7 +239,7 @@ export function ArpenteurView({
         <div
           ref={tabsRef}
           role="tablist"
-          className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 scroll-mt-24"
+          className="arp-tabbar flex gap-2 overflow-x-auto scroll-mt-24"
         >
           {tabs.map((t) => (
             <button
@@ -321,8 +341,8 @@ function Chip({
   children: React.ReactNode;
 }) {
   return (
-    <span className="arp-plate rounded-xl px-3 py-1.5 text-xs sm:text-sm flex items-baseline gap-1.5 max-w-full">
-      <span className="text-[10px] uppercase tracking-[0.14em] text-fantasy-muted">
+    <span className="arp-plate rounded-full px-3.5 py-1.5 text-xs sm:text-sm flex items-baseline gap-1.5 max-w-full">
+      <span className="text-[10px] uppercase tracking-[0.16em] text-[#c9a466]">
         {label}
       </span>
       <span className="text-fantasy-text font-semibold truncate">

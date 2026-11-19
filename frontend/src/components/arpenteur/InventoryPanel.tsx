@@ -404,7 +404,7 @@ function Tile({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-fantasy-border-soft bg-fantasy-surface/80 px-4 py-3 flex flex-col gap-1.5">
+    <div className="arp-card px-4 py-3.5 flex flex-col gap-1.5">
       <span className="text-[11px] uppercase tracking-[0.12em] text-fantasy-muted">
         {label}
       </span>

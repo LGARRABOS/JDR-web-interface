@@ -163,7 +163,7 @@ export function CrewPanel({ doc, rights, update, players, isGM }: Props) {
                   key={id}
                   type="button"
                   onClick={() => setFilter(id)}
-                  className={`h-8 px-2.5 rounded-md text-xs ${filter === id ? 'bg-fantasy-accent text-fantasy-bg font-bold' : 'text-fantasy-text-soft hover:bg-fantasy-input-soft'}`}
+                  className={`h-8 px-2.5 rounded-md text-xs ${filter === id ? 'arp-btn-brass' : 'text-fantasy-text-soft hover:bg-fantasy-input-soft'}`}
                 >
                   {label}
                 </button>
@@ -326,7 +326,7 @@ function Stat({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-fantasy-border-soft bg-fantasy-surface/80 px-4 py-3 flex flex-col gap-1.5">
+    <div className="arp-card px-4 py-3.5 flex flex-col gap-1.5">
       <span className="text-[11px] uppercase tracking-[0.12em] text-fantasy-muted">
         {label}
       </span>
@@ -367,7 +367,7 @@ function MemberCard({
   const hasSkills = m.combat + m.extraction + m.entretien + m.expertise > 0;
   const vieMax = Math.max(m.vieMax, m.vie);
   return (
-    <article className="relative rounded-xl border border-fantasy-border-soft bg-gradient-to-br from-black/25 to-transparent p-3.5 flex flex-col gap-3 overflow-hidden">
+    <article className="relative rounded-xl border border-[#5a3e1c] bg-gradient-to-br from-[#2c2117] to-[#18110b] shadow-[inset_0_1px_0_rgb(255_220_150/0.08)] p-3.5 flex flex-col gap-3 overflow-hidden">
       <div
         className="absolute inset-y-0 left-0 w-1"
         style={{ background: color }}

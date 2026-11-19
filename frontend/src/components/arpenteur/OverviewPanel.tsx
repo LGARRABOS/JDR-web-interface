@@ -21,7 +21,7 @@ import {
 } from '../../arpenteur/logic';
 import type { UpdateFn } from '../../arpenteur/useArpenteur';
 import type { ArpenteurDoc, Build, Expedition } from '../../arpenteur/types';
-import { ShipThumb } from './ShipProfile';
+import { ShipThumb3D } from './ShipThumb3D';
 import { Btn, Card, ReadOnlyHint, Stepper, TextField } from './ui';
 
 interface Props {
@@ -322,7 +322,7 @@ export function OverviewPanel({
                     }
                     className={`w-full rounded-xl border p-2 text-left transition-colors ${previewId === s.id ? 'border-fantasy-accent bg-fantasy-accent/10' : 'border-fantasy-border-soft hover:bg-black/20'}`}
                   >
-                    <ShipThumb build={s.build} className="w-full h-auto" />
+                    <ShipThumb3D build={s.build} className="w-full h-auto" />
                     <span className="block text-[11px] text-fantasy-muted mt-1">
                       Étape {i + 1} · {shortDate(s.at)}
                     </span>
@@ -350,9 +350,10 @@ export function OverviewPanel({
                     }
                     className={`w-full rounded-xl border border-dashed p-2 text-left ${previewId === 'pending' ? 'border-fantasy-accent bg-fantasy-accent/10' : 'border-fantasy-border-soft'}`}
                   >
-                    <ShipThumb
+                    <ShipThumb3D
                       build={doc.pending.build}
                       className="w-full h-auto opacity-80"
+                      scaffolding
                     />
                     <span className="block text-[11px] text-amber-300 mt-1">
                       En chantier

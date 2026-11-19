@@ -676,7 +676,7 @@ Cliquez sur un personnage qui a une portée : un cercle jaune montre sa zone d'a
     ],
     body: `Une partie **GEMMA Arpenteur** ajoute un vaisseau des sables commun à tout le groupe. Le bouton « Arpenteur » en haut de la table ouvre sa page ; « Table » revient à la carte. Le chat, les dés et la musique restent disponibles.
 
-En haut de la page, l'arpenteur apparaît en 3D, vu de trois-quarts, survolant les dunes du désert où il se trouve. Son allure, ses matériaux, ses mâts, sa proue, ses éclairages et ses couleurs suivent ses améliorations, et ses canons sortent des sabords. Les réacteurs soulèvent le sable, les cheminées fument, et la scène passe de nuit entre 20 h et 7 h. Le bouton « Coupe » montre le plan de l'intérieur : cliquez sur une salle pour la gérer.
+En haut de la page, l'arpenteur apparaît en 3D, vu de trois-quarts, survolant les dunes du désert où il se trouve. Son allure, ses matériaux, ses mâts, sa proue, ses éclairages et ses couleurs suivent ses améliorations, et ses canons sortent des sabords. Les réacteurs soulèvent le sable et les cheminées fument. Quand la coque est abîmée, des brèches, des feux et de la fumée apparaissent ; pendant un chantier, le navire est entouré d'échafaudages. La scène passe de nuit entre 20 h et 7 h. Le bouton « Coupe » montre le plan de l'intérieur : cliquez sur une salle pour la gérer.
 
 > Sur un appareil trop ancien pour la 3D, une version dessinée s'affiche à la place.
 
