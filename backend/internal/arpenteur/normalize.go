@@ -6,6 +6,7 @@ import (
 	"math"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -395,6 +396,15 @@ func NormalizeMap(m *MapState) {
 		m.Ship.Y = clampF(m.Ship.Y, 0, 1)
 	}
 	m.Heading = math.Mod(clampF(m.Heading, -3600, 3600)+3600, 360)
+	if t := m.Travel; t != nil {
+		t.From = strings.ToUpper(text(t.From, 12))
+		t.To = strings.ToUpper(text(t.To, 12))
+		t.Duration = clamp(t.Duration, 5, 120)
+		t.StartedAt = text(t.StartedAt, 40)
+		if _, err := time.Parse(time.RFC3339Nano, t.StartedAt); err != nil || t.From == "" || t.To == "" || t.From == t.To {
+			m.Travel = nil
+		}
+	}
 	markers := []Marker{}
 	seen := map[string]bool{}
 	for _, mk := range m.Markers {

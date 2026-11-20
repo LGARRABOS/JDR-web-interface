@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -277,6 +278,7 @@ func (d *Doc) Apply(section string, raw json.RawMessage, isGM bool) error {
 		if !isGM {
 			keepHiddenMarkers(&v, d.Map)
 		}
+		stampTravel(&v, d.Map, time.Now())
 		d.Map = v
 	case SectionPermissions:
 		var v Permissions
@@ -307,6 +309,21 @@ func keepPlayerLinks(next *Crew, prev Crew) {
 			next.Members[i].PC = false
 		}
 	}
+}
+
+// stampTravel : l'heure de départ d'un voyage est fixée par le serveur (même
+// référence pour tous les joueurs) et ne peut plus être modifiée ensuite.
+func stampTravel(next *MapState, prev MapState, now time.Time) {
+	t := next.Travel
+	if t == nil {
+		return
+	}
+	if p := prev.Travel; p != nil && p.From == t.From && p.To == t.To && p.StartedAt != "" {
+		t.StartedAt = p.StartedAt
+		t.Duration = p.Duration
+		return
+	}
+	t.StartedAt = now.UTC().Format(time.RFC3339Nano)
 }
 
 // keepHiddenMarkers : les repères cachés (que le joueur ne voit pas) sont

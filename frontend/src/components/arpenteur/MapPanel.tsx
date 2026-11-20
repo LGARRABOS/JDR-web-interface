@@ -22,6 +22,8 @@ import type {
 import type { GameStore } from '../../realtime/gameStore';
 import { getErrorMessage } from '../../utils/errorMessage';
 import { KeldMap } from './KeldMap';
+import { useTravel } from './useTravel';
+import { TRAVEL_SECONDS } from '../../arpenteur/travel';
 import {
   Btn,
   Card,
@@ -65,23 +67,35 @@ export function MapPanel({
   const [selected, setSelected] = useState<string | null>(map.sector || null);
   const [editing, setEditing] = useState<Marker | null>(null);
   const can = rights.map;
+  // Voyage en cours : on attend l'arrivée avant de repartir.
+  const travel = useTravel(map.travel);
   const reachable = new Set(
-    can && map.sector ? neighbors(map.sector).map((n) => n.id) : []
+    can && map.sector && !travel ? neighbors(map.sector).map((n) => n.id) : []
   );
 
   const save = (next: MapState, log?: string) =>
     update('map', next, { log, immediate: !!log });
 
-  const moveTo = (id: string) => {
+  // Départ vers une position voisine (voyage animé), ou placement direct par le MJ.
+  const moveTo = (id: string, voyage = true) => {
     const name = nodeName(id, map.sectorNames);
+    const go = voyage && !!map.sector && map.sector !== id;
     save(
       {
         ...map,
         sector: id,
         destination: map.destination === id ? '' : map.destination,
         trail: [...map.trail, { sector: id, at: new Date().toISOString() }],
+        travel: go
+          ? {
+              from: map.sector,
+              to: id,
+              startedAt: new Date().toISOString(),
+              duration: TRAVEL_SECONDS,
+            }
+          : null,
       },
-      `Arrivée : ${name}${regionById(id) && name !== id ? ` (${id})` : ''}`
+      `${go ? 'En route vers' : 'Arrivée :'} ${name}${regionById(id) && name !== id ? ` (${id})` : ''}`
     );
   };
 
@@ -123,6 +137,14 @@ export function MapPanel({
               {regionById(map.sector) && map.sectorNames[map.sector]
                 ? ` (${map.sector})`
                 : ''}
+              {travel && (
+                <>
+                  {' '}
+                  · en route depuis{' '}
+                  <strong>{nodeName(travel.from, map.sectorNames)}</strong>,
+                  arrivée dans {travel.remaining} s
+                </>
+              )}
               {map.destination && (
                 <>
                   {' '}
@@ -148,6 +170,7 @@ export function MapPanel({
               markers={map.markers}
               selected={selected}
               reachable={reachable}
+              travel={travel}
               onSelect={setSelected}
             />
             <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pt-2 text-xs text-fantasy-muted">
@@ -250,12 +273,12 @@ export function MapPanel({
                                 variant="primary"
                                 onClick={() => moveTo(sel.id)}
                               >
-                                Arriver ici
+                                Partir
                               </Btn>
                             </>
                           )}
                           {isGM && !reachable.has(sel.id) && (
-                            <Btn onClick={() => moveTo(sel.id)}>
+                            <Btn onClick={() => moveTo(sel.id, false)}>
                               Placer l'arpenteur ici
                             </Btn>
                           )}

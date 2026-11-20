@@ -39,6 +39,8 @@ export interface DrawItem {
   mesh: GpuMesh;
   model: Mat4;
   shadow?: boolean;
+  /** Posé sur les dunes : chaque sommet suit le relief du sable sous lui. */
+  drape?: boolean;
 }
 
 export interface Lighting {
@@ -318,6 +320,8 @@ export class Renderer {
       scroll: number;
       /** 0 = dunes, 1 = sol aplani autour d'une ville. */
       calm?: number;
+      /** Abscisse du centre de la zone aplanie (ville qui défile). */
+      calmX?: number;
       shadowCenter: Vec3;
       shadowRadius: number;
       pods?: { pos: Vec3; power: number }[];
@@ -402,6 +406,7 @@ export class Renderer {
     gl.uniform3fv(this.u(m, 'uRockB'), light.rockB);
     gl.uniform1f(this.u(m, 'uScroll'), opts.scroll);
     gl.uniform1f(this.u(m, 'uCalm'), opts.calm ?? 0);
+    gl.uniform1f(this.u(m, 'uCalmX'), opts.calmX ?? 0);
     gl.uniform1f(this.u(m, 'uShadowOn'), shadowOn ? 1 : 0);
     const pods = (opts.pods ?? []).slice(0, 8);
     const pd = new Float32Array(32);
@@ -416,6 +421,7 @@ export class Renderer {
     gl.uniform1i(this.u(m, 'uShadow'), 0);
     for (const it of items) {
       gl.uniformMatrix4fv(this.u(m, 'uModel'), false, it.model);
+      gl.uniform1f(this.u(m, 'uDrape'), it.drape ? 1 : 0);
       gl.bindVertexArray(it.mesh.vao);
       gl.drawElements(gl.TRIANGLES, it.mesh.count, gl.UNSIGNED_INT, 0);
     }

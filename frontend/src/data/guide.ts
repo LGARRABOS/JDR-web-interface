@@ -678,7 +678,7 @@ Cliquez sur un personnage qui a une portée : un cercle jaune montre sa zone d'a
 
 En haut de la page, l'arpenteur apparaît en 3D, vu de trois-quarts, survolant les dunes du désert où il se trouve. Son allure, ses matériaux, ses mâts, sa proue, ses éclairages et ses couleurs suivent ses améliorations, et ses canons sortent des sabords. Les réacteurs soulèvent le sable et les cheminées fument. L'équipage s'active sur le pont (barre, cabestan, drisses, vigie). Quand la coque est abîmée, des brèches, des feux et de la fumée apparaissent ; pendant un chantier, le navire est entouré d'échafaudages. La scène passe de nuit entre 20 h et 7 h. Le bouton « Coupe » montre le plan de l'intérieur : cliquez sur une salle pour la gérer.
 
-Glissez sur la scène pour tourner autour du navire, utilisez la molette (ou pincez sur mobile) pour zoomer ; les boutons +, − et ⟲ sont à droite, ⟲ remet le point de vue par défaut. À chaque déplacement sur la carte, le navire traverse une tempête de sable et le décor change de secteur ; dans une ville, il vient s'amarrer au quai et la ville l'entoure.
+Glissez sur la scène pour tourner autour du navire, utilisez la molette (ou pincez sur mobile) pour zoomer ; les boutons +, − et ⟲ sont à droite, ⟲ remet le point de vue par défaut. Pendant un voyage, la caméra passe derrière le navire : il accélère, les balises, arches, épaves et ruines défilent, la lumière passe peu à peu à celle du désert d'arrivée (avec un bref coup de vent de sable à la frontière), puis il ralentit. Vers une ville, on la voit grandir à l'horizon avant que le navire ne s'amarre au quai ; en partant, il largue les amarres et la ville s'éloigne.
 
 > Sur un appareil trop ancien pour la 3D, une version dessinée s'affiche à la place.
 
@@ -770,7 +770,7 @@ Cliquez sur le schéma pour placer la cible : la distance, le côté du navire (
     ],
     body: `Le « Réseau des déserts » montre les sous-régions (M1 à F4), les traversées possibles et les trajets entre les villes et les déserts. Cliquez sur une sous-région ou une ville : ses accès s'affichent.
 
-Depuis la position actuelle, les destinations directes sont entourées. « Mettre le cap » trace la route ; « Arriver ici » déplace l'arpenteur et l'ajoute au sillage. Le MJ peut placer le navire n'importe où.
+Depuis la position actuelle, les destinations directes sont entourées. « Mettre le cap » trace la route ; « Partir » lance le voyage : pendant environ 25 secondes, le petit navire glisse le long du trajet avec le temps restant, et tout le groupe voit le même voyage. On ne peut pas repartir avant l'arrivée. Le MJ peut placer le navire n'importe où, instantanément.
 
 Vous pouvez nommer une sous-région (« Le Désert du phare vert ») et y poser des repères : mission, danger, trésor… Le MJ peut en cacher aux joueurs.
 

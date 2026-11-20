@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { MARKER_KINDS } from '../../arpenteur/catalog';
+import { travelEase, type TravelNow } from '../../arpenteur/travel';
 import {
   CITIES,
   COAST,
@@ -68,6 +69,7 @@ export function KeldMap({
   selected,
   reachable,
   onSelect,
+  travel = null,
 }: {
   current: string;
   destination: string;
@@ -77,6 +79,8 @@ export function KeldMap({
   selected: string | null;
   reachable: Set<string>;
   onSelect: (id: string) => void;
+  /** Voyage en cours : le navire glisse le long du trajet. */
+  travel?: TravelNow | null;
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const peaks = useMemo(() => {
@@ -92,7 +96,15 @@ export function KeldMap({
     });
     return out.sort((a, b) => a.y - b.y);
   }, []);
-  const here = nodePosition(current);
+  const from = travel ? nodePosition(travel.from) : null;
+  const to = travel ? nodePosition(travel.to) : null;
+  const k = travel ? travelEase(travel.p) : 1;
+  const here =
+    from && to
+      ? { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k }
+      : nodePosition(current);
+  // Le petit navire regarde dans le sens de la marche.
+  const facingLeft = !!(from && to && to.x < from.x);
   const there = destination ? nodePosition(destination) : null;
   const trailPts = trail
     .slice(-12)
@@ -435,6 +447,42 @@ export function KeldMap({
           />
         </g>
       )}
+      {from && to && travel && here && (
+        <g style={{ pointerEvents: 'none' }}>
+          <line
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
+            stroke="#7ff3ff"
+            strokeOpacity={0.35}
+            strokeWidth={8}
+            strokeLinecap="round"
+          />
+          <line
+            x1={from.x}
+            y1={from.y}
+            x2={here.x}
+            y2={here.y}
+            stroke="#7ff3ff"
+            strokeWidth={8}
+            strokeLinecap="round"
+          />
+          <text
+            x={here.x}
+            y={here.y + 44}
+            textAnchor="middle"
+            fontSize={30}
+            fontWeight={700}
+            fill="#e8fbff"
+            stroke="#0b1418"
+            strokeWidth={6}
+            paintOrder="stroke"
+          >
+            {`${travel.remaining} s`}
+          </text>
+        </g>
+      )}
       {here && (
         <g style={{ pointerEvents: 'none' }}>
           <circle
@@ -447,7 +495,7 @@ export function KeldMap({
           />
           <g className="arp-float" filter="url(#arp-glow)">
             <g
-              transform={`translate(${here.x - 46},${here.y - 140}) scale(0.92)`}
+              transform={`translate(${here.x - 46},${here.y - 140}) scale(0.92)${facingLeft ? ' translate(100,0) scale(-1,1)' : ''}`}
             >
               {/* Petit arpenteur de profil */}
               <path

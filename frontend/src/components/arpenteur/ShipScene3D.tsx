@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { installedGuns } from '../../arpenteur/logic';
 import type { Mood } from '../../arpenteur3d/environment';
 import { Stage, type Place } from '../../arpenteur3d/stage';
+import { travelEase, travelNow } from '../../arpenteur/travel';
+import { useTravel } from './useTravel';
 import type { DesertId } from '../../arpenteur3d/environment';
 import {
   cityById,
@@ -84,13 +86,16 @@ export function ShipScene3D(props: ShipSceneProps) {
   const guns = installedGuns(doc.combat).installed;
   const crew = doc.crew.members.length;
   const sector = doc.map.sector;
-  const { desert, place } = sceneOf(sector);
-  const cityId = place.city?.id ?? '';
-  // Bandeau affiché pendant un changement de secteur.
+  const mapTravel = doc.map.travel ?? null;
+  const travel = useTravel(mapTravel);
+  const travelKey = mapTravel
+    ? `${mapTravel.from}|${mapTravel.to}|${mapTravel.startedAt}|${mapTravel.duration}`
+    : '';
+  // Bandeau d'arrivée, affiché quelques secondes quand un voyage se termine.
   const [banner, setBanner] = useState<{ title: string; sub: string } | null>(
     null
   );
-  const lastSector = useRef<string | null>(null);
+  const wasTraveling = useRef(false);
   // Dégâts arrondis au huitième pour ne pas reconstruire le navire à chaque point.
   const damage =
     Math.round(
@@ -277,44 +282,52 @@ export function ShipScene3D(props: ShipSceneProps) {
     canvasRef.current?.dispatchEvent(new Event('arp-ship'));
   }, [use3D, animate, build, guns, crew, damage, scaffolding]);
 
-  // Décor : désert ou ville. Au premier affichage on s'y place directement ;
-  // ensuite, chaque changement de secteur joue un voyage animé.
+  // Décor : désert ou ville. Si un voyage est en cours (même ouvert en route),
+  // la scène le joue au point où il en est, calé sur l'heure de départ.
   useEffect(() => {
     const stage = stageRef.current;
     if (!use3D || !stage) return;
-    const scenePlace: Place = cityId
-      ? { city: { id: cityId, capital: !!cityById(cityId)?.capital } }
-      : {};
-    const prev = lastSector.current;
-    lastSector.current = sector;
+    const now = travelNow(mapTravel);
     const reduced =
       !animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prev === null || prev === sector || reduced) {
-      stage.setEnvironment(desert, mood, scenePlace);
+    if (now && !reduced) {
+      const from = sceneOf(now.from);
+      const to = sceneOf(now.to);
+      stage.setJourney(from, to, mood, now.start, now.duration);
     } else {
-      stage.travel(desert, mood, scenePlace);
-      const name = nodeName(sector, doc.map.sectorNames);
-      setBanner(
-        cityId
-          ? { title: `Arrivée à ${name}`, sub: 'Amarrage au quai' }
-          : {
-              title: name,
-              sub:
-                desert === 'keld'
-                  ? 'Nouveau secteur'
-                  : `Désert de ${DESERTS[desert].name}${name !== sector ? ` · ${sector}` : ''}`,
-            }
-      );
+      const here = sceneOf(sector);
+      stage.setEnvironment(here.desert, mood, here.place);
     }
     canvasRef.current?.dispatchEvent(new Event('arp-ship'));
-  }, [use3D, animate, sector, desert, cityId, mood, doc.map.sectorNames]);
+    // travelKey résume mapTravel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [use3D, animate, sector, travelKey, mood]);
 
-  // Le bandeau s'efface après le voyage.
+  // Fin de voyage : bandeau d'arrivée.
   useEffect(() => {
-    if (!banner) return;
+    if (travel) {
+      wasTraveling.current = true;
+      return;
+    }
+    if (!wasTraveling.current) return;
+    wasTraveling.current = false;
+    const id = sector.trim().toUpperCase();
+    const name = nodeName(id, doc.map.sectorNames);
+    const d = sceneOf(id).desert;
+    setBanner(
+      cityById(id)
+        ? { title: `Arrivée à ${name}`, sub: 'Amarré au quai' }
+        : {
+            title: name,
+            sub:
+              d === 'keld'
+                ? 'Arrivée'
+                : `Désert de ${DESERTS[d].name}${name !== id ? ` · ${id}` : ''}`,
+          }
+    );
     const t = setTimeout(() => setBanner(null), 5200);
     return () => clearTimeout(t);
-  }, [banner]);
+  }, [travel, sector, doc.map.sectorNames]);
 
   if (!use3D) return <ShipScene {...props} />;
   const zoomBy = (m: number) =>
@@ -330,6 +343,28 @@ export function ShipScene3D(props: ShipSceneProps) {
         role="img"
         aria-label={`Arpenteur ${doc.name} — glisser pour pivoter, molette ou pincement pour zoomer`}
       />
+      {travel && (
+        <div
+          className="pointer-events-none absolute left-1/2 bottom-3 sm:bottom-24 -translate-x-1/2 arp-plate rounded-xl px-4 py-2 text-center min-w-[220px]"
+          role="status"
+        >
+          <p className="font-heading text-[10px] uppercase tracking-[0.3em] opacity-80">
+            En route vers
+          </p>
+          <p className="font-heading text-base sm:text-lg leading-tight">
+            {nodeName(travel.to, doc.map.sectorNames)}
+          </p>
+          <div className="mt-1.5 h-1.5 rounded-full bg-black/40 overflow-hidden">
+            <div
+              className="h-full bg-[#7ff3ff]"
+              style={{ width: `${Math.round(travelEase(travel.p) * 100)}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[11px] opacity-80">
+            arrivée dans {travel.remaining} s
+          </p>
+        </div>
+      )}
       {banner && (
         <div
           key={banner.title}

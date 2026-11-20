@@ -276,6 +276,17 @@ type MapState struct {
 	Ship        *Point            `json:"ship"`
 	Heading     float64           `json:"heading"`
 	Markers     []Marker          `json:"markers"`
+	// Travel : voyage en cours (ou le dernier), pour l'animer chez tous les joueurs.
+	Travel *Travel `json:"travel"`
+}
+
+// Travel : départ de From vers To à StartedAt (horodaté par le serveur),
+// pour une durée en secondes. Sector vaut déjà To pendant le voyage.
+type Travel struct {
+	From      string `json:"from"`
+	To        string `json:"to"`
+	StartedAt string `json:"startedAt"`
+	Duration  int    `json:"duration"`
 }
 
 type TrailStep struct {

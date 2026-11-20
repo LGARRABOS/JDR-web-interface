@@ -27,7 +27,7 @@ import {
   type Lighting,
 } from './renderer';
 import { MeshBuilder, P } from './geometry';
-import { cityMesh, lerpLighting, veil } from './city';
+import { cityMesh, journeyMesh, lerpLighting, veil } from './city';
 import {
   buildShip,
   crewMeshes,
@@ -75,16 +75,25 @@ export interface Place {
   city?: { id: string; capital?: boolean };
 }
 
-interface Transition {
+/** Décor d'une position : désert et ville éventuelle. */
+export interface Scene {
+  desert: DesertId;
+  place: Place;
+}
+
+interface Journey {
+  key: string;
+  from: Scene;
+  to: Scene;
   start: number;
-  from: Lighting;
-  to: Lighting;
-  toDesert: DesertId;
-  toMood: Mood;
-  toPlace: Place;
-  fromCity: boolean;
-  toCity: boolean;
-  swapped: boolean;
+  duration: number;
+  fromLight: Lighting;
+  toLight: Lighting;
+  /** Distance parcourue (m) échantillonnée sur la progression 0..1. */
+  table: Float32Array;
+  total: number;
+  base: number;
+  props: GpuMesh;
 }
 
 const ease = (t: number) => {
@@ -92,9 +101,17 @@ const ease = (t: number) => {
   return u * u * (3 - 2 * u);
 };
 const smooth = (a: number, b: number, x: number) => ease((x - a) / (b - a));
-/** Durée d'une transition de secteur et instant du changement de décor (s). */
-const T_SWAP = 2.5;
-const T_END = 6.2;
+/** Vitesse de pointe pendant un voyage (multiple de la croisière). */
+const VMAX = 7;
+const SAMPLES = 400;
+
+/** Vitesse (en multiples de la croisière) à la progression p du voyage. */
+function journeySpeed(p: number, v0: number, v1: number) {
+  if (p < 0.16) return v0 + (VMAX - v0) * ease(p / 0.16);
+  if (p > 0.74) return VMAX + (v1 - VMAX) * ease((p - 0.74) / 0.26);
+  return VMAX;
+}
+
 const CREW_SCALE = 1.4;
 
 export class Stage {
@@ -111,8 +128,8 @@ export class Stage {
   private light: Lighting;
   private mood: Mood = 'dusk';
   private place: Place = {};
-  private city: { city: GpuMesh; moor: GpuMesh } | null = null;
-  private trans: Transition | null = null;
+  private cities = new Map<string, { city: GpuMesh; moor: GpuMesh }>();
+  private journey: Journey | null = null;
   private scrollPos = 0;
   private lastT = -1;
 
@@ -127,60 +144,101 @@ export class Stage {
   }
 
   setEnvironment(desert: DesertId, mood: Mood, place: Place = {}) {
-    this.trans = null;
+    this.endJourney();
     this.applyEnv(desert, mood, place);
   }
 
   /**
-   * Voyage animé vers un nouveau secteur : le navire accélère dans une tempête
-   * de sable, le décor change au plus fort du voile ; arrivé dans une ville, il
-   * glisse jusqu'au quai et s'amarre ; en partant, il se détache et file.
+   * Voyage d'un secteur à l'autre, calé sur l'horloge (départ `startMs`,
+   * durée `durationMs`) pour être vu au même point par tous les joueurs :
+   * le navire largue les amarres ou accélère, le sable défile de plus en plus
+   * vite, les paysages défilent (balises, arches, épaves, ruines), la lumière
+   * passe d'un désert à l'autre avec un bref coup de vent de sable, la ville
+   * d'arrivée grandit à l'horizon, puis il ralentit et s'amarre ou reprend
+   * sa croisière.
    */
-  travel(desert: DesertId, mood: Mood, place: Place = {}) {
-    this.trans = {
-      start: -1,
-      from: this.light,
-      to: lighting(desert, mood),
-      toDesert: desert,
-      toMood: mood,
-      toPlace: place,
-      fromCity: !!this.place.city,
-      toCity: !!place.city,
-      swapped: false,
+  setJourney(
+    from: Scene,
+    to: Scene,
+    mood: Mood,
+    startMs: number,
+    durationMs: number
+  ) {
+    const key = `${startMs}|${scKey(from)}|${scKey(to)}`;
+    if (this.journey?.key === key) return;
+    this.endJourney();
+    if (Date.now() >= startMs + durationMs) {
+      this.applyEnv(to.desert, mood, to.place);
+      return;
+    }
+    this.applyEnv(from.desert, mood, from.place);
+    const v0 = from.place.city ? 0 : 1;
+    const v1 = to.place.city ? 0 : 1;
+    const table = new Float32Array(SAMPLES + 1);
+    const dt = durationMs / 1000 / SAMPLES;
+    for (let i = 1; i <= SAMPLES; i++) {
+      const p = (i - 0.5) / SAMPLES;
+      table[i] = table[i - 1] + CRUISE * journeySpeed(p, v0, v1) * dt;
+    }
+    const total = table[SAMPLES];
+    this.journey = {
+      key,
+      from,
+      to,
+      start: startMs,
+      duration: durationMs,
+      fromLight: lighting(from.desert, mood),
+      toLight: lighting(to.desert, mood),
+      table,
+      total,
+      base: this.scrollPos,
+      props: this.r.upload(
+        journeyMesh(scKey(from) + scKey(to), total, mood === 'night')
+      ),
     };
   }
 
   get traveling() {
-    return !!this.trans;
+    return !!this.journey;
+  }
+
+  private endJourney() {
+    if (!this.journey) return;
+    this.r.release(this.journey.props);
+    this.journey = null;
   }
 
   private applyEnv(desert: DesertId, mood: Mood, place: Place) {
-    const moodChanged = mood !== this.mood;
+    if (mood !== this.mood) this.clearCities();
     this.light = lighting(desert, mood);
     this.mood = mood;
-    const changed =
-      (place.city?.id ?? '') !== (this.place.city?.id ?? '') || moodChanged;
     this.place = place;
-    if (changed) this.buildCity();
   }
 
-  private buildCity() {
-    if (this.city) {
-      this.r.release(this.city.city);
-      this.r.release(this.city.moor);
-      this.city = null;
+  /** Maillages d'une ville (construits à la demande, gardés en cache). */
+  private cityOf(c: { id: string; capital?: boolean }) {
+    let m = this.cities.get(c.id);
+    if (!m && this.ship) {
+      const d = cityMesh({
+        id: c.id,
+        capital: c.capital,
+        night: this.mood === 'night',
+        halfBeam: this.ship.parts.halfBeam,
+        length: this.ship.parts.length,
+        hover: HOVER_DOCK,
+      });
+      m = { city: this.r.upload(d.city), moor: this.r.upload(d.moor) };
+      this.cities.set(c.id, m);
     }
-    const c = this.place.city;
-    if (!c || !this.ship) return;
-    const m = cityMesh({
-      id: c.id,
-      capital: c.capital,
-      night: this.mood === 'night',
-      halfBeam: this.ship.parts.halfBeam,
-      length: this.ship.parts.length,
-      hover: HOVER_DOCK,
-    });
-    this.city = { city: this.r.upload(m.city), moor: this.r.upload(m.moor) };
+    return m ?? null;
+  }
+
+  private clearCities() {
+    for (const m of this.cities.values()) {
+      this.r.release(m.city);
+      this.r.release(m.moor);
+    }
+    this.cities.clear();
   }
 
   setShip(build: Build, opts: StageOptions = {}) {
@@ -209,7 +267,8 @@ export class Stage {
   }
 
   private afterShip() {
-    this.buildCity();
+    // Le quai dépend des dimensions du navire.
+    this.clearCities();
   }
 
   private disposeShip() {
@@ -234,44 +293,74 @@ export class Stage {
     const dt =
       this.lastT < 0 ? 0 : Math.min(0.1, Math.max(0, time - this.lastT));
     this.lastT = time;
-    // --- Voyage en cours : vitesse, position, voile de sable, changement de décor ---
-    let speed = this.place.city ? 0 : 1;
-    let shipX = 0;
+    // --- Voyage en cours : distance parcourue, décor qui défile, lumière ---
     let dock = this.place.city ? 1 : 0;
     let light = this.light;
-    let moored = !!this.place.city;
-    const tr = this.trans;
-    if (tr) {
-      if (tr.start < 0) tr.start = time;
-      const e = time - tr.start;
-      if (e < T_SWAP) {
-        if (tr.fromCity) {
-          // Largue les amarres, s'élève et quitte le quai.
-          shipX = 75 * Math.pow(Math.min(1, e / T_SWAP), 2);
-          dock = 1 - smooth(0, 1.6, e);
-          speed = 0;
-          moored = false;
-        } else speed = 1 + 4 * smooth(0, 1.5, e);
-      } else {
-        if (!tr.swapped) {
-          tr.swapped = true;
-          this.applyEnv(tr.toDesert, tr.toMood, tr.toPlace);
-        }
-        const u = (e - T_SWAP) / (T_END - T_SWAP);
-        if (tr.toCity) {
-          // Entre au port en ralentissant et vient se ranger le long du quai.
-          const k = ease(u);
-          shipX = -75 * (1 - k) * (1 - k);
-          dock = k;
-          speed = 0;
-          moored = u > 0.97;
-        } else speed = 5 - 4 * smooth(0, 1, u);
+    const scenery: DrawItem[] = [];
+    let calm = 0;
+    let calmX = 0;
+    const j = this.journey;
+    let finished = false;
+    // Pendant le voyage, la caméra passe derrière le navire pour regarder
+    // devant lui : on voit le paysage arriver et la ville grandir à l'horizon.
+    let chase = 0;
+    if (j) {
+      const p = Math.min(1, Math.max(0, (Date.now() - j.start) / j.duration));
+      const f = p * SAMPLES;
+      const i0 = Math.min(SAMPLES - 1, Math.floor(f));
+      const dist = j.table[i0] + (j.table[i0 + 1] - j.table[i0]) * (f - i0);
+      this.scrollPos = j.base + dist;
+      const fc = j.from.place.city;
+      const tc = j.to.place.city;
+      dock = (fc ? 1 - smooth(0, 0.07, p) : 0) + (tc ? smooth(0.9, 1, p) : 0);
+      const cities: {
+        x: number;
+        m: { city: GpuMesh; moor: GpuMesh } | null;
+      }[] = [];
+      if (fc) cities.push({ x: -dist, m: this.cityOf(fc) });
+      if (tc) cities.push({ x: j.total - dist, m: this.cityOf(tc) });
+      for (const c of cities) {
+        if (!c.m || Math.abs(c.x) > 2400) continue;
+        scenery.push({
+          mesh: c.m.city,
+          model: translation(c.x, 0, 0),
+          shadow: Math.abs(c.x) < 200,
+        });
       }
-      const v = smooth(1.0, 2.3, e) * (1 - smooth(2.7, 4.3, e));
-      light = veil(lerpLighting(tr.from, tr.to, smooth(2.2, 2.8, e)), v);
-      if (e >= T_END) this.trans = null;
+      if (fc && p < 0.012) {
+        const m = this.cityOf(fc);
+        if (m) scenery.push({ mesh: m.moor, model: translation(-dist, 0, 0) });
+      }
+      const near = cities.reduce<number | null>(
+        (a, c) => (a === null || Math.abs(c.x) < Math.abs(a) ? c.x : a),
+        null
+      );
+      if (near !== null) {
+        calm = 1;
+        calmX = near;
+      }
+      scenery.push({
+        mesh: j.props,
+        model: translation(-dist, 0, 0),
+        drape: true,
+      });
+      const v = 0.5 * smooth(0.42, 0.49, p) * (1 - smooth(0.51, 0.58, p));
+      light = veil(
+        lerpLighting(j.fromLight, j.toLight, smooth(0.36, 0.64, p)),
+        v
+      );
+      finished = p >= 1;
+      chase = smooth(0.04, 0.2, p) * (1 - smooth(0.86, 0.99, p));
+    } else {
+      if (!this.place.city) this.scrollPos += CRUISE * dt;
+      const c = this.place.city ? this.cityOf(this.place.city) : null;
+      if (c) {
+        scenery.push({ mesh: c.city, model: identity(), shadow: true });
+        scenery.push({ mesh: c.moor, model: identity() });
+        calm = 1;
+      }
     }
-    this.scrollPos += CRUISE * speed * dt;
+    const shipX = 0;
     const hover = HOVER + (HOVER_DOCK - HOVER) * dock;
     const calmBob = 1 - dock * 0.8;
     const bob = Math.sin(time * 1.2) * 0.35 * calmBob;
@@ -287,10 +376,8 @@ export class Stage {
     if (view.ground !== false) {
       items.push({ mesh: this.env.terrain, model: identity() });
       items.push({ mesh: this.env.mesas, model: identity() });
-      if (this.city) {
-        items.push({ mesh: this.city.city, model: identity(), shadow: true });
-        if (moored) items.push({ mesh: this.city.moor, model: identity() });
-      } else {
+      items.push(...scenery);
+      if (!calm || Math.abs(calmX) > 900) {
         // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
         const off = -(this.scrollPos % ROCK_LOOP);
         items.push({ mesh: this.env.rocks, model: translation(off, 0, 0) });
@@ -312,13 +399,13 @@ export class Stage {
 
     const aspect = this.r.width / this.r.height;
     const fov = view.fov ?? 0.36;
-    const yaw = view.yaw ?? 0.55;
+    const yaw = (view.yaw ?? 0.55) - 1.3 * chase;
     const dirH: Vec3 = [Math.sin(yaw), 0, Math.cos(yaw)];
     const cy = hover + (parts.top + parts.bottom) / 2 + 1;
     const halfH = (parts.top - parts.bottom) / 2 + 1;
     const halfW = parts.radius * (0.55 + 0.45 * Math.abs(Math.cos(yaw)));
     const fovX = 2 * Math.atan(Math.tan(fov / 2) * aspect);
-    const m = view.margin ?? 1.05;
+    const m = (view.margin ?? 1.05) * (1 + 0.08 * chase);
     const dist =
       Math.max(halfW / Math.tan(fovX / 2), halfH / Math.tan(fov / 2)) * m;
     const right: Vec3 = normalize([dirH[2], 0, -dirH[0]]);
@@ -329,7 +416,8 @@ export class Stage {
       right[2] * -shift,
     ];
     const eyeY =
-      view.eyeHeight ?? target[1] + dist * Math.tan(view.elevation ?? 0.1);
+      view.eyeHeight ??
+      target[1] + dist * Math.tan((view.elevation ?? 0.1) + 0.04 * chase);
     const eye: Vec3 = [
       target[0] + dirH[0] * dist,
       eyeY,
@@ -342,26 +430,32 @@ export class Stage {
     this.r.render(items, glows, { eye, target, fov }, light, {
       time,
       scroll: this.scrollPos,
-      calm: this.place.city ? 1 : 0,
+      calm,
+      calmX,
       shadowCenter: [shipX * 0.5, hover, 0],
       shadowRadius: parts.radius + 14 + Math.abs(shipX) * 0.5,
       pods,
       dust: view.ground === false || dock > 0.5 ? null : this.ship.dust,
     });
+    // Arrivée : le décor de destination devient le décor courant.
+    if (j && finished) {
+      this.endJourney();
+      this.applyEnv(j.to.desert, this.mood, j.to.place);
+    }
   }
 
   dispose() {
     this.disposeShip();
-    if (this.city) {
-      this.r.release(this.city.city);
-      this.r.release(this.city.moor);
-    }
+    this.endJourney();
+    this.clearCities();
     this.r.release(this.env.terrain);
     this.r.release(this.env.mesas);
     this.r.release(this.env.rocks);
     this.r.dispose();
   }
 }
+
+const scKey = (s: Scene) => `${s.desert}:${s.place.city?.id ?? ''}`;
 
 /** Nuages de sable sous les tuyères qui soufflent vers le bas. */
 function dustMesh(parts: ShipParts): import('./geometry').MeshData {

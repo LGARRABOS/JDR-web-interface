@@ -237,6 +237,17 @@ export interface MapState {
   ship: { x: number; y: number } | null;
   heading: number;
   markers: Marker[];
+  /** Voyage en cours (ou le dernier) : animé chez tous les joueurs. */
+  travel?: Travel | null;
+}
+
+export interface Travel {
+  from: string;
+  to: string;
+  /** Heure de départ (ISO), fixée par le serveur. */
+  startedAt: string;
+  /** Durée en secondes. */
+  duration: number;
 }
 
 export interface Perm {

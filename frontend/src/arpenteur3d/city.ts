@@ -166,7 +166,7 @@ export function cityMesh(o: CityOptions): { city: MeshData; moor: MeshData } {
     b.cylinder(0.9, 1.2, 10, brass);
     b.pop();
     b.pop();
-    const tip: Vec3 = [x + (fx < 0 ? 4 : -4), top + 17.2, z0 + 2];
+    const tip: Vec3 = [x + (fx < 0 ? 4 : -4), top + 17.2, z0 - 1];
     b.tube([[x, top + 16.6, zz], tip], 0.32, 6, iron);
     b.tube(
       [
@@ -369,7 +369,11 @@ export function cityMesh(o: CityOptions): { city: MeshData; moor: MeshData } {
       z < 30 + rad
     )
       return true;
-    if (z > 0 && Math.hypot(x, z) < 125 + rad) return true;
+    // La ville défile le long de x quand le navire arrive ou repart : le
+    // chenal du navire et le couloir de la caméra restent dégagés sur toute
+    // la longueur (grand boulevard qui mène au port).
+    if (Math.abs(z) < o.halfBeam + 8 + rad) return true;
+    if (z > 0 && z - rad < 150) return true;
     return false;
   };
   // Îlots alignés sur une trame de rues, plus serrés et plus hauts près du port.
@@ -482,6 +486,198 @@ export function cityMesh(o: CityOptions): { city: MeshData; moor: MeshData } {
   b.pop();
   b.pop();
   return { city: b.build(), moor: m.build() };
+}
+
+/**
+ * Paysages croisés pendant un voyage, le long du cap (x de 0 à `length`) :
+ * balises régulières qui donnent la vitesse, arches et éperons rocheux,
+ * épaves ensablées, ruines de colonnades. Posés sur les dunes à l'affichage.
+ */
+export function journeyMesh(
+  seed: string,
+  length: number,
+  night: boolean
+): MeshData {
+  const b = new MeshBuilder();
+  const r = rng(seed);
+  const mat = (
+    hex: string,
+    p: number = P.PLAIN,
+    rough = 0.9,
+    metal = 0
+  ): Mat => ({
+    p,
+    color: linear(hex),
+    metal,
+    rough,
+  });
+  const rock = mat('#8a5a3a', P.ROCK, 0.95);
+  const stone = mat('#c8b08a', P.ROCK, 0.95);
+  const wood = mat('#4a3424', P.WOOD, 0.9);
+  const iron = mat('#2a2622', P.IRON, 0.6, 0.6);
+  const brass = mat('#b8893a', P.BRASS, 0.35, 1);
+  const lamp: Mat = {
+    p: P.EMIT,
+    color: linear('#ffb45a'),
+    metal: 0,
+    rough: 1,
+    emit: night ? 4 : 1.2,
+  };
+  const blob = (
+    x: number,
+    y: number,
+    z: number,
+    sx: number,
+    sy: number,
+    sz: number,
+    k: number
+  ) =>
+    b.grid(
+      14,
+      9,
+      (u, v) => {
+        const a = u * Math.PI * 2;
+        const ph = (v - 0.5) * Math.PI;
+        const n =
+          1 +
+          0.22 * Math.sin(a * 3 + k) * Math.cos(ph * 2) +
+          0.1 * Math.sin(a * 7 + ph * 5 + k);
+        return [
+          x + Math.cos(a) * Math.cos(ph) * sx * n,
+          y + Math.sin(ph) * sy * n,
+          z + Math.sin(a) * Math.cos(ph) * sz * n,
+        ];
+      },
+      rock,
+      { flip: true }
+    );
+  // Balises le long de la piste.
+  for (let x = 120, k = 0; x < length - 120; x += 150, k++) {
+    const z = k % 2 ? 48 : -48;
+    b.push(translation(x, -2, z));
+    b.cylinder(0.25, 9, 6, iron);
+    b.push(translation(0, 9, 0));
+    b.cylinder(0.55, 0.9, 8, lamp);
+    b.push(translation(0, 0.9, 0));
+    b.lathe(
+      [
+        [0.7, 0],
+        [0, 0.6],
+      ],
+      8,
+      brass
+    );
+    b.pop();
+    b.pop();
+    b.pop();
+  }
+  // Grands éléments du paysage.
+  for (let x = 80 + r() * 60; x < length - 80; x += 70 + r() * 90) {
+    const side = r() < 0.5 ? -1 : 1;
+    // Hors du couloir de la caméra (côté +z, entre le navire et l'objectif).
+    const z = side > 0 ? 175 + r() * 110 : -(55 + r() * 180);
+    const kind = r();
+    if (kind < 0.3) {
+      // Éperon ou arche de grès.
+      const h = 14 + r() * 26;
+      if (r() < 0.45) {
+        const w = 14 + r() * 12;
+        blob(x - w / 2, h * 0.45, z, 4, h * 0.55, 4.5, x);
+        blob(x + w / 2, h * 0.45, z, 4, h * 0.55, 4.5, x + 1);
+        blob(x, h * 0.95, z, w * 0.62, 3.2, 4, x + 2);
+      } else blob(x, h * 0.35, z, 6 + r() * 8, h * 0.6, 6 + r() * 6, x);
+    } else if (kind < 0.55) {
+      // Épave d'un vieux glisseur, à moitié ensablée et couchée sur le flanc.
+      const len = 18 + r() * 16;
+      b.push(
+        chain(
+          translation(x, -1.2, z),
+          rotationY(r() * Math.PI),
+          rotationZ(0.35 + r() * 0.3)
+        )
+      );
+      b.grid(
+        16,
+        8,
+        (u, v) => {
+          const xx = (u - 0.5) * len;
+          const hb =
+            3.2 * Math.sin(Math.PI * Math.min(1, u * 1.05 + 0.02)) ** 0.6;
+          const a = (v - 0.5) * Math.PI;
+          return [xx, Math.sin(a) * 2.6 * (hb / 3.2), Math.cos(a) * hb];
+        },
+        wood,
+        { flip: true }
+      );
+      // Membrures nues qui dépassent.
+      for (let k = 0; k < 6; k++) {
+        const xx = (k / 5 - 0.5) * len * 0.7;
+        b.tube(
+          [
+            [xx, 0, 3],
+            [xx, 3.5, 3.6],
+            [xx, 5, 2.2],
+          ],
+          0.18,
+          5,
+          wood
+        );
+      }
+      b.tube(
+        [
+          [len * 0.1, 0, 0],
+          [len * 0.1 + 3, 11, 1],
+        ],
+        0.3,
+        6,
+        wood
+      );
+      b.pop();
+    } else if (kind < 0.8) {
+      // Ruines : colonnade, colonnes tombées, pans de mur.
+      const n = 3 + Math.floor(r() * 4);
+      b.push(chain(translation(x, -1.5, z), rotationY(r() * 0.6)));
+      for (let k = 0; k < n; k++) {
+        const h = r() < 0.3 ? 2 + r() * 3 : 8 + r() * 4;
+        b.push(translation(k * 5 - n * 2.5, 0, 0));
+        b.cylinder(0.9, h, 10, stone);
+        if (h > 7) {
+          b.push(translation(0, h, 0));
+          b.box(2.4, 0.8, 2.4, stone);
+          b.pop();
+        }
+        b.pop();
+      }
+      if (r() < 0.6) {
+        b.push(
+          chain(
+            translation(n * 2.5 + 4, 0.8, 4),
+            rotationZ(Math.PI / 2),
+            rotationY(0.4)
+          )
+        );
+        b.cylinder(0.85, 9, 10, stone);
+        b.pop();
+      }
+      b.push(translation(-4, 0, -6));
+      b.box(10, 4 + r() * 4, 1.4, stone);
+      b.pop();
+      b.pop();
+    } else {
+      // Champ de rochers.
+      for (let k = 0; k < 5; k++)
+        blob(
+          x + (r() - 0.5) * 30,
+          0,
+          z + (r() - 0.5) * 30,
+          2 + r() * 4,
+          1.5 + r() * 2.5,
+          2 + r() * 4,
+          x + k
+        );
+    }
+  }
+  return b.build();
 }
 
 /** Interpolation entre deux éclairages (transition d'un secteur à l'autre). */

@@ -142,6 +142,41 @@ func TestHiddenMarkers(t *testing.T) {
 	}
 }
 
+func TestTravelStampedByServer(t *testing.T) {
+	d := Default()
+	next := d.Map
+	next.Sector = "M2"
+	next.Travel = &Travel{From: "m1", To: "m2", StartedAt: "2001-01-01T00:00:00Z", Duration: 999}
+	raw, _ := json.Marshal(next)
+	if err := d.Apply(SectionMap, raw, false); err != nil {
+		t.Fatal(err)
+	}
+	tr := d.Map.Travel
+	if tr == nil || tr.From != "M1" || tr.To != "M2" || tr.Duration != 120 {
+		t.Fatalf("voyage mal normalisé : %+v", tr)
+	}
+	if tr.StartedAt == "2001-01-01T00:00:00Z" {
+		t.Fatal("l'heure de départ doit venir du serveur")
+	}
+	// Une autre modification de la carte ne relance pas le voyage.
+	first := tr.StartedAt
+	next = d.Map
+	next.Travel = &Travel{From: "M1", To: "M2", StartedAt: "2030-01-01T00:00:00Z", Duration: 20}
+	raw, _ = json.Marshal(next)
+	if err := d.Apply(SectionMap, raw, false); err != nil {
+		t.Fatal(err)
+	}
+	if d.Map.Travel.StartedAt != first || d.Map.Travel.Duration != 120 {
+		t.Fatalf("voyage en cours modifié : %+v", d.Map.Travel)
+	}
+	// Voyage invalide (même départ et arrivée) : ignoré.
+	d.Map.Travel = &Travel{From: "M2", To: "M2", StartedAt: first, Duration: 20}
+	Normalize(&d)
+	if d.Map.Travel != nil {
+		t.Fatal("un voyage sur place est rejeté")
+	}
+}
+
 func TestNormalizeBounds(t *testing.T) {
 	d := Default()
 	d.Combat.Decks[0].Guns.A1 = Battery{Slots: 4, Installed: 9, Loaded: 7, Primed: -2}

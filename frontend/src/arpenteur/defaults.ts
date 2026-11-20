@@ -106,6 +106,7 @@ export function emptyArpenteur(): ArpenteurDoc {
       ship: null,
       heading: 0,
       markers: [],
+      travel: null,
     },
     permissions: {
       ship: { posts: [], fallback: [] },

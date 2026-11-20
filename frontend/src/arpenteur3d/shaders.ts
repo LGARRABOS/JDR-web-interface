@@ -53,7 +53,7 @@ layout(location=2) in vec2 aUv;
 layout(location=3) in vec3 aCol;
 layout(location=4) in vec4 aMat;
 uniform mat4 uModel, uViewProj, uLightVP;
-uniform float uTime, uScroll, uCalm;
+uniform float uTime, uScroll, uCalm, uCalmX, uDrape;
 out vec3 vWorld; out vec3 vNrm; out vec2 vUv; out vec3 vCol; flat out vec4 vMat; out vec4 vLight;
 ${COMMON}
 ${WIND}
@@ -65,7 +65,7 @@ void main(){
     vec2 q = wp.xz + vec2(uScroll, 0.);
     float k = smoothstep(450., 1100., length(wp.xz));
     // Autour d'une ville, le sol est aplani (place, faubourgs), les dunes reprennent au loin.
-    float flat_ = uCalm * (1. - smoothstep(520., 950., length(wp.xz)));
+    float flat_ = uCalm * (1. - smoothstep(520., 950., length(wp.xz - vec2(uCalmX, 0.))));
     wp.y = mix(dune(q) + k*swell(q), -1., flat_);
     float e = .8 + k*6.;
     vec2 ex = vec2(e, 0.), ez = vec2(0., e);
@@ -76,7 +76,7 @@ void main(){
   } else {
     n = mat3(uModel) * n;
     // Rochers posés sur le sable : ils épousent la dune sous eux (aMat.w = 1).
-    if (aMat.x == 9. && aMat.w > .5) {
+    if ((aMat.x == 9. && aMat.w > .5) || uDrape > .5) {
       vec2 q = wp.xz + vec2(uScroll, 0.);
       wp.y += dune(q) + smoothstep(450., 1100., length(wp.xz))*swell(q);
     }
