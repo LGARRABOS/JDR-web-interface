@@ -9,6 +9,10 @@ float dune(vec2 p){
   h += (fbm(p*.018)-.5)*5.;
   return h - 2.;
 }
+// Grandes ondulations du désert, loin du navire seulement.
+float swell(vec2 p){
+  return 9.*sin(p.x*.0042 + sin(p.y*.0031)*2.2) + 6.*sin(p.y*.0063 - p.x*.0024) + (fbm(p*.0025) - .5)*12.;
+}
 `;
 
 const WIND = /* glsl */ `
@@ -59,11 +63,21 @@ void main(){
   vec4 wp = uModel * vec4(p, 1.);
   if (aMat.x == 8.) {
     vec2 q = wp.xz + vec2(uScroll, 0.);
-    wp.y = dune(q);
-    float e = .8;
-    n = normalize(vec3(dune(q-vec2(e,0.))-dune(q+vec2(e,0.)), 2.*e, dune(q-vec2(0.,e))-dune(q+vec2(0.,e))));
+    float k = smoothstep(450., 1100., length(wp.xz));
+    wp.y = dune(q) + k*swell(q);
+    float e = .8 + k*6.;
+    vec2 ex = vec2(e, 0.), ez = vec2(0., e);
+    n = normalize(vec3(
+      dune(q-ex)+k*swell(q-ex) - dune(q+ex)-k*swell(q+ex),
+      2.*e,
+      dune(q-ez)+k*swell(q-ez) - dune(q+ez)-k*swell(q+ez)));
   } else {
     n = mat3(uModel) * n;
+    // Rochers posés sur le sable : ils épousent la dune sous eux (aMat.w = 1).
+    if (aMat.x == 9. && aMat.w > .5) {
+      vec2 q = wp.xz + vec2(uScroll, 0.);
+      wp.y += dune(q) + smoothstep(450., 1100., length(wp.xz))*swell(q);
+    }
   }
   vWorld = wp.xyz; vNrm = n; vUv = aUv; vCol = aCol; vMat = aMat;
   vLight = uLightVP * wp;

@@ -309,6 +309,9 @@ function alignY(o: Vec3, d: Vec3): Mat4 {
   return basis(o, x, y, z);
 }
 
+/** Élargissement général des coques (le gréement suit la largeur). */
+const BEAM_SCALE = 1.18;
+
 /** Rentrée des murs des châteaux, du pied au toit. */
 const CT = 0.12;
 
@@ -319,7 +322,8 @@ export class Hull {
     readonly allure: Allure,
     readonly ponts: number
   ) {
-    this.s = SPECS[allure];
+    // Coque élargie : plus d'assise et de pont visible quand on tourne autour.
+    this.s = { ...SPECS[allure], B: SPECS[allure].B * BEAM_SCALE };
     this.D = this.s.D * (ponts >= 3 ? 1.25 : ponts === 2 ? 1.12 : 1);
   }
   get L() {
@@ -2833,40 +2837,71 @@ function damage(b: MeshBuilder, hull: Hull, amount: number, stacks: Vec3[]) {
     const side = i % 2 === 0 ? 1 : -1;
     const s = 0.2 + rand(i * 7 + 3) * 0.62;
     const v = 0.5 + rand(i * 13 + 5) * 0.38;
-    const p = hull.point(s, v);
-    const nn = hull.normal(s, v);
-    const pos: Vec3 = [
-      p[0] + nn[0] * 0.03,
-      p[1] + nn[1] * 0.03,
-      (p[2] + nn[2] * 0.03) * side,
-    ];
-    const dir: Vec3 = [nn[0], nn[1], nn[2] * side];
-    const r = 0.6 + rand(i * 3) * 0.6;
-    b.push(alignY(pos, dir));
-    b.push(scaling(1.3, 1, 1));
-    b.cylinder(r, 0.04, 12, charred);
-    for (let k = 0; k < 7; k++) {
-      const a = (k / 7) * Math.PI * 2 + rand(i + k);
-      b.push(
-        chain(
-          rotationY(a),
-          translation(r * 0.9, 0.05, 0),
-          rotationZ(0.5 + rand(k + i) * 0.6)
-        )
-      );
+    // Brèche épousant la coque : bord déchiqueté, bordé enfoncé et noirci au
+    // centre, auréole de brûlure autour, échardes qui pointent vers l'extérieur.
+    const r = 0.7 + rand(i * 3) * 0.7;
+    const p0 = hull.point(s, v);
+    const p1 = hull.point(s, Math.min(1, v + 0.01));
+    const perV =
+      0.01 /
+      Math.max(0.05, Math.hypot(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]));
+    const edge = (a: number) =>
+      r *
+      (0.72 +
+        0.28 * Math.sin(a * 5 + i) * Math.sin(a * 3 - i * 2) +
+        0.12 * Math.sin(a * 11 + i));
+    const onHull = (a: number, rho: number, depth: number): Vec3 => {
+      const d = edge(a) * rho;
+      const ss = s + (Math.cos(a) * d * 1.2) / hull.L;
+      const vv = Math.min(0.99, Math.max(0.02, v + Math.sin(a) * d * perV));
+      const p = hull.point(ss, vv);
+      const n = hull.normal(ss, vv);
+      return [
+        p[0] + n[0] * depth,
+        p[1] + n[1] * depth,
+        (p[2] + n[2] * depth) * side,
+      ];
+    };
+    const flip = side < 0;
+    // Intérieur enfoncé et carbonisé.
+    b.grid(
+      28,
+      5,
+      (u, w) =>
+        onHull(u * Math.PI * 2, 1 - w, -0.45 * (1 - (1 - w) ** 2) + 0.02),
+      charred,
+      { flip: !flip }
+    );
+    // Auréole de bois brûlé autour de la brèche.
+    b.grid(
+      28,
+      3,
+      (u, w) => onHull(u * Math.PI * 2, 1 + w * 0.55, 0.025 - w * 0.015),
+      { ...splinter, color: linear('#24170e') },
+      { flip }
+    );
+    // Échardes le long du bord.
+    for (let k = 0; k < 11; k++) {
+      const a = (k / 11) * Math.PI * 2 + rand(i + k) * 0.4;
+      const at = onHull(a, 1, 0.02);
+      const n = hull.normal(s, v);
+      const out: Vec3 = [
+        Math.cos(a) * 0.5 + n[0] * 0.7,
+        Math.sin(a) * 0.5 + n[1] * 0.7,
+        n[2] * 0.7 * side,
+      ];
+      b.push(alignY(at, out));
       b.lathe(
         [
-          [0.1, 0],
-          [0.04, 0.5 + rand(i * 5 + k) * 0.5],
-          [0, 0.9],
+          [0.08, 0],
+          [0.035, 0.35 + rand(i * 5 + k) * 0.45],
+          [0, 0.7],
         ],
         4,
         splinter
       );
       b.pop();
     }
-    b.pop();
-    b.pop();
     if (amount >= 0.5 && i % 2 === 0) {
       const d: Vec3 = [
         hull.x(s),

@@ -19,10 +19,11 @@ export function terrainMesh(): MeshData {
   // Grille plus fine près de la caméra, plus lâche au loin.
   const xs: number[] = [];
   const zs: number[] = [];
-  for (let i = -1; i <= 1; i += 1 / 90)
-    xs.push(Math.sign(i) * Math.abs(i) ** 1.6 * 700);
-  for (let j = -1; j <= 1; j += 1 / 70)
-    zs.push(Math.sign(j) * Math.abs(j) ** 1.6 * 700);
+  // Le décor s'étend dans toutes les directions : la caméra peut tourner autour du navire.
+  for (let i = -1; i <= 1.0001; i += 1 / 110)
+    xs.push(Math.sign(i) * Math.abs(i) ** 2 * 2300);
+  for (let j = -1; j <= 1.0001; j += 1 / 110)
+    zs.push(Math.sign(j) * Math.abs(j) ** 2 * 2300);
   const nx = xs.length;
   const base = b.vertexCount;
   for (const z of zs)
@@ -50,18 +51,20 @@ export function mesasMesh(): MeshData {
     metal: 0,
     rough: 0.95,
   };
-  const spots: [number, number, number, number][] = [
-    [-1.25, 820, 170, 70],
-    [-0.9, 700, 110, 52],
-    [-0.62, 900, 220, 96],
-    [-0.3, 760, 90, 44],
-    [-0.08, 980, 260, 118],
-    [0.22, 820, 140, 64],
-    [0.48, 720, 100, 50],
-    [0.8, 950, 240, 104],
-    [1.1, 780, 120, 58],
-    [1.4, 860, 160, 72],
-  ];
+  // Couronne de mesas tout autour de l'horizon (angle, distance, largeur, hauteur).
+  const spots: [number, number, number, number][] = [];
+  for (let k = 0; k < 26; k++) {
+    const r1 = Math.sin(k * 12.9898) * 43758.5453;
+    const r2 = Math.sin(k * 78.233) * 12543.137;
+    const f1 = r1 - Math.floor(r1);
+    const f2 = r2 - Math.floor(r2);
+    spots.push([
+      (k / 26) * Math.PI * 2 + (f1 - 0.5) * 0.18,
+      620 + f2 * 520,
+      80 + f1 * 190,
+      40 + f2 * 80,
+    ]);
+  }
   spots.forEach(([ang, dist, w, h0], k) => {
     let h = h0;
     const cx = Math.sin(ang) * dist * 1.25;
@@ -69,6 +72,7 @@ export function mesasMesh(): MeshData {
     h *= 0.62;
     // Profil : talus d'éboulis, falaise en gradins, plateau.
     const prof: [number, number][] = [
+      [1.6, -30],
       [1.5, -8],
       [1.32, h * 0.12],
       [1.18, h * 0.3],
@@ -109,6 +113,9 @@ export function mesasMesh(): MeshData {
 }
 
 /** Rochers épars (sphères bosselées), pour donner de la profondeur. */
+/** Longueur de la bande de rochers qui défile en boucle (m). */
+export const ROCK_LOOP = 840;
+
 export function rocksMesh(): MeshData {
   const b = new MeshBuilder();
   const rock = {
@@ -116,12 +123,20 @@ export function rocksMesh(): MeshData {
     color: [0.4, 0.25, 0.15] as Vec3,
     metal: 0,
     rough: 0.95,
+    emit: 1,
   };
-  const spots: [number, number, number][] = [
-    [300, -260, 7],
-    [-340, -300, 9],
-    [420, -200, 5],
-  ];
+  // Rochers épars tout autour, à moyenne distance.
+  const spots: [number, number, number][] = [];
+  // Répartis sur une bande de 840 m le long du cap (la scène les fait défiler en boucle),
+  // à l'écart de l'aplomb du navire.
+  for (let k = 0; k < 16; k++) {
+    const fr = Math.sin(k * 91.7) * 4375.85;
+    const f = fr - Math.floor(fr);
+    const g = (k * 0.618034) % 1;
+    const x = -ROCK_LOOP / 2 + g * ROCK_LOOP;
+    const z = (k % 2 ? 1 : -1) * (35 + f * 135);
+    spots.push([x, z, 4 + f * 10]);
+  }
   spots.forEach(([x, z, r], k) => {
     b.grid(
       18,
@@ -135,9 +150,10 @@ export function rocksMesh(): MeshData {
             0.25 * Math.sin(a * 3 + k) * Math.cos(p * 2) +
             0.12 * Math.sin(a * 7 + p * 5 + k));
         return [
-          x + Math.cos(a) * Math.cos(p) * rr * 1.3,
-          -1.5 + Math.sin(p) * rr * 0.7 + r * 0.2,
-          z + Math.sin(a) * Math.cos(p) * rr,
+          x + Math.cos(a) * Math.cos(p) * rr * 1.6,
+          // Affleurement à moitié enfoui dans le sable, plus large que haut.
+          -r * 0.45 + Math.sin(p) * rr * 0.55,
+          z + Math.sin(a) * Math.cos(p) * rr * 1.2,
         ];
       },
       rock,

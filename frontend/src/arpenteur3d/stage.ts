@@ -2,6 +2,7 @@ import type { Build } from '../arpenteur/types';
 import {
   lighting,
   mesasMesh,
+  ROCK_LOOP,
   rocksMesh,
   terrainMesh,
   type DesertId,
@@ -150,9 +151,12 @@ export class Stage {
     if (view.ground !== false) {
       items.push({ mesh: this.env.terrain, model: identity() });
       items.push({ mesh: this.env.mesas, model: identity() });
+      // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
+      const off = -((time * 9) % ROCK_LOOP);
+      items.push({ mesh: this.env.rocks, model: translation(off, 0, 0) });
       items.push({
         mesh: this.env.rocks,
-        model: translation(-(((time * 9) % 400) - 200) * 0, 0, 0),
+        model: translation(off + ROCK_LOOP, 0, 0),
       });
     }
     items.push({ mesh: this.ship.body, model: shipM, shadow: true });
