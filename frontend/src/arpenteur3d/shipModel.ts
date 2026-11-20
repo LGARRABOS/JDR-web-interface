@@ -392,8 +392,9 @@ export class Hull {
       z = hb * Math.pow(Math.sin(phi), 0.9);
       y = yM - (yM - yK) * Math.pow(Math.cos(phi), 0.95);
     } else {
+      // Muraille rentrante (« tumblehome ») : la coque se resserre vers le pont.
       const t = (v - 0.66) / 0.34;
-      z = hb * (1 - 0.06 * t * t);
+      z = hb * (1 + 0.025 * Math.sin(t * Math.PI) - 0.14 * Math.pow(t, 1.7));
       y = yM + (yD - yM) * t;
     }
     return [this.x(s), y, z];
@@ -494,10 +495,10 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     rough: 0.75,
   };
   const sheath: Mat = {
-    p: P.PLATES,
-    color: linear('#b06a3c'),
+    p: P.PATINA,
+    color: linear('#9c5a34'),
     metal: 1,
-    rough: 0.45,
+    rough: 0.52,
   };
   const sail: Mat = {
     p: P.SAIL,
@@ -508,20 +509,21 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
   const lum = build.poupe.luminaires;
   const lampColor =
     lum === 'aether' ? AETHER : lum === 'braseros' ? FIRE : WARM;
-  const lampEmit = lum === 'aucun' ? 0 : opts.night ? 5 : 2.4;
+  const lampEmit = lum === 'aucun' ? 0 : opts.night ? 5 : 1.1;
   const glass: Mat = {
     p: P.GLASS,
     color: lampColor,
     metal: 0,
     rough: 0.05,
-    emit: lum === 'aucun' ? 0 : opts.night ? 3.2 : 1.4,
+    emit: lum === 'aucun' ? 0 : opts.night ? 3.2 : 0.55,
   };
+  // En plein jour, les lueurs restent visibles sans être surexposées.
   const aether = (e: number): Mat => ({
     p: P.EMIT,
     color: AETHER,
     metal: 0,
     rough: 0.4,
-    emit: e,
+    emit: e * (opts.night ? 1 : 0.6),
   });
 
   // --- Coque -----------------------------------------------------------------
@@ -637,8 +639,17 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       );
     }
   };
-  strip(0.985, 1, brass, 0.08);
-  strip(0.83, 0.85, brass, 0.07);
+  // Préceintes : épaisses ceintures de bois sombre, en saillie sur le bordé
+  // (la plus haute borde le pont).
+  const wale: Mat = {
+    p: P.WOOD,
+    color: linear('#3a2a1d'),
+    metal: 0,
+    rough: 0.85,
+  };
+  strip(0.975, 1, wale, 0.12);
+  strip(0.81, 0.845, wale, 0.16);
+  strip(0.895, 0.925, wale, 0.14);
   strip(
     0.395,
     0.415,
@@ -1206,14 +1217,20 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
         b.pop();
         b.pop();
         b.pop();
+        // Voile carrée : gonflée au centre, bordure basse relevée entre les écoutes,
+        // bords tendus par la ralingue.
         b.grid(
-          10,
-          8,
+          22,
+          16,
           (u, v) => {
-            const z = (u - 0.5) * w * (1 + v * 0.12);
-            const yy = ya - 0.2 - v * (ya - yb - 0.3);
+            const c = u * 2 - 1;
+            const z = c * (w / 2) * (1 + v * 0.12);
+            const foot = (1 - c * c) * 0.55 * v * v;
+            const yy = ya - 0.2 - v * (ya - yb - 0.3) + foot;
+            const edge = Math.pow(1 - c * c, 0.7);
             const belly =
-              Math.sin(u * Math.PI) * Math.sin(v * Math.PI * 0.9 + 0.2) * 1.9;
+              edge * Math.sin(v * Math.PI * 0.85 + 0.25) * 2.1 +
+              Math.sin(u * 9 + v * 3) * 0.06 * edge;
             return [0.3 + belly, yy, z];
           },
           sail,

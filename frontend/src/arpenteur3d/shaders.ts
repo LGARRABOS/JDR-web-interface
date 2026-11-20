@@ -145,8 +145,16 @@ void main(){
     float dirt = fbm(uv*vec2(.4, 1.2) + 4.);
     float streak = fbm(vec2(uv.x*2.2, uv.y*.25) + 9.);
     albedo *= mix(.75, 1.05, dirt) * mix(.72, 1.04, smoothstep(.25, .65, streak));
+    // Bois patiné : grisé par le soleil et le sable, plus clair sur les faces exposées,
+    // coulures sombres verticales et planches remplacées plus fraîches.
+    float lum = dot(albedo, vec3(.3, .55, .15));
+    float bleach = clamp(.28 + .3*N.y + (dirt-.5)*.4, 0., .7);
+    albedo = mix(albedo, vec3(lum)*vec3(1.08, 1., .9)*1.12, bleach);
+    float drip = smoothstep(.55, .85, fbm(vec2(uv.x*3.5, uv.y*.12) + 2.)) * smoothstep(.3, .7, fbm(uv*vec2(1.5, .5)));
+    albedo *= 1. - drip*.35;
+    albedo = mix(albedo, albedo*vec3(1.15, .95, .8), step(.94, id)*.6);
     h = seam*.008 + grain*.0015;
-    rough = clamp(rough + (grain-.5)*.15, .3, 1.);
+    rough = clamp(rough + .1 + (grain-.5)*.15 + drip*.05, .4, 1.);
   } else if (pat == 2. || pat == 5.) {
     vec3 pl = plates(uv, mpp);
     albedo *= (.86 + .2*fract(pl.z)) * mix(.55, 1., pl.y);
@@ -156,7 +164,7 @@ void main(){
     rough = clamp(rough + (grime-.5)*.25 + (1.-pl.y)*.2, .15, 1.);
     if (pat == 5.) {
       float streak = fbm(vec2(uv.x*2.6, uv.y*.45)) + fbm(uv*1.3)*.6;
-      float m = smoothstep(.98, 1.25, streak + (1.-pl.y)*.2) * .85;
+      float m = smoothstep(.88, 1.2, streak + (1.-pl.y)*.25) * .85;
       albedo = mix(albedo, vec3(.05, .17, .13), m);
       metal = mix(metal, 0., m);
       rough = mix(rough, .85, m);
@@ -172,6 +180,8 @@ void main(){
     float wrinkle = (sin(uv.y*7. + noise(uv*.8)*5.) * .5 + .5) * detail(mpp, 2.);
     float dirt = fbm(uv*vec2(.5, .8));
     albedo *= mix(.78, 1., seam) * (.94 + weave) * mix(.8, 1.05, dirt);
+    // Toile vieillie : jaunie vers le bas, auréoles de sable.
+    albedo *= mix(vec3(1.), vec3(.92, .86, .74), smoothstep(.4, .9, fbm(uv*vec2(.3, .15) + 7.)));
     h = (1.-seam)*.002 + wrinkle*.004;
   } else if (pat == 7.) {
     float pulse = .82 + .18*sin(uTime*3. + uv.x*2.);
@@ -214,7 +224,8 @@ void main(){
   vec3 V = normalize(uCam - vWorld);
   vec3 L = uSunDir;
   float NdLr = dot(N, L);
-  float NdL = max(NdLr, 0.);
+  // La toile diffuse la lumière : éclairage « enveloppant » pour les voiles.
+  float NdL = pat == 6. ? max((NdLr + .35)/1.35, 0.) : max(NdLr, 0.);
   float sh = shadowAt(vLight, NdLr);
   vec3 H = normalize(L + V);
   float NdH = max(dot(N, H), 0.), NdV = max(dot(N, V), 1e-3), VdH = max(dot(V, H), 0.);
@@ -230,7 +241,9 @@ void main(){
   vec3 direct = (kd*albedo/3.14159 + spec) * uSunColor * NdL * sh * 3.14159;
   vec3 amb = mix(uGround*.9, uZenith, N.y*.5+.5) * mix(.55, 1., clamp(N.y*.5+.6, 0., 1.));
   // Occlusion approchée : ce que le soleil ne voit pas reçoit aussi moins de ciel.
-  amb *= mix(.62, 1., sh);
+  // Les voiles, fines et claires, reçoivent la lumière renvoyée par le sable et les autres voiles.
+  amb *= pat == 6. ? 1.35 : mix(.62, 1., sh);
+  if (pat == 6.) amb += uGround*.35*(1. - sh);
   vec3 R = reflect(-V, N);
   vec3 Fr = F0 + (max(vec3(1.-rough), F0) - F0)*pow(clamp(1.-NdV, 0., 1.), 5.);
   vec3 env = mix(skyColor(R), amb, clamp(rough*1.2, 0., 1.));
@@ -243,16 +256,9 @@ void main(){
     pods += uPodColor * uPods[i].w * max(dot(N, d*inversesqrt(l2)), 0.) / (1. + l2*.18);
   }
   vec3 col = kd*albedo*(amb + pods) + Fr*env*so + direct + emit;
-  // Vernis (bois, peinture) : second reflet net par-dessus.
-  if (pat == 1. || pat == 11. || pat == 0.) {
-    float ca = .02, ca2 = ca*ca;
-    float cd = NdH*NdH*(ca2-1.)+1.;
-    float cF = .04 + .96*pow(clamp(1.-VdH, 0., 1.), 5.);
-    col += uSunColor * NdL * sh * cF * ca2/(3.14159*cd*cd) * .25 * .25;
-    col += skyColor(R) * (.04 + .96*pow(clamp(1.-NdV, 0., 1.), 5.)) * .18 * so;
-  }
   // Voiles : la lumière traverse la toile.
-  if (pat == 6.) col += albedo * uSunColor * (max(-NdLr, 0.)*.6 + pow(max(dot(-V, L), 0.), 4.)*.35) * sh * (1. - uNight*.6);
+  // (la toile s'ombre elle-même dans la carte d'ombres : on n'en garde qu'une part)
+  if (pat == 6.) col += albedo * uSunColor * (max(-NdLr, 0.)*.75 + pow(max(dot(-V, L), 0.), 4.)*.4) * mix(.65, 1., sh) * (1. - uNight*.6);
   // Atmosphère : brume plus dense au ras du sable, éclairée côté soleil.
   float dist = length(vWorld - uCam);
   vec3 fd = (vWorld - uCam)/max(dist, 1e-3);
