@@ -1,4 +1,5 @@
 import type { Build } from '../arpenteur/types';
+import { defaultBuild } from '../arpenteur/defaults';
 import {
   lighting,
   mesasMesh,
@@ -27,7 +28,7 @@ import {
   type Lighting,
 } from './renderer';
 import { MeshBuilder, P } from './geometry';
-import { cityMesh, journeyMesh, lerpLighting, veil } from './city';
+import { BERTHS, cityMesh, journeyMesh, veil } from './city';
 import {
   buildShip,
   crewMeshes,
@@ -93,7 +94,23 @@ interface Journey {
   table: Float32Array;
   total: number;
   base: number;
-  props: GpuMesh;
+  /** Paysages croisés avant et après la tempête (changement de zone). */
+  propsA: GpuMesh;
+  propsB: GpuMesh;
+}
+
+/** Ville chargée : décor, amarres, habitants et autres navires. */
+interface CityRt {
+  city: GpuMesh;
+  moor: GpuMesh;
+  crowd: CrewMember[];
+  ships: {
+    body: GpuMesh;
+    glows: GpuMesh;
+    x: number;
+    z: number;
+    cycle?: { period: number; phase: number };
+  }[];
 }
 
 const ease = (t: number) => {
@@ -128,7 +145,9 @@ export class Stage {
   private light: Lighting;
   private mood: Mood = 'dusk';
   private place: Place = {};
-  private cities = new Map<string, { city: GpuMesh; moor: GpuMesh }>();
+  private cities = new Map<string, CityRt>();
+  /** Habillages des habitants (trois tenues). */
+  private folk: { torso: GpuMesh; leg: GpuMesh; arm: GpuMesh }[] = [];
   private journey: Journey | null = null;
   private scrollPos = 0;
   private lastT = -1;
@@ -192,9 +211,8 @@ export class Stage {
       table,
       total,
       base: this.scrollPos,
-      props: this.r.upload(
-        journeyMesh(scKey(from) + scKey(to), total, mood === 'night')
-      ),
+      propsA: this.r.upload(journeyMesh('a' + scKey(from), total)),
+      propsB: this.r.upload(journeyMesh('b' + scKey(to), total)),
     };
   }
 
@@ -204,7 +222,8 @@ export class Stage {
 
   private endJourney() {
     if (!this.journey) return;
-    this.r.release(this.journey.props);
+    this.r.release(this.journey.propsA);
+    this.r.release(this.journey.propsB);
     this.journey = null;
   }
 
@@ -215,21 +234,47 @@ export class Stage {
     this.place = place;
   }
 
-  /** Maillages d'une ville (construits à la demande, gardés en cache). */
-  private cityOf(c: { id: string; capital?: boolean }) {
+  /** Ville (construite à la demande, gardée en cache). */
+  private cityOf(c: { id: string; capital?: boolean }): CityRt | null {
     let m = this.cities.get(c.id);
     if (!m && this.ship) {
+      const night = this.mood === 'night';
       const d = cityMesh({
         id: c.id,
         capital: c.capital,
-        night: this.mood === 'night',
+        night,
         halfBeam: this.ship.parts.halfBeam,
         length: this.ship.parts.length,
         hover: HOVER_DOCK,
       });
-      m = { city: this.r.upload(d.city), moor: this.r.upload(d.moor) };
+      // Autres navires du port, chacun avec sa silhouette et ses couleurs.
+      const ships = BERTHS.map((q, k) => {
+        const parts = buildShip(npcBuild(c.id, k), { crew: 0, night });
+        return {
+          body: this.r.upload(parts.body),
+          glows: this.r.upload(parts.glows),
+          x: q.x,
+          z: q.z,
+          cycle: q.cycle,
+        };
+      });
+      m = {
+        city: this.r.upload(d.city),
+        moor: this.r.upload(d.moor),
+        crowd: d.crowd,
+        ships,
+      };
       this.cities.set(c.id, m);
     }
+    if (!this.folk.length)
+      this.folk = FOLK.map((st) => {
+        const f = crewMeshes(st);
+        return {
+          torso: this.r.upload(f.torso),
+          leg: this.r.upload(f.leg),
+          arm: this.r.upload(f.arm),
+        };
+      });
     return m ?? null;
   }
 
@@ -237,8 +282,53 @@ export class Stage {
     for (const m of this.cities.values()) {
       this.r.release(m.city);
       this.r.release(m.moor);
+      for (const sh of m.ships) {
+        this.r.release(sh.body);
+        this.r.release(sh.glows);
+      }
     }
     this.cities.clear();
+  }
+
+  /** Dessine une ville décalée de `cx` le long du cap, avec sa vie. */
+  private drawCity(
+    c: CityRt,
+    cx: number,
+    time: number,
+    items: DrawItem[],
+    glows: DrawItem[],
+    moored: boolean
+  ) {
+    const base = translation(cx, 0, 0);
+    items.push({ mesh: c.city, model: base, shadow: Math.abs(cx) < 200 });
+    if (moored) items.push({ mesh: c.moor, model: base });
+    if (Math.abs(cx) > 900) return;
+    for (const sh of c.ships) {
+      // Arrivée, escale, départ, puis absence ; les navires filent vers +x.
+      let x = sh.x;
+      let dock = 1;
+      if (sh.cycle) {
+        const t = (time + sh.cycle.phase) % sh.cycle.period;
+        if (t < 22) {
+          const u = 1 - ease(t / 22);
+          x = sh.x - 900 * u * u;
+          dock = smooth(14, 22, t);
+        } else if (t < 52) dock = 1;
+        else if (t < 74) {
+          const u = (t - 52) / 22;
+          x = sh.x + 900 * u * u;
+          dock = 1 - smooth(52, 58, t);
+        } else continue;
+      }
+      const y = HOVER_DOCK + (HOVER - HOVER_DOCK) * (1 - dock);
+      const bob = Math.sin(time * 1.1 + sh.x) * 0.3 * (1 - dock * 0.8);
+      const mdl = chain(base, translation(x, y + bob, sh.z));
+      items.push({ mesh: sh.body, model: mdl });
+      glows.push({ mesh: sh.glows, model: mdl });
+    }
+    c.crowd.forEach((p, k) =>
+      poseCrew(items, this.folk[k % this.folk.length], base, p, time)
+    );
   }
 
   setShip(build: Build, opts: StageOptions = {}) {
@@ -301,6 +391,9 @@ export class Stage {
     let calmX = 0;
     const j = this.journey;
     let finished = false;
+    let storm = 0;
+    let stormColor: Vec3 = [0.8, 0.62, 0.42];
+    let cityDraw: { rt: CityRt; x: number; moored: boolean } | null = null;
     // Pendant le voyage, la caméra passe derrière le navire pour regarder
     // devant lui : on voit le paysage arriver et la ville grandir à l'horizon.
     let chase = 0;
@@ -313,50 +406,33 @@ export class Stage {
       const fc = j.from.place.city;
       const tc = j.to.place.city;
       dock = (fc ? 1 - smooth(0, 0.07, p) : 0) + (tc ? smooth(0.9, 1, p) : 0);
-      const cities: {
-        x: number;
-        m: { city: GpuMesh; moor: GpuMesh } | null;
-      }[] = [];
-      if (fc) cities.push({ x: -dist, m: this.cityOf(fc) });
-      if (tc) cities.push({ x: j.total - dist, m: this.cityOf(tc) });
-      for (const c of cities) {
-        if (!c.m || Math.abs(c.x) > 2400) continue;
-        scenery.push({
-          mesh: c.m.city,
-          model: translation(c.x, 0, 0),
-          shadow: Math.abs(c.x) < 200,
-        });
-      }
-      if (fc && p < 0.012) {
-        const m = this.cityOf(fc);
-        if (m) scenery.push({ mesh: m.moor, model: translation(-dist, 0, 0) });
-      }
-      const near = cities.reduce<number | null>(
-        (a, c) => (a === null || Math.abs(c.x) < Math.abs(a) ? c.x : a),
-        null
-      );
-      if (near !== null) {
+      // Changement de zone au cœur de la tempête : avant, le décor de départ ;
+      // après, celui d'arrivée. Rien ne disparaît à découvert.
+      const after = p >= 0.5;
+      const cityX = after ? j.total - dist : -dist;
+      const c = after ? tc : fc;
+      if (c) {
+        const rt = this.cityOf(c);
+        if (rt && Math.abs(cityX) < 2400)
+          cityDraw = { rt, x: cityX, moored: !after && p < 0.012 };
         calm = 1;
-        calmX = near;
+        calmX = cityX;
       }
       scenery.push({
-        mesh: j.props,
+        mesh: after ? j.propsB : j.propsA,
         model: translation(-dist, 0, 0),
         drape: true,
       });
-      const v = 0.5 * smooth(0.42, 0.49, p) * (1 - smooth(0.51, 0.58, p));
-      light = veil(
-        lerpLighting(j.fromLight, j.toLight, smooth(0.36, 0.64, p)),
-        v
-      );
+      storm = smooth(0.36, 0.47, p) * (1 - smooth(0.53, 0.66, p));
+      light = veil(after ? j.toLight : j.fromLight, storm * 0.7);
+      stormColor = stormTint(after ? j.toLight : j.fromLight);
       finished = p >= 1;
       chase = smooth(0.04, 0.2, p) * (1 - smooth(0.86, 0.99, p));
     } else {
       if (!this.place.city) this.scrollPos += CRUISE * dt;
       const c = this.place.city ? this.cityOf(this.place.city) : null;
       if (c) {
-        scenery.push({ mesh: c.city, model: identity(), shadow: true });
-        scenery.push({ mesh: c.moor, model: identity() });
+        cityDraw = { rt: c, x: 0, moored: true };
         calm = 1;
       }
     }
@@ -377,6 +453,15 @@ export class Stage {
       items.push({ mesh: this.env.terrain, model: identity() });
       items.push({ mesh: this.env.mesas, model: identity() });
       items.push(...scenery);
+      if (cityDraw)
+        this.drawCity(
+          cityDraw.rt,
+          cityDraw.x,
+          time,
+          items,
+          glows,
+          cityDraw.moored
+        );
       if (!calm || Math.abs(calmX) > 900) {
         // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
         const off = -(this.scrollPos % ROCK_LOOP);
@@ -432,6 +517,8 @@ export class Stage {
       scroll: this.scrollPos,
       calm,
       calmX,
+      storm,
+      stormColor,
       shadowCenter: [shipX * 0.5, hover, 0],
       shadowRadius: parts.radius + 14 + Math.abs(shipX) * 0.5,
       pods,
@@ -448,11 +535,71 @@ export class Stage {
     this.disposeShip();
     this.endJourney();
     this.clearCities();
+    for (const f of this.folk) {
+      this.r.release(f.torso);
+      this.r.release(f.leg);
+      this.r.release(f.arm);
+    }
     this.r.release(this.env.terrain);
     this.r.release(this.env.mesas);
     this.r.release(this.env.rocks);
     this.r.dispose();
   }
+}
+
+/** Couleur de la tempête (espace d'affichage) d'après le sable du désert. */
+function stormTint(l: Lighting): Vec3 {
+  const g = (v: number) => Math.pow(Math.min(1, v), 1 / 2.2);
+  return [
+    g(l.sandB[0] * 1.5 + l.horizon[0] * 0.5),
+    g(l.sandB[1] * 1.5 + l.horizon[1] * 0.5),
+    g(l.sandB[2] * 1.5 + l.horizon[2] * 0.5),
+  ];
+}
+
+/** Tenues des habitants des villes. */
+const FOLK = [
+  { body: '#7a3a2a', accent: '#d8b45a' },
+  { body: '#2f4f5a', accent: '#c9a227' },
+  { body: '#d8ccb0', accent: '#8a2f24' },
+];
+
+/** Navire de passage : allure et couleurs tirées d'après la ville et le poste. */
+function npcBuild(seed: string, k: number): Build {
+  let h = k * 7919;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const pick = <T>(a: T[]) =>
+    a[(h = (h * 1103515245 + 12345) >>> 0) % a.length];
+  const b = defaultBuild();
+  b.allure = pick([
+    'escorteur',
+    'survivor',
+    'protector',
+    'bombardier',
+    'fleche',
+    'forteresse',
+    'enforceur',
+    'gouverneur',
+  ] as const);
+  b.mats = {
+    ...b.mats,
+    type: pick(['double', 'triple', 'pique'] as const),
+    sailColor: pick(['#e8dcc0', '#c9b48a', '#d8c8a8', '#b8a080', '#e0d0b8']),
+    flagColor: pick(['#1f4f5a', '#2f5a2f', '#5a2f5a', '#c9a227', '#3a3a6a']),
+  };
+  b.coque = {
+    ...b.coque,
+    material: pick(['chene', 'beaulou', 'boisfer', 'cuivre'] as const),
+  };
+  b.poupe = {
+    ...b.poupe,
+    material: pick(['chene', 'sombrefer', 'beaulou'] as const),
+  };
+  b.deco = {
+    bands: [pick(['#1f4f5a', '#8a2f24', '#2f5a2f', '#c9a227'])],
+    trim: '#c9a227',
+  };
+  return b;
 }
 
 const scKey = (s: Scene) => `${s.desert}:${s.place.city?.id ?? ''}`;

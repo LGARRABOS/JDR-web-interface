@@ -425,8 +425,13 @@ precision highp float;
 in vec2 vUv;
 uniform sampler2D uTex, uBloomA, uBloomB;
 uniform float uExposure, uBloom, uGrain, uTime;
+// Tempête de sable plein écran : densité 0..1, couleur, horloge, format.
+uniform float uStorm, uStormT, uAspect;
+uniform vec3 uStormColor;
 out vec4 o;
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+float sfbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vnoise(p);p=p*2.07+vec2(3.1,1.7);a*=.5;}return s;}
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14), 0., 1.); }
 void main(){
   vec2 q = vUv-.5;
@@ -442,6 +447,21 @@ void main(){
   c = mix(c, c*c*(3.-2.*c), .22);
   c += vec3(.012, .004, -.01)*smoothstep(.5, 1., l) + vec3(-.006, 0., .012)*(1.-smoothstep(0., .4, l));
   c *= 1. - dot(q, q)*.55;
+  if (uStorm > 0.001) {
+    // Rideaux de sable qui roulent de droite à gauche, nappes plus denses,
+    // filets de grains rapides : la scène disparaît dans la tempête.
+    vec2 p = vec2(vUv.x*uAspect, vUv.y);
+    float t = uStormT;
+    vec2 warp = vec2(sfbm(p*1.3 + vec2(t*.35, t*.1)), sfbm(p*1.3 + vec2(-t*.2, t*.27)+5.));
+    float big = sfbm(p*vec2(1.6, 2.6) + warp*1.6 + vec2(t*1.1, 0.));
+    float mid = sfbm(p*vec2(5., 9.) + warp*.8 + vec2(t*3.4, t*.2));
+    float grains = smoothstep(.8, 1., vnoise(vec2(p.x*2.2 + t*7., p.y*90.))) * smoothstep(.3, .7, sfbm(p*3. + t*.5));
+    float dens = uStorm*(.62 + .55*(big-.5) + .3*(mid-.5)) + uStorm*uStorm*.35;
+    vec3 sc = uStormColor*(.82 + .38*big) + vec3(.05,.03,0.)*mid;
+    c = mix(c, sc, clamp(dens, 0., .96));
+    c += uStormColor*grains*uStorm*.12;
+    c *= 1. - uStorm*.18*(1.-vUv.y);
+  }
   c += (hash(vUv*vec2(1733., 977.) + uTime) - .5) * uGrain;
   o = vec4(c, 1.);
 }`;

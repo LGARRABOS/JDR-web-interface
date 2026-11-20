@@ -322,6 +322,9 @@ export class Renderer {
       calm?: number;
       /** Abscisse du centre de la zone aplanie (ville qui défile). */
       calmX?: number;
+      /** Tempête de sable plein écran (0..1) et sa couleur (affichage). */
+      storm?: number;
+      stormColor?: Vec3;
       shadowCenter: Vec3;
       shadowRadius: number;
       pods?: { pos: Vec3; power: number }[];
@@ -542,6 +545,16 @@ export class Renderer {
       gl.uniform1f(this.u(this.composite, 'uBloom'), light.bloom);
       gl.uniform1f(this.u(this.composite, 'uGrain'), 0.018);
       gl.uniform1f(this.u(this.composite, 'uTime'), opts.time % 10);
+      gl.uniform1f(this.u(this.composite, 'uStorm'), opts.storm ?? 0);
+      gl.uniform1f(this.u(this.composite, 'uStormT'), opts.time % 1000);
+      gl.uniform1f(
+        this.u(this.composite, 'uAspect'),
+        this.width / Math.max(1, this.height)
+      );
+      gl.uniform3fv(
+        this.u(this.composite, 'uStormColor'),
+        opts.stormColor ?? [0.8, 0.62, 0.42]
+      );
     });
   }
 
