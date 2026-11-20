@@ -1071,45 +1071,81 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       shape: c.shape,
     });
     if (c.shape === 'dome') {
+      // Dôme de cuivre posé sur un tambour octogonal en bois percé de
+      // fenêtres, ceinturé de moulures : il fait corps avec la dunette.
       const s = (sa + split) / 2;
       const y = base(s) + height(s);
-      const rx = Math.min(3.4, ((split - sa) * hull.L) / 2 - 0.8);
-      const rz = Math.min(3.2, width(s) - 0.5);
-      b.push(chain(translation(hull.x(s), y, 0), scaling(rx, 2.1, rz)));
-      b.sphere(
-        1,
-        40,
-        { p: P.PATINA, color: linear('#a8683a'), metal: 1, rough: 0.5 },
-        true
+      const x = cx(s);
+      const R = Math.max(
+        1.2,
+        Math.min(2.3, width(s) - 1.1, ((split - sa) * hull.L) / 2 - 1.2)
       );
-      for (let k = 0; k < 12; k++) {
-        b.push(rotationY((k / 12) * Math.PI * 2));
+      const H = 1.3;
+      b.push(translation(x, y - 0.05, 0));
+      b.lathe(
+        [
+          [R + 0.3, 0],
+          [R + 0.3, 0.22],
+          [R, 0.22],
+          [R, H],
+          [R + 0.16, H],
+          [R + 0.16, H + 0.16],
+          [R * 0.98, H + 0.16],
+        ],
+        8,
+        castleMat
+      );
+      b.pop();
+      for (let k = 0; k < 8; k++) {
+        const a = ((k + 0.5) / 8) * Math.PI * 2;
+        const rr = R * Math.cos(Math.PI / 8) + 0.02;
+        window(
+          b,
+          [x + Math.cos(a) * rr, y + 0.75, Math.sin(a) * rr],
+          [Math.cos(a), 0, Math.sin(a)],
+          0.42,
+          0.7,
+          glass,
+          brass
+        );
+      }
+      const dome: Mat = {
+        p: P.PATINA,
+        color: linear('#b0703e'),
+        metal: 0.85,
+        rough: 0.62,
+      };
+      b.push(chain(translation(x, y + H + 0.1, 0), scaling(1, 0.85, 1)));
+      b.sphere(R, 32, dome, true);
+      for (let k = 0; k < 8; k++) {
+        b.push(rotationY(((k + 0.5) / 8) * Math.PI * 2));
         const arc: Vec3[] = [];
-        for (let i = 0; i <= 12; i++) {
-          const a = (i / 12) * (Math.PI / 2);
-          arc.push([Math.cos(a) * 1.005, Math.sin(a) * 1.005, 0]);
+        for (let i2 = 0; i2 <= 12; i2++) {
+          const a = (i2 / 12) * (Math.PI / 2);
+          arc.push([Math.cos(a) * (R + 0.02), Math.sin(a) * (R + 0.02), 0]);
         }
-        b.tube(arc, 0.025, 4, brass);
+        b.tube(arc, 0.05, 4, brass);
         b.pop();
       }
       b.pop();
-      // Coupole vitrée.
-      b.push(translation(hull.x(s), y + 2.0, 0));
-      b.sphere(1.0, 28, { ...glass, emit: (glass.emit ?? 0) * 0.6 }, true);
-      for (let k = 0; k < 8; k++) {
-        b.push(rotationY((k / 8) * Math.PI * 2));
-        b.push(chain(rotationZ(-0.02), scaling(1.02, 1.02, 1.02)));
-        const arc: Vec3[] = [];
-        for (let i = 0; i <= 10; i++) {
-          const a = (i / 10) * (Math.PI / 2);
-          arc.push([Math.cos(a), Math.sin(a), 0]);
-        }
-        b.tube(arc, 0.04, 5, brass);
-        b.pop();
-        b.pop();
-      }
-      b.push(translation(0, 1.0, 0));
-      b.sphere(0.18, 12, brass);
+      // Petite lanterne vitrée au sommet.
+      const yt = y + H + 0.1 + R * 0.85;
+      b.push(translation(x, yt - 0.05, 0));
+      b.cylinder(0.32, 0.12, 12, brass);
+      b.push(translation(0, 0.12, 0));
+      b.cylinder(0.24, 0.5, 8, { ...glass, emit: (glass.emit ?? 0) * 0.8 });
+      b.pop();
+      b.push(translation(0, 0.62, 0));
+      b.lathe(
+        [
+          [0.34, 0],
+          [0.2, 0.22],
+          [0.04, 0.42],
+          [0, 0.5],
+        ],
+        8,
+        dome
+      );
       b.pop();
       b.pop();
     }
