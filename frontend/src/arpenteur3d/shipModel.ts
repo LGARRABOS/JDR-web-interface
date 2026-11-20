@@ -471,6 +471,9 @@ export interface ShipParts {
   radius: number;
   top: number;
   bottom: number;
+  /** Demi-largeur au maître-bau et longueur de coque (m). */
+  halfBeam: number;
+  length: number;
   /** Équipage animé (repère du navire), et ses couleurs. */
   crew: CrewMember[];
   crewStyle: CrewStyle;
@@ -1673,6 +1676,8 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     top,
     bottom,
     crew: crewMembers,
+    halfBeam: hull.halfBeam(0.5),
+    length: hull.L,
     crewStyle: { body: build.tenue.color, accent: build.tenue.accent },
   };
 }

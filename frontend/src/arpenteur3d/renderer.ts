@@ -316,6 +316,8 @@ export class Renderer {
     opts: {
       time: number;
       scroll: number;
+      /** 0 = dunes, 1 = sol aplani autour d'une ville. */
+      calm?: number;
       shadowCenter: Vec3;
       shadowRadius: number;
       pods?: { pos: Vec3; power: number }[];
@@ -399,6 +401,7 @@ export class Renderer {
     gl.uniform3fv(this.u(m, 'uRockA'), light.rockA);
     gl.uniform3fv(this.u(m, 'uRockB'), light.rockB);
     gl.uniform1f(this.u(m, 'uScroll'), opts.scroll);
+    gl.uniform1f(this.u(m, 'uCalm'), opts.calm ?? 0);
     gl.uniform1f(this.u(m, 'uShadowOn'), shadowOn ? 1 : 0);
     const pods = (opts.pods ?? []).slice(0, 8);
     const pd = new Float32Array(32);

@@ -27,6 +27,7 @@ import {
   type Lighting,
 } from './renderer';
 import { MeshBuilder, P } from './geometry';
+import { cityMesh, lerpLighting, veil } from './city';
 import {
   buildShip,
   crewMeshes,
@@ -64,6 +65,36 @@ export interface ViewOptions {
 }
 
 const HOVER = 13;
+/** Hauteur de vol à quai (le pont arrive au niveau du quai). */
+const HOVER_DOCK = 9;
+/** Vitesse de croisière (défilement du sable, m/s). */
+const CRUISE = 9;
+
+/** Où se trouve le navire : en plein désert, ou amarré dans une ville. */
+export interface Place {
+  city?: { id: string; capital?: boolean };
+}
+
+interface Transition {
+  start: number;
+  from: Lighting;
+  to: Lighting;
+  toDesert: DesertId;
+  toMood: Mood;
+  toPlace: Place;
+  fromCity: boolean;
+  toCity: boolean;
+  swapped: boolean;
+}
+
+const ease = (t: number) => {
+  const u = Math.min(1, Math.max(0, t));
+  return u * u * (3 - 2 * u);
+};
+const smooth = (a: number, b: number, x: number) => ease((x - a) / (b - a));
+/** Durée d'une transition de secteur et instant du changement de décor (s). */
+const T_SWAP = 2.5;
+const T_END = 6.2;
 const CREW_SCALE = 1.4;
 
 export class Stage {
@@ -79,6 +110,11 @@ export class Stage {
   } | null = null;
   private light: Lighting;
   private mood: Mood = 'dusk';
+  private place: Place = {};
+  private city: { city: GpuMesh; moor: GpuMesh } | null = null;
+  private trans: Transition | null = null;
+  private scrollPos = 0;
+  private lastT = -1;
 
   constructor(canvas: HTMLCanvasElement, opts: { preserve?: boolean } = {}) {
     this.r = new Renderer(canvas, opts);
@@ -90,9 +126,61 @@ export class Stage {
     this.light = lighting('mahibori', 'dusk');
   }
 
-  setEnvironment(desert: DesertId, mood: Mood) {
+  setEnvironment(desert: DesertId, mood: Mood, place: Place = {}) {
+    this.trans = null;
+    this.applyEnv(desert, mood, place);
+  }
+
+  /**
+   * Voyage animé vers un nouveau secteur : le navire accélère dans une tempête
+   * de sable, le décor change au plus fort du voile ; arrivé dans une ville, il
+   * glisse jusqu'au quai et s'amarre ; en partant, il se détache et file.
+   */
+  travel(desert: DesertId, mood: Mood, place: Place = {}) {
+    this.trans = {
+      start: -1,
+      from: this.light,
+      to: lighting(desert, mood),
+      toDesert: desert,
+      toMood: mood,
+      toPlace: place,
+      fromCity: !!this.place.city,
+      toCity: !!place.city,
+      swapped: false,
+    };
+  }
+
+  get traveling() {
+    return !!this.trans;
+  }
+
+  private applyEnv(desert: DesertId, mood: Mood, place: Place) {
+    const moodChanged = mood !== this.mood;
     this.light = lighting(desert, mood);
     this.mood = mood;
+    const changed =
+      (place.city?.id ?? '') !== (this.place.city?.id ?? '') || moodChanged;
+    this.place = place;
+    if (changed) this.buildCity();
+  }
+
+  private buildCity() {
+    if (this.city) {
+      this.r.release(this.city.city);
+      this.r.release(this.city.moor);
+      this.city = null;
+    }
+    const c = this.place.city;
+    if (!c || !this.ship) return;
+    const m = cityMesh({
+      id: c.id,
+      capital: c.capital,
+      night: this.mood === 'night',
+      halfBeam: this.ship.parts.halfBeam,
+      length: this.ship.parts.length,
+      hover: HOVER_DOCK,
+    });
+    this.city = { city: this.r.upload(m.city), moor: this.r.upload(m.moor) };
   }
 
   setShip(build: Build, opts: StageOptions = {}) {
@@ -117,6 +205,11 @@ export class Stage {
         };
       })(),
     };
+    this.afterShip();
+  }
+
+  private afterShip() {
+    this.buildCity();
   }
 
   private disposeShip() {
@@ -138,11 +231,54 @@ export class Stage {
   render(time: number, view: ViewOptions = {}) {
     if (!this.ship) return;
     const { parts } = this.ship;
-    const bob = Math.sin(time * 1.2) * 0.35;
-    const roll = Math.sin(time * 0.9) * 0.012;
-    const pitchA = Math.sin(time * 0.7 + 1) * 0.008;
+    const dt =
+      this.lastT < 0 ? 0 : Math.min(0.1, Math.max(0, time - this.lastT));
+    this.lastT = time;
+    // --- Voyage en cours : vitesse, position, voile de sable, changement de décor ---
+    let speed = this.place.city ? 0 : 1;
+    let shipX = 0;
+    let dock = this.place.city ? 1 : 0;
+    let light = this.light;
+    let moored = !!this.place.city;
+    const tr = this.trans;
+    if (tr) {
+      if (tr.start < 0) tr.start = time;
+      const e = time - tr.start;
+      if (e < T_SWAP) {
+        if (tr.fromCity) {
+          // Largue les amarres, s'élève et quitte le quai.
+          shipX = 75 * Math.pow(Math.min(1, e / T_SWAP), 2);
+          dock = 1 - smooth(0, 1.6, e);
+          speed = 0;
+          moored = false;
+        } else speed = 1 + 4 * smooth(0, 1.5, e);
+      } else {
+        if (!tr.swapped) {
+          tr.swapped = true;
+          this.applyEnv(tr.toDesert, tr.toMood, tr.toPlace);
+        }
+        const u = (e - T_SWAP) / (T_END - T_SWAP);
+        if (tr.toCity) {
+          // Entre au port en ralentissant et vient se ranger le long du quai.
+          const k = ease(u);
+          shipX = -75 * (1 - k) * (1 - k);
+          dock = k;
+          speed = 0;
+          moored = u > 0.97;
+        } else speed = 5 - 4 * smooth(0, 1, u);
+      }
+      const v = smooth(1.0, 2.3, e) * (1 - smooth(2.7, 4.3, e));
+      light = veil(lerpLighting(tr.from, tr.to, smooth(2.2, 2.8, e)), v);
+      if (e >= T_END) this.trans = null;
+    }
+    this.scrollPos += CRUISE * speed * dt;
+    const hover = HOVER + (HOVER_DOCK - HOVER) * dock;
+    const calmBob = 1 - dock * 0.8;
+    const bob = Math.sin(time * 1.2) * 0.35 * calmBob;
+    const roll = Math.sin(time * 0.9) * 0.012 * calmBob;
+    const pitchA = Math.sin(time * 0.7 + 1) * 0.008 * calmBob;
     const shipM = chain(
-      translation(0, HOVER + bob, 0),
+      translation(shipX, hover + bob, 0),
       rotationX(roll),
       rotationZ(pitchA)
     );
@@ -151,13 +287,18 @@ export class Stage {
     if (view.ground !== false) {
       items.push({ mesh: this.env.terrain, model: identity() });
       items.push({ mesh: this.env.mesas, model: identity() });
-      // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
-      const off = -((time * 9) % ROCK_LOOP);
-      items.push({ mesh: this.env.rocks, model: translation(off, 0, 0) });
-      items.push({
-        mesh: this.env.rocks,
-        model: translation(off + ROCK_LOOP, 0, 0),
-      });
+      if (this.city) {
+        items.push({ mesh: this.city.city, model: identity(), shadow: true });
+        if (moored) items.push({ mesh: this.city.moor, model: identity() });
+      } else {
+        // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
+        const off = -(this.scrollPos % ROCK_LOOP);
+        items.push({ mesh: this.env.rocks, model: translation(off, 0, 0) });
+        items.push({
+          mesh: this.env.rocks,
+          model: translation(off + ROCK_LOOP, 0, 0),
+        });
+      }
     }
     items.push({ mesh: this.ship.body, model: shipM, shadow: true });
     for (const f of this.ship.fans)
@@ -173,7 +314,7 @@ export class Stage {
     const fov = view.fov ?? 0.36;
     const yaw = view.yaw ?? 0.55;
     const dirH: Vec3 = [Math.sin(yaw), 0, Math.cos(yaw)];
-    const cy = HOVER + (parts.top + parts.bottom) / 2 + 1;
+    const cy = hover + (parts.top + parts.bottom) / 2 + 1;
     const halfH = (parts.top - parts.bottom) / 2 + 1;
     const halfW = parts.radius * (0.55 + 0.45 * Math.abs(Math.cos(yaw)));
     const fovX = 2 * Math.atan(Math.tan(fov / 2) * aspect);
@@ -196,20 +337,25 @@ export class Stage {
     ];
     const pods = parts.nozzles.map((n) => ({
       pos: transformPoint(shipM, n.pos),
-      power: (this.mood === 'night' ? 4.5 : 3.5) * n.size,
+      power: (this.mood === 'night' ? 4.5 : 3.5) * n.size * (1 - dock * 0.6),
     }));
-    this.r.render(items, glows, { eye, target, fov }, this.light, {
+    this.r.render(items, glows, { eye, target, fov }, light, {
       time,
-      scroll: time * 9,
-      shadowCenter: [0, HOVER, 0],
-      shadowRadius: parts.radius + 14,
+      scroll: this.scrollPos,
+      calm: this.place.city ? 1 : 0,
+      shadowCenter: [shipX * 0.5, hover, 0],
+      shadowRadius: parts.radius + 14 + Math.abs(shipX) * 0.5,
       pods,
-      dust: view.ground === false ? null : this.ship.dust,
+      dust: view.ground === false || dock > 0.5 ? null : this.ship.dust,
     });
   }
 
   dispose() {
     this.disposeShip();
+    if (this.city) {
+      this.r.release(this.city.city);
+      this.r.release(this.city.moor);
+    }
     this.r.release(this.env.terrain);
     this.r.release(this.env.mesas);
     this.r.release(this.env.rocks);

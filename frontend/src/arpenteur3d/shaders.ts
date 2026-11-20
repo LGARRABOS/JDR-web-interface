@@ -53,7 +53,7 @@ layout(location=2) in vec2 aUv;
 layout(location=3) in vec3 aCol;
 layout(location=4) in vec4 aMat;
 uniform mat4 uModel, uViewProj, uLightVP;
-uniform float uTime, uScroll;
+uniform float uTime, uScroll, uCalm;
 out vec3 vWorld; out vec3 vNrm; out vec2 vUv; out vec3 vCol; flat out vec4 vMat; out vec4 vLight;
 ${COMMON}
 ${WIND}
@@ -64,12 +64,14 @@ void main(){
   if (aMat.x == 8.) {
     vec2 q = wp.xz + vec2(uScroll, 0.);
     float k = smoothstep(450., 1100., length(wp.xz));
-    wp.y = dune(q) + k*swell(q);
+    // Autour d'une ville, le sol est aplani (place, faubourgs), les dunes reprennent au loin.
+    float flat_ = uCalm * (1. - smoothstep(520., 950., length(wp.xz)));
+    wp.y = mix(dune(q) + k*swell(q), -1., flat_);
     float e = .8 + k*6.;
     vec2 ex = vec2(e, 0.), ez = vec2(0., e);
     n = normalize(vec3(
       dune(q-ex)+k*swell(q-ex) - dune(q+ex)-k*swell(q+ex),
-      2.*e,
+      2.*e/max(1. - flat_, .02),
       dune(q-ez)+k*swell(q-ez) - dune(q+ez)-k*swell(q+ez)));
   } else {
     n = mat3(uModel) * n;

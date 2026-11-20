@@ -616,3 +616,33 @@ input[type='number'] {
 .arp-tube > div {
   box-shadow: 0 0 8px currentColor;
 }
+
+/* Bandeau de changement de secteur (scène 3D de l'arpenteur). */
+.arp-travel-banner {
+  animation: arp-travel 5.2s ease-in-out both;
+}
+@keyframes arp-travel {
+  0% {
+    opacity: 0;
+    letter-spacing: 0.02em;
+  }
+  25% {
+    opacity: 0;
+  }
+  42% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+    letter-spacing: 0.08em;
+  }
+  100% {
+    opacity: 0;
+    letter-spacing: 0.1em;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arp-travel-banner {
+    animation-duration: 3s;
+  }
+}
