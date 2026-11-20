@@ -2,9 +2,7 @@ import type { Build } from '../arpenteur/types';
 import { defaultBuild } from '../arpenteur/defaults';
 import {
   lighting,
-  mesasMesh,
   ROCK_LOOP,
-  rocksMesh,
   terrainMesh,
   type DesertId,
   type Mood,
@@ -28,7 +26,15 @@ import {
   type Lighting,
 } from './renderer';
 import { MeshBuilder, P } from './geometry';
-import { BERTHS, cityMesh, journeyMesh, veil } from './city';
+import { BERTHS, cityMesh, veil } from './city';
+import {
+  BIOMES,
+  biomeLighting,
+  biomeOf,
+  farMesh,
+  featuresMesh,
+  type Biome,
+} from './biomes';
 import {
   buildShip,
   crewMeshes,
@@ -80,6 +86,8 @@ export interface Place {
 export interface Scene {
   desert: DesertId;
   place: Place;
+  /** Sous-région qui donne le paysage (relief, lointains, curiosités). */
+  biome?: string;
 }
 
 interface Journey {
@@ -97,6 +105,8 @@ interface Journey {
   /** Paysages croisés avant et après la tempête (changement de zone). */
   propsA: GpuMesh;
   propsB: GpuMesh;
+  fromBiome: Biome;
+  toBiome: Biome;
 }
 
 /** Ville chargée : décor, amarres, habitants et autres navires. */
@@ -133,7 +143,10 @@ const CREW_SCALE = 1.4;
 
 export class Stage {
   readonly r: Renderer;
-  private env: { terrain: GpuMesh; mesas: GpuMesh; rocks: GpuMesh };
+  private env: { terrain: GpuMesh };
+  private biome: Biome = BIOMES.dunes;
+  /** Lointains et bande de décor de chaque paysage (cache). */
+  private biomes = new Map<string, { far: GpuMesh; band: GpuMesh }>();
   private ship: {
     parts: ShipParts;
     body: GpuMesh;
@@ -156,15 +169,13 @@ export class Stage {
     this.r = new Renderer(canvas, opts);
     this.env = {
       terrain: this.r.upload(terrainMesh()),
-      mesas: this.r.upload(mesasMesh()),
-      rocks: this.r.upload(rocksMesh()),
     };
     this.light = lighting('mahibori', 'dusk');
   }
 
-  setEnvironment(desert: DesertId, mood: Mood, place: Place = {}) {
+  setEnvironment(desert: DesertId, mood: Mood, place: Place = {}, biome = '') {
     this.endJourney();
-    this.applyEnv(desert, mood, place);
+    this.applyEnv(desert, mood, place, biome);
   }
 
   /**
@@ -187,10 +198,10 @@ export class Stage {
     if (this.journey?.key === key) return;
     this.endJourney();
     if (Date.now() >= startMs + durationMs) {
-      this.applyEnv(to.desert, mood, to.place);
+      this.applyEnv(to.desert, mood, to.place, to.biome);
       return;
     }
-    this.applyEnv(from.desert, mood, from.place);
+    this.applyEnv(from.desert, mood, from.place, from.biome);
     const v0 = from.place.city ? 0 : 1;
     const v1 = to.place.city ? 0 : 1;
     const table = new Float32Array(SAMPLES + 1);
@@ -206,13 +217,37 @@ export class Stage {
       to,
       start: startMs,
       duration: durationMs,
-      fromLight: lighting(from.desert, mood),
-      toLight: lighting(to.desert, mood),
+      fromLight: biomeLighting(
+        lighting(from.desert, mood),
+        biomeOf(from.biome ?? '', from.desert)
+      ),
+      toLight: biomeLighting(
+        lighting(to.desert, mood),
+        biomeOf(to.biome ?? '', to.desert)
+      ),
+      fromBiome: biomeOf(from.biome ?? '', from.desert),
+      toBiome: biomeOf(to.biome ?? '', to.desert),
       table,
       total,
       base: this.scrollPos,
-      propsA: this.r.upload(journeyMesh('a' + scKey(from), total)),
-      propsB: this.r.upload(journeyMesh('b' + scKey(to), total)),
+      propsA: this.r.upload(
+        featuresMesh(
+          biomeOf(from.biome ?? '', from.desert),
+          'a' + scKey(from),
+          60,
+          total,
+          { night: mood === 'night' }
+        )
+      ),
+      propsB: this.r.upload(
+        featuresMesh(
+          biomeOf(to.biome ?? '', to.desert),
+          'b' + scKey(to),
+          60,
+          total,
+          { night: mood === 'night' }
+        )
+      ),
     };
   }
 
@@ -227,11 +262,42 @@ export class Stage {
     this.journey = null;
   }
 
-  private applyEnv(desert: DesertId, mood: Mood, place: Place) {
-    if (mood !== this.mood) this.clearCities();
-    this.light = lighting(desert, mood);
+  private applyEnv(desert: DesertId, mood: Mood, place: Place, biome = '') {
+    if (mood !== this.mood) {
+      this.clearCities();
+      this.clearBiomes();
+    }
+    this.biome = biomeOf(biome, desert);
+    this.light = biomeLighting(lighting(desert, mood), this.biome);
     this.mood = mood;
     this.place = place;
+  }
+
+  /** Lointains et bande de curiosités d'un paysage (construits à la demande). */
+  private biomeMeshes(b: Biome) {
+    let m = this.biomes.get(b.id);
+    if (!m) {
+      const night = this.mood === 'night';
+      m = {
+        far: this.r.upload(farMesh(b, night)),
+        band: this.r.upload(
+          featuresMesh(b, 'band', -ROCK_LOOP / 2 + 30, ROCK_LOOP / 2 - 30, {
+            night,
+            density: 2.2,
+          })
+        ),
+      };
+      this.biomes.set(b.id, m);
+    }
+    return m;
+  }
+
+  private clearBiomes() {
+    for (const m of this.biomes.values()) {
+      this.r.release(m.far);
+      this.r.release(m.band);
+    }
+    this.biomes.clear();
   }
 
   /** Ville (construite à la demande, gardée en cache). */
@@ -391,6 +457,7 @@ export class Stage {
     let calmX = 0;
     const j = this.journey;
     let finished = false;
+    let biome = this.biome;
     let storm = 0;
     let stormColor: Vec3 = [0.8, 0.62, 0.42];
     let cityDraw: { rt: CityRt; x: number; moored: boolean } | null = null;
@@ -409,6 +476,7 @@ export class Stage {
       // Changement de zone au cœur de la tempête : avant, le décor de départ ;
       // après, celui d'arrivée. Rien ne disparaît à découvert.
       const after = p >= 0.5;
+      biome = after ? j.toBiome : j.fromBiome;
       const cityX = after ? j.total - dist : -dist;
       const c = after ? tc : fc;
       if (c) {
@@ -451,7 +519,8 @@ export class Stage {
     const glows: DrawItem[] = [];
     if (view.ground !== false) {
       items.push({ mesh: this.env.terrain, model: identity() });
-      items.push({ mesh: this.env.mesas, model: identity() });
+      const bm = this.biomeMeshes(biome);
+      items.push({ mesh: bm.far, model: identity() });
       items.push(...scenery);
       if (cityDraw)
         this.drawCity(
@@ -465,10 +534,16 @@ export class Stage {
       if (!calm || Math.abs(calmX) > 900) {
         // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
         const off = -(this.scrollPos % ROCK_LOOP);
-        items.push({ mesh: this.env.rocks, model: translation(off, 0, 0) });
+        // Curiosités du paysage, posées sur les dunes, qui défilent en boucle.
         items.push({
-          mesh: this.env.rocks,
+          mesh: bm.band,
+          model: translation(off, 0, 0),
+          drape: true,
+        });
+        items.push({
+          mesh: bm.band,
           model: translation(off + ROCK_LOOP, 0, 0),
+          drape: true,
         });
       }
     }
@@ -519,6 +594,7 @@ export class Stage {
       calmX,
       storm,
       stormColor,
+      duneAmp: biome.dune,
       shadowCenter: [shipX * 0.5, hover, 0],
       shadowRadius: parts.radius + 14 + Math.abs(shipX) * 0.5,
       pods,
@@ -527,7 +603,7 @@ export class Stage {
     // Arrivée : le décor de destination devient le décor courant.
     if (j && finished) {
       this.endJourney();
-      this.applyEnv(j.to.desert, this.mood, j.to.place);
+      this.applyEnv(j.to.desert, this.mood, j.to.place, j.to.biome);
     }
   }
 
@@ -541,8 +617,7 @@ export class Stage {
       this.r.release(f.arm);
     }
     this.r.release(this.env.terrain);
-    this.r.release(this.env.mesas);
-    this.r.release(this.env.rocks);
+    this.clearBiomes();
     this.r.dispose();
   }
 }
@@ -602,7 +677,8 @@ function npcBuild(seed: string, k: number): Build {
   return b;
 }
 
-const scKey = (s: Scene) => `${s.desert}:${s.place.city?.id ?? ''}`;
+const scKey = (s: Scene) =>
+  `${s.desert}:${s.biome ?? ''}:${s.place.city?.id ?? ''}`;
 
 /** Nuages de sable sous les tuyères qui soufflent vers le bas. */
 function dustMesh(parts: ShipParts): import('./geometry').MeshData {

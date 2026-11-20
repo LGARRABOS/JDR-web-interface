@@ -2,6 +2,7 @@ import { MeshBuilder, P, type Mat, type MeshData } from './geometry';
 import {
   chain,
   linear,
+  rotationX,
   rotationY,
   rotationZ,
   scaling,
@@ -43,6 +44,150 @@ export const BERTHS: {
 /** Chenaux dégagés (z) où circulent les navires qui arrivent ou partent. */
 const LANES = [-110, -300];
 
+/** Style d'une ville : couleurs, toits, tours et monument. */
+interface CityStyle {
+  walls: string[];
+  /** Matériau des dômes et flèches : cuivre, céramique colorée, ardoise… */
+  dome: string;
+  domeMetal: boolean;
+  awnings: string[];
+  roof: 'terrasse' | 'domes' | 'pignons' | 'usine';
+  tower: 'minaret' | 'beffroi' | 'cheminee' | 'phare' | 'cristal';
+  monument:
+    | 'dome'
+    | 'ziggurat'
+    | 'horloge'
+    | 'forge'
+    | 'cristal'
+    | 'phare'
+    | 'colosse'
+    | 'arene'
+    | 'temple';
+  /** Hauteur des maisons (multiplicateur) et part de végétation. */
+  height: number;
+  palms: number;
+}
+
+const STYLES: Record<string, CityStyle> = {
+  // Cité blanche du nord, coupoles bleues et minarets.
+  ZENIT: {
+    walls: ['#f0ece2', '#e8e2d4', '#f4f0e8', '#dcd6c8'],
+    dome: '#3a6aa8',
+    domeMetal: false,
+    awnings: ['#3a6aa8', '#c9a227', '#f0ece2'],
+    roof: 'domes',
+    tower: 'minaret',
+    monument: 'dome',
+    height: 1,
+    palms: 0.3,
+  },
+  // Ville du sel : blocs blanc-gris, flèches de cristal.
+  FREMIS: {
+    walls: ['#e4e0d8', '#d4d0c8', '#c8c4bc', '#ece8e0'],
+    dome: '#a8c8d8',
+    domeMetal: false,
+    awnings: ['#5a8aa8', '#a8c8d8', '#6a6a7a'],
+    roof: 'terrasse',
+    tower: 'cristal',
+    monument: 'cristal',
+    height: 0.8,
+    palms: 0.1,
+  },
+  // Port de pisé, dômes de cuivre (ville de référence).
+  DARRAKIS: {
+    walls: ['#c9a27a', '#d8b48a', '#b88a62', '#e0c49c', '#a87a56', '#cfae8c'],
+    dome: '#a8683a',
+    domeMetal: true,
+    awnings: ['#8a2f24', '#2f5a6a', '#c9a227', '#5a6a2f'],
+    roof: 'domes',
+    tower: 'minaret',
+    monument: 'dome',
+    height: 1,
+    palms: 1,
+  },
+  // Capitale de pierre rouge : ziggourat royale, beffrois, plus haute.
+  RAKDOS: {
+    walls: ['#a85a3a', '#b8684a', '#984a2e', '#c87a5a', '#8a4a32'],
+    dome: '#c9a227',
+    domeMetal: true,
+    awnings: ['#c9a227', '#5a1f1a', '#2f2f5a'],
+    roof: 'terrasse',
+    tower: 'beffroi',
+    monument: 'ziggurat',
+    height: 1.3,
+    palms: 0.6,
+  },
+  // Ville de bois et d'ardoise, toits à pignons, phare d'atterrissage.
+  FARDEL: {
+    walls: ['#8a6a4a', '#7a5a3a', '#9a7a5a', '#6a4a30'],
+    dome: '#3a3a44',
+    domeMetal: false,
+    awnings: ['#8a2f24', '#3a5a3a', '#c9a227'],
+    roof: 'pignons',
+    tower: 'phare',
+    monument: 'phare',
+    height: 0.85,
+    palms: 0.2,
+  },
+  // Ville d'os blanchi : colosse de pierre, arène.
+  KARTOUM: {
+    walls: ['#e4d8c0', '#d8cab0', '#cabca0', '#efe4cc'],
+    dome: '#8a6a4a',
+    domeMetal: false,
+    awnings: ['#6a2a1a', '#a87a3a', '#2a2a2a'],
+    roof: 'terrasse',
+    tower: 'minaret',
+    monument: 'colosse',
+    height: 0.9,
+    palms: 0.4,
+  },
+  // Cité violette des cristaux.
+  DELROSIS: {
+    walls: ['#7a6a8a', '#8a7a9a', '#6a5a7a', '#9a8aa8'],
+    dome: '#b07ad8',
+    domeMetal: false,
+    awnings: ['#b07ad8', '#5a8ac8', '#d8c8e8'],
+    roof: 'domes',
+    tower: 'cristal',
+    monument: 'cristal',
+    height: 1.1,
+    palms: 0.1,
+  },
+  // Ville-forge : briques sombres, cheminées d'usine, engrenage géant.
+  GARKAL: {
+    walls: ['#5a4038', '#6a4a40', '#4a3630', '#7a5a4a'],
+    dome: '#4a4440',
+    domeMetal: true,
+    awnings: ['#8a3a1a', '#3a3a3a', '#c9a227'],
+    roof: 'usine',
+    tower: 'cheminee',
+    monument: 'forge',
+    height: 1.05,
+    palms: 0,
+  },
+  // Cité-jardin du sud : céramiques vertes, temple, palmeraies.
+  'CITE-SUD': {
+    walls: ['#e0d0a8', '#d8c498', '#e8dcb8', '#cab88a'],
+    dome: '#3a8a6a',
+    domeMetal: false,
+    awnings: ['#3a8a6a', '#d8a03a', '#8a2f24'],
+    roof: 'domes',
+    tower: 'minaret',
+    monument: 'temple',
+    height: 0.9,
+    palms: 2,
+  },
+};
+const STYLE_POOL = Object.values(STYLES);
+
+function styleOf(id: string): CityStyle {
+  const s = STYLES[id.toUpperCase()];
+  if (s) return s;
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return STYLE_POOL[h % STYLE_POOL.length];
+}
+
 /** Hauteur du quai : le pont du navire amarré arrive à son niveau. */
 export const DOCK_TOP = 0;
 
@@ -70,14 +215,8 @@ export function cityMesh(o: CityOptions): {
   const m = new MeshBuilder();
   const r = rng(o.id);
   const top = o.hover + DOCK_TOP;
-  const adobe = [
-    '#c9a27a',
-    '#d8b48a',
-    '#b88a62',
-    '#e0c49c',
-    '#a87a56',
-    '#cfae8c',
-  ];
+  const st = styleOf(o.id);
+  const adobe = st.walls;
   const mat = (
     hex: string,
     p: number = P.PLAIN,
@@ -94,13 +233,12 @@ export function cityMesh(o: CityOptions): {
   const plank = mat('#6a4a30', P.WOOD, 0.85);
   const iron = mat('#2a2622', P.IRON, 0.6, 0.6);
   const brass = mat('#b8893a', P.BRASS, 0.35, 1);
-  const copper: Mat = {
-    p: P.PATINA,
-    color: linear('#a8683a'),
-    metal: 0.85,
-    rough: 0.6,
-  };
-  const awning = ['#8a2f24', '#2f5a6a', '#c9a227', '#5a6a2f'];
+
+  // Dômes, flèches et toits aux couleurs de la ville.
+  const copper: Mat = st.domeMetal
+    ? { p: P.PATINA, color: linear(st.dome), metal: 0.85, rough: 0.6 }
+    : { p: P.PLAIN, color: linear(st.dome), metal: 0, rough: 0.45 };
+  const awning = st.awnings;
   const lit: Mat = {
     p: P.EMIT,
     color: linear('#ffb45a'),
@@ -342,8 +480,71 @@ export function cityMesh(o: CityOptions): {
       b.pop();
       b.pop();
     }
+    // Toits à pignons (ardoise) ou sheds d'usine selon le style.
+    if (st.roof === 'pignons' && !low) {
+      const ph = Math.min(w, d) * 0.45;
+      b.push(
+        chain(
+          translation(0, h, 0),
+          w >= d ? rotationY(0) : rotationY(Math.PI / 2)
+        )
+      );
+      const L = Math.max(w, d) + 0.4;
+      const D = Math.min(w, d) / 2 + 0.3;
+      b.grid(
+        1,
+        2,
+        (u, v) => [
+          (u - 0.5) * L,
+          v < 0.5 ? ph * v * 2 : ph * (2 - v * 2),
+          (v * 2 - 1) * D,
+        ],
+        copper,
+        {}
+      );
+      for (const sx of [-1, 1]) {
+        const i0 = b.vertex([sx * L * 0.48, 0, -D], [sx, 0, 0], [0, 0], mat(c));
+        const i1 = b.vertex([sx * L * 0.48, 0, D], [sx, 0, 0], [1, 0], mat(c));
+        const i2 = b.vertex(
+          [sx * L * 0.48, ph, 0],
+          [sx, 0, 0],
+          [0.5, 1],
+          mat(c)
+        );
+        if (sx > 0) b.tri(i0, i2, i1);
+        else b.tri(i0, i1, i2);
+      }
+      b.pop();
+      b.pop();
+      return;
+    }
+    if (st.roof === 'usine' && !low && r() < 0.6) {
+      // Toit en dents de scie et haute cheminée de brique.
+      const n = Math.max(2, Math.round(w / 4));
+      for (let k = 0; k < n; k++) {
+        b.push(translation(-w / 2 + (k + 0.5) * (w / n), h, 0));
+        b.grid(
+          1,
+          1,
+          (u, v) => [(u - 0.5) * (w / n), u * 2.2, (v - 0.5) * d],
+          copper,
+          {}
+        );
+        b.push(translation(w / n / 2 - 0.05, 0, 0));
+        b.box(0.1, 2.2, d, win(true));
+        b.pop();
+        b.pop();
+      }
+      if (r() < 0.5) {
+        b.push(translation(w * 0.3, h, -d * 0.3));
+        b.cylinder(0.9, 7 + r() * 6, 10, mat('#4a2e26'));
+        b.pop();
+      }
+      b.pop();
+      return;
+    }
     // Ornements : dôme, tourelle, auvent, cheminée.
-    const roll = r();
+    const roll = r() * (st.roof === 'terrasse' ? 1.4 : 1);
     if (roll < 0.22) {
       b.push(translation(0, h + 0.6, 0));
       b.cylinder(Math.min(w, d) * 0.3, 1.2, 12, mat(c));
@@ -386,8 +587,357 @@ export function cityMesh(o: CityOptions): {
     }
     b.pop();
   };
+  const belfry = (x: number, z: number, h: number, c: string) => {
+    b.push(translation(x, ground, z));
+    b.box(6, h, 6, mat(c));
+    b.push(translation(0, h, 0));
+    b.box(7, 1, 7, mat(c, P.PLAIN, 0.95));
+    for (const [nx, nz] of [
+      [0, 1],
+      [0, -1],
+      [1, 0],
+      [-1, 0],
+    ]) {
+      b.push(translation(nx * 3.05, -3, nz * 3.05));
+      b.push(rotationY(nx !== 0 ? Math.PI / 2 : 0));
+      b.cylinder(1.8, 0.15, 20, mat('#efe4c8'));
+      b.pop();
+      b.pop();
+    }
+    b.push(translation(0, 1, 0));
+    b.lathe(
+      [
+        [4.2, 0],
+        [0, 6],
+      ],
+      4,
+      copper
+    );
+    b.pop();
+    b.pop();
+    b.pop();
+  };
+  const lighthouse = (x: number, z: number, h: number) => {
+    b.push(translation(x, ground, z));
+    b.lathe(
+      [
+        [4, 0],
+        [2.6, h],
+        [3.4, h],
+        [3.4, h + 0.6],
+        [0, h + 0.6],
+      ],
+      14,
+      mat('#e8e0d0')
+    );
+    for (let k = 1; k < 4; k++) {
+      b.push(translation(0, (h * k) / 4, 0));
+      b.torus(4 - (1.4 * k) / 4 + 0.05, 0.5, 14, 4, mat('#8a2f24'));
+      b.pop();
+    }
+    b.push(translation(0, h + 0.6, 0));
+    b.cylinder(2, 3, 10, { ...lit, emit: o.night ? 6 : 1.4 });
+    b.push(translation(0, 3, 0));
+    b.lathe(
+      [
+        [2.6, 0],
+        [0, 2.4],
+      ],
+      10,
+      copper
+    );
+    b.pop();
+    b.pop();
+    b.pop();
+  };
+  const crystalSpire = (x: number, z: number, h: number) => {
+    const cm: Mat = {
+      p: P.GLASS,
+      color: linear(st.dome),
+      metal: 0,
+      rough: 0.15,
+      emit: o.night ? 1.6 : 0.3,
+    };
+    b.push(translation(x, ground, z));
+    b.cylinder(3.4, 3, 8, mat(adobe[0]));
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      const hh = k === 0 ? h : h * (0.35 + r() * 0.3);
+      b.push(
+        chain(
+          translation(
+            k === 0 ? 0 : Math.cos(a) * 2,
+            3,
+            k === 0 ? 0 : Math.sin(a) * 2
+          ),
+          rotationZ(k === 0 ? 0 : (r() - 0.5) * 0.5)
+        )
+      );
+      b.lathe(
+        [
+          [0, 0],
+          [hh * 0.08, hh * 0.05],
+          [hh * 0.08, hh * 0.82],
+          [0, hh],
+        ],
+        6,
+        cm
+      );
+      b.pop();
+    }
+    b.pop();
+  };
+  const monument = (
+    kind: CityStyle['monument'],
+    x: number,
+    z: number,
+    k: number
+  ) => {
+    const sm = mat(adobe[0]);
+    b.push(translation(x, ground, z));
+    switch (kind) {
+      case 'dome': {
+        const big = 16 * k;
+        b.cylinder(big, big * 0.6, 24, sm);
+        b.push(chain(translation(0, big * 0.6, 0), scaling(1, 1.1, 1)));
+        b.sphere(big, 28, copper, true);
+        b.pop();
+        b.push(translation(0, big * 1.7, 0));
+        b.cylinder(1.2, 4, 8, brass);
+        b.pop();
+        for (const [dx, dz] of [
+          [-1, -1],
+          [1, -1],
+          [-1, 1],
+          [1, 1],
+        ])
+          minaret(dx * big * 1.15, dz * big * 0.9, big * 1.7, adobe[0]);
+        break;
+      }
+      case 'ziggurat': {
+        const n = 6;
+        for (let i = 0; i < n; i++) {
+          const w = (44 - i * 6.5) * k;
+          b.push(translation(0, i * 6 * k, 0));
+          b.box(w, 6 * k, w, mat(adobe[i % adobe.length]));
+          b.pop();
+        }
+        b.push(translation(0, n * 6 * k, 0));
+        b.box(6 * k, 6 * k, 6 * k, mat(adobe[0]));
+        b.push(translation(0, 6 * k, 0));
+        b.lathe(
+          [
+            [4.5 * k, 0],
+            [0, 7 * k],
+          ],
+          4,
+          copper
+        );
+        b.pop();
+        b.pop();
+        // Grand escalier en façade.
+        b.push(translation(0, 0, 22 * k));
+        for (let i = 0; i < 12; i++) {
+          b.push(translation(0, i * 3 * k, -i * 2.2 * k));
+          b.box(8 * k, 3 * k, 3 * k, mat(adobe[1 % adobe.length]));
+          b.pop();
+        }
+        b.pop();
+        break;
+      }
+      case 'horloge':
+        belfry(0, 0, 40 * k, adobe[0]);
+        break;
+      case 'forge': {
+        // Haute halle de fonderie et engrenage géant dressé.
+        b.push(translation(0, 0, 0));
+        b.box(50 * k, 18 * k, 26 * k, mat('#4a3630'));
+        b.pop();
+        for (let i = 0; i < 4; i++) {
+          b.push(translation((-18 + i * 12) * k, 18 * k, -6 * k));
+          b.lathe(
+            [
+              [2.2 * k, 0],
+              [1.6 * k, 26 * k],
+              [2 * k, 27 * k],
+              [0, 27 * k],
+            ],
+            10,
+            mat('#3a2620')
+          );
+          b.pop();
+        }
+        const R = 20 * k;
+        b.push(chain(translation(0, R + 2, 16 * k), rotationX(Math.PI / 2)));
+        b.torus(R, R * 0.1, 40, 8, mat('#6a3a22', P.RUST, 0.8, 0.5));
+        const teeth = 36;
+        for (let i = 0; i < teeth; i++) {
+          b.push(
+            chain(
+              rotationY((i / teeth) * Math.PI * 2),
+              translation(R * 1.1, 0, 0)
+            )
+          );
+          b.box(R * 0.16, R * 0.18, R * 0.1, mat('#6a3a22', P.RUST, 0.8, 0.5));
+          b.pop();
+        }
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          b.tube(
+            [
+              [0, 0, 0],
+              [Math.cos(a) * R, 0, Math.sin(a) * R],
+            ],
+            R * 0.05,
+            6,
+            iron
+          );
+        }
+        b.cylinder(R * 0.16, R * 0.3, 14, brass);
+        b.pop();
+        // Bouches de four rougeoyantes.
+        for (let i = 0; i < 5; i++) {
+          b.push(translation((-20 + i * 10) * k, 2, 13.1 * k));
+          b.box(4 * k, 5 * k, 0.2, {
+            p: P.EMIT,
+            color: linear('#ff6a1a'),
+            metal: 0,
+            rough: 1,
+            emit: o.night ? 5 : 2,
+          });
+          b.pop();
+        }
+        break;
+      }
+      case 'cristal':
+        crystalSpire(0, 0, 60 * k);
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          crystalSpire(Math.cos(a) * 22 * k, Math.sin(a) * 22 * k, 22 * k);
+        }
+        break;
+      case 'phare':
+        lighthouse(0, 0, 48 * k);
+        break;
+      case 'colosse': {
+        // Statue colossale d'un chasseur, lance dressée.
+        const S = 1.6 * k;
+        b.push(translation(0, 0, 0));
+        b.box(16 * S, 6 * S, 16 * S, stone);
+        b.push(translation(0, 6 * S, 0));
+        b.lathe(
+          [
+            [0, 0],
+            [4 * S, 0],
+            [4.5 * S, 8 * S],
+            [5.5 * S, 16 * S],
+            [6 * S, 20 * S],
+            [2 * S, 22 * S],
+            [0, 22 * S],
+          ],
+          12,
+          sm
+        );
+        b.push(translation(0, 24.5 * S, 0));
+        b.sphere(2.8 * S, 14, sm);
+        b.pop();
+        b.tube(
+          [
+            [5.5 * S, 18 * S, 0],
+            [8 * S, 12 * S, 2 * S],
+            [9 * S, 8 * S, 3 * S],
+          ],
+          1.1 * S,
+          8,
+          sm
+        );
+        b.tube(
+          [
+            [-5.5 * S, 18 * S, 0],
+            [-8 * S, 23 * S, 1 * S],
+            [-8.5 * S, 27 * S, 1 * S],
+          ],
+          1.1 * S,
+          8,
+          sm
+        );
+        b.tube(
+          [
+            [-8.5 * S, -6 * S, 1 * S],
+            [-8.5 * S, 40 * S, 1 * S],
+          ],
+          0.5 * S,
+          6,
+          brass
+        );
+        b.pop();
+        b.pop();
+        break;
+      }
+      case 'arene': {
+        b.lathe(
+          [
+            [34 * k, 0],
+            [34 * k, 16 * k],
+            [30 * k, 16 * k],
+            [22 * k, 3 * k],
+            [0, 3 * k],
+          ],
+          32,
+          sm
+        );
+        break;
+      }
+      case 'temple': {
+        // Temple à colonnades sur terrasses plantées.
+        b.box(60 * k, 4 * k, 40 * k, sm);
+        b.push(translation(0, 4 * k, 0));
+        b.box(44 * k, 4 * k, 28 * k, mat(adobe[1 % adobe.length]));
+        b.push(translation(0, 4 * k, 0));
+        for (let i = 0; i < 8; i++)
+          for (const zz of [-11, 11]) {
+            b.push(translation((-17.5 + i * 5) * k, 0, zz * k));
+            b.cylinder(1.1 * k, 12 * k, 10, mat('#efe4cc'));
+            b.pop();
+          }
+        b.push(translation(0, 12 * k, 0));
+        b.box(42 * k, 2 * k, 26 * k, mat('#efe4cc'));
+        b.push(chain(translation(0, 2 * k, 0), scaling(1, 0.55, 0.7)));
+        b.sphere(16 * k, 24, copper, true);
+        b.pop();
+        b.pop();
+        b.pop();
+        b.pop();
+        break;
+      }
+    }
+    b.pop();
+    // Une arène à côté de la statue de Kartoum.
+    if (kind === 'colosse') monument('arene', x + 90, z - 30, k);
+  };
   const tower = (x: number, z: number, h: number) => {
     const c = adobe[Math.floor(r() * adobe.length)];
+    if (st.tower === 'minaret') minaret(x, z, h, c);
+    else if (st.tower === 'beffroi') belfry(x, z, h * 0.9, c);
+    else if (st.tower === 'cheminee') {
+      b.push(translation(x, ground, z));
+      b.lathe(
+        [
+          [2.6, 0],
+          [2.2, h * 0.3],
+          [1.6, h * 1.4],
+          [1.9, h * 1.45],
+          [1.9, h * 1.5],
+          [0, h * 1.5],
+        ],
+        12,
+        mat('#4a2e26')
+      );
+      b.pop();
+    } else if (st.tower === 'phare') lighthouse(x, z, h * 0.8);
+    else crystalSpire(x, z, h * 1.2);
+  };
+  const minaret = (x: number, z: number, h: number, c: string) => {
     b.push(translation(x, ground, z));
     b.cylinder(2.2, h, 12, mat(c));
     b.push(translation(0, h, 0));
@@ -456,7 +1006,11 @@ export function cityMesh(o: CityOptions): {
       const z = gz + (r() - 0.5) * 3;
       if (blocked(x, z, Math.max(w, d) / 2)) continue;
       const h =
-        4 + r() * (o.capital ? 20 : 13) * Math.max(0.25, 1.2 - dist / R);
+        4 +
+        r() *
+          (o.capital ? 20 : 13) *
+          st.height *
+          Math.max(0.25, 1.2 - dist / R);
       // Dans le couloir de la caméra, maisons basses : elle passe au-dessus.
       const low = z > 0 && z - Math.max(w, d) / 2 < 150;
       house(
@@ -480,17 +1034,8 @@ export function cityMesh(o: CityOptions): {
     tower(x, z, 18 + r() * 16);
     placed++;
   }
-  // Grand dôme (palais ou temple), visible derrière le quai.
-  const big = o.capital ? 26 : 16;
-  b.push(translation(-20, ground, -150));
-  b.cylinder(big, big * 0.6, 24, mat('#e0c49c'));
-  b.push(chain(translation(0, big * 0.6, 0), scaling(1, 1.1, 1)));
-  b.sphere(big, 28, copper, true);
-  b.pop();
-  b.push(translation(0, big * 1.7, 0));
-  b.cylinder(1.2, 4, 8, brass);
-  b.pop();
-  b.pop();
+  // Monument de la ville, visible derrière le quai.
+  monument(st.monument, -20, -150, o.capital ? 1.6 : 1);
   // Place du marché devant le quai : étals, palmiers, fontaine.
   const palm = (x: number, z: number) => {
     const h = 7 + r() * 5;
@@ -529,7 +1074,7 @@ export function cityMesh(o: CityOptions): {
     const x = (r() - 0.5) * 300;
     const z = 25 + r() * 95;
     if (Math.abs(x) < len / 2 && z < 32) continue;
-    if (r() < 0.45) palm(x, z);
+    if (r() < 0.25 + 0.3 * Math.min(1, st.palms)) palm(x, z);
     else {
       // Étal sous auvent.
       b.push(chain(translation(x, ground, z), rotationY(r() * 0.4 - 0.2)));

@@ -1,13 +1,14 @@
 // Shaders GLSL ES 3.0 du rendu 3D de l'arpenteur.
 
 const COMMON = /* glsl */ `
+uniform float uDuneAmp;
 float hash(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*noise(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return s;}
 float dune(vec2 p){
   float h = 2.6*sin(p.x*.021+sin(p.y*.013)*1.8) + 1.7*sin(p.y*.034+p.x*.012) + 1.1*sin((p.x+p.y)*.051);
   h += (fbm(p*.018)-.5)*5.;
-  return h - 2.;
+  return h*uDuneAmp - 2.;
 }
 // Grandes ondulations du désert, loin du navire seulement.
 float swell(vec2 p){

@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { installedGuns } from '../../arpenteur/logic';
 import type { Mood } from '../../arpenteur3d/environment';
-import { Stage, type Place } from '../../arpenteur3d/stage';
+import { Stage, type Scene } from '../../arpenteur3d/stage';
 import { travelEase, travelNow } from '../../arpenteur/travel';
 import { useTravel } from './useTravel';
-import type { DesertId } from '../../arpenteur3d/environment';
 import {
   cityById,
   DESERTS,
@@ -40,16 +39,20 @@ const isDefault = (c: Cam) =>
   Math.abs(c.zoom - DEFAULT_CAM.zoom) < 1e-3;
 
 /** Décor d'une position : désert, et ville d'escale le cas échéant. */
-function sceneOf(sector: string): { desert: DesertId; place: Place } {
+function sceneOf(sector: string): Scene {
   const id = sector.trim().toUpperCase();
   const city = cityById(id);
   if (city) {
-    // Une ville prend la couleur du désert qu'elle dessert.
+    // Une ville prend la couleur et le paysage du désert qu'elle dessert.
     const route = ROUTES.find(([c]) => c === id);
-    const desert = (route && regionById(route[1])?.desert) || desertOf(id);
-    return { desert, place: { city: { id, capital: city.capital } } };
+    const region = route ? regionById(route[1]) : undefined;
+    return {
+      desert: region?.desert || desertOf(id),
+      place: { city: { id, capital: city.capital } },
+      biome: region?.id ?? id,
+    };
   }
-  return { desert: desertOf(id), place: {} };
+  return { desert: desertOf(id), place: {}, biome: id };
 }
 
 function supportsWebGL2() {
@@ -296,7 +299,7 @@ export function ShipScene3D(props: ShipSceneProps) {
       stage.setJourney(from, to, mood, now.start, now.duration);
     } else {
       const here = sceneOf(sector);
-      stage.setEnvironment(here.desert, mood, here.place);
+      stage.setEnvironment(here.desert, mood, here.place, here.biome);
     }
     canvasRef.current?.dispatchEvent(new Event('arp-ship'));
     // travelKey résume mapTravel.

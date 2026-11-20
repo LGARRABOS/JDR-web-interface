@@ -324,6 +324,8 @@ export class Renderer {
       calmX?: number;
       /** Tempête de sable plein écran (0..1) et sa couleur (affichage). */
       storm?: number;
+      /** Amplitude des dunes (paysage du secteur). */
+      duneAmp?: number;
       stormColor?: Vec3;
       shadowCenter: Vec3;
       shadowRadius: number;
@@ -409,6 +411,7 @@ export class Renderer {
     gl.uniform3fv(this.u(m, 'uRockB'), light.rockB);
     gl.uniform1f(this.u(m, 'uScroll'), opts.scroll);
     gl.uniform1f(this.u(m, 'uCalm'), opts.calm ?? 0);
+    gl.uniform1f(this.u(m, 'uDuneAmp'), opts.duneAmp ?? 1);
     gl.uniform1f(this.u(m, 'uCalmX'), opts.calmX ?? 0);
     gl.uniform1f(this.u(m, 'uShadowOn'), shadowOn ? 1 : 0);
     const pods = (opts.pods ?? []).slice(0, 8);
@@ -440,6 +443,7 @@ export class Renderer {
       gl.uniform3f(this.u(d, 'uUp'), view[1], view[5], view[9]);
       gl.uniform1f(this.u(d, 'uTime'), opts.time);
       gl.uniform1f(this.u(d, 'uScroll'), opts.scroll);
+      gl.uniform1f(this.u(d, 'uDuneAmp'), opts.duneAmp ?? 1);
       const sc = light.sunColor;
       const k = 0.35;
       gl.uniform3f(
