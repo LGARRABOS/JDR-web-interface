@@ -525,7 +525,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
   });
 
   // --- Coque -----------------------------------------------------------------
-  const NU = 90;
+  const NU = 140;
   const NV = 26;
   const G0 = hull.D * 1.6 + 5;
   for (const side of [1, -1]) {
@@ -1241,20 +1241,30 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     // Haubans.
     const tx = x - Math.sin(rake) * H;
     const ty = y0 + Math.cos(rake) * H;
-    for (const side of [1, -1])
+    for (const side of [1, -1]) {
+      const feet: Vec3[] = [];
       for (const ds of [-0.025, 0, 0.025]) {
         const ss = Math.min(0.99, Math.max(0.01, s + ds));
         const p = hull.point(ss, 1);
+        const foot: Vec3 = [p[0], p[1] + hull.bulwark, (p[2] - 0.1) * side];
+        feet.push(foot);
+        b.tube([[tx, ty * 0.98 - 1, 0], foot], 0.035, 3, rope);
+      }
+      // Enfléchures : échelons de corde entre les haubans, sur le bas du gréement.
+      const top: Vec3 = [tx, ty * 0.98 - 1, 0];
+      const at = (f: Vec3, t: number): Vec3 => [
+        f[0] + (top[0] - f[0]) * t,
+        f[1] + (top[1] - f[1]) * t,
+        f[2] + (top[2] - f[2]) * t,
+      ];
+      for (let t = 0.06; t < 0.55; t += 0.045)
         b.tube(
-          [
-            [tx, ty * 0.98 - 1, 0],
-            [p[0], p[1] + hull.bulwark, (p[2] - 0.1) * side],
-          ],
-          0.035,
+          [at(feet[0], t), at(feet[1], t), at(feet[2], t)],
+          0.018,
           3,
           rope
         );
-      }
+    }
     // Étai vers la proue ou le mât suivant.
     const next = mastS[i + 1];
     if (next !== undefined)

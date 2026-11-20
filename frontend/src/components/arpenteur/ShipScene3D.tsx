@@ -64,11 +64,35 @@ export function ShipScene3D(props: ShipSceneProps) {
     let raf = 0;
     let dirty = true;
     const t0 = performance.now();
+    // Résolution adaptative : on baisse la définition si la machine peine,
+    // puis on la remonte quand elle tient la cadence.
+    let scale = 1;
+    let last = 0;
+    let avg = 16.7;
+    let calm = 0;
     const resize = () => {
       const r = canvas.getBoundingClientRect();
-      const dpr = Math.min(1.5, window.devicePixelRatio || 1);
-      stage.setSize(r.width * dpr, r.height * dpr);
+      const dpr = Math.min(2, window.devicePixelRatio || 1) * scale;
+      stage.setSize(Math.round(r.width * dpr), Math.round(r.height * dpr));
       dirty = true;
+    };
+    const adapt = (now: number) => {
+      const dt = last ? now - last : 16.7;
+      last = now;
+      if (dt > 250) return; // onglet repris, mesure sans valeur
+      avg = avg * 0.92 + dt * 0.08;
+      if (avg > 26 && scale > 0.55) {
+        scale = Math.max(0.55, scale - 0.15);
+        avg = 16.7;
+        calm = 0;
+        resize();
+      } else if (avg < 18) {
+        if (++calm > 180 && scale < 1) {
+          scale = Math.min(1, scale + 0.1);
+          calm = 0;
+          resize();
+        }
+      } else calm = 0;
     };
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
@@ -86,8 +110,12 @@ export function ShipScene3D(props: ShipSceneProps) {
     const frame = () => {
       raf = requestAnimationFrame(frame);
       if (still && !dirty) return;
-      if (document.hidden || !onScreen) return;
+      if (document.hidden || !onScreen) {
+        last = 0;
+        return;
+      }
       dirty = false;
+      if (!still) adapt(performance.now());
       const wide = canvas.clientWidth / Math.max(1, canvas.clientHeight) > 1.8;
       stage.render(still ? 2 : (performance.now() - t0) / 1000, {
         yaw: 0.4,

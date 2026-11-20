@@ -86,15 +86,23 @@ float seamAA(float x, float w){
   return mix(l, 1. - w*1.2, smoothstep(.15, .45, fw));
 }
 float detail(float mpp, float freq){ return clamp(1.3 - mpp*freq*2.2, 0., 1.); }
-float shadowAt(vec4 lp){
+// Ombres douces : 16 échantillons en disque de Poisson, tournés par pixel.
+const vec2 POISSON[16] = vec2[](
+  vec2(-.94201624,-.39906216), vec2(.94558609,-.76890725), vec2(-.09418410,-.92938870), vec2(.34495938,.29387760),
+  vec2(-.91588581,.45771432), vec2(-.81544232,-.87912464), vec2(-.38277543,.27676845), vec2(.97484398,.75648379),
+  vec2(.44323325,-.97511554), vec2(.53742981,-.47373420), vec2(-.26496911,-.41893023), vec2(.79197514,.19090188),
+  vec2(-.24188840,.99706507), vec2(-.81409955,.91437590), vec2(.19984126,.78641367), vec2(.14383161,-.14100790));
+float shadowAt(vec4 lp, float ndl){
   if (uShadowOn < .5) return 1.;
   vec3 c = lp.xyz/lp.w*.5+.5;
   if (c.x<0.||c.x>1.||c.y<0.||c.y>1.||c.z>1.) return 1.;
-  float b = .0012;
-  vec2 t = vec2(1./2048.);
+  float b = mix(.0022, .0005, clamp(ndl, 0., 1.));
+  float ang = 6.2831853*fract(52.9829189*fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
+  mat2 rot = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
+  vec2 t = vec2(1.9/2048.);
   float s = 0.;
-  for (int i=-1;i<=1;i++) for (int j=-1;j<=1;j++) s += texture(uShadow, vec3(c.xy + vec2(i,j)*t*1.2, c.z - b));
-  return s/9.;
+  for (int i=0;i<16;i++) s += texture(uShadow, vec3(c.xy + rot*POISSON[i]*t, c.z - b));
+  return s/16.;
 }
 // Tôles rivetées : renvoie (relief, joint, variation).
 vec3 plates(vec2 uv, float mpp){
@@ -161,9 +169,10 @@ void main(){
   } else if (pat == 6.) {
     float seam = seamAA(uv.x/.75, .03);
     float weave = noise(uv*vec2(160., 160.))*.06*detail(mpp, 160.);
+    float wrinkle = (sin(uv.y*7. + noise(uv*.8)*5.) * .5 + .5) * detail(mpp, 2.);
     float dirt = fbm(uv*vec2(.5, .8));
     albedo *= mix(.78, 1., seam) * (.94 + weave) * mix(.8, 1.05, dirt);
-    h = (1.-seam)*.002;
+    h = (1.-seam)*.002 + wrinkle*.004;
   } else if (pat == 7.) {
     float pulse = .82 + .18*sin(uTime*3. + uv.x*2.);
     emit = vCol * vMat.w * pulse;
@@ -206,7 +215,7 @@ void main(){
   vec3 L = uSunDir;
   float NdLr = dot(N, L);
   float NdL = max(NdLr, 0.);
-  float sh = shadowAt(vLight);
+  float sh = shadowAt(vLight, NdLr);
   vec3 H = normalize(L + V);
   float NdH = max(dot(N, H), 0.), NdV = max(dot(N, V), 1e-3), VdH = max(dot(V, H), 0.);
   float a = max(rough*rough, .002), a2 = a*a;
@@ -220,6 +229,8 @@ void main(){
   vec3 kd = (1.-F)*(1.-metal);
   vec3 direct = (kd*albedo/3.14159 + spec) * uSunColor * NdL * sh * 3.14159;
   vec3 amb = mix(uGround*.9, uZenith, N.y*.5+.5) * mix(.55, 1., clamp(N.y*.5+.6, 0., 1.));
+  // Occlusion approchée : ce que le soleil ne voit pas reçoit aussi moins de ciel.
+  amb *= mix(.62, 1., sh);
   vec3 R = reflect(-V, N);
   vec3 Fr = F0 + (max(vec3(1.-rough), F0) - F0)*pow(clamp(1.-NdV, 0., 1.), 5.);
   vec3 env = mix(skyColor(R), amb, clamp(rough*1.2, 0., 1.));
@@ -232,11 +243,25 @@ void main(){
     pods += uPodColor * uPods[i].w * max(dot(N, d*inversesqrt(l2)), 0.) / (1. + l2*.18);
   }
   vec3 col = kd*albedo*(amb + pods) + Fr*env*so + direct + emit;
-  if (pat == 6.) col += albedo * uSunColor * max(-NdLr, 0.) * .45 * sh;
+  // Vernis (bois, peinture) : second reflet net par-dessus.
+  if (pat == 1. || pat == 11. || pat == 0.) {
+    float ca = .02, ca2 = ca*ca;
+    float cd = NdH*NdH*(ca2-1.)+1.;
+    float cF = .04 + .96*pow(clamp(1.-VdH, 0., 1.), 5.);
+    col += uSunColor * NdL * sh * cF * ca2/(3.14159*cd*cd) * .25 * .25;
+    col += skyColor(R) * (.04 + .96*pow(clamp(1.-NdV, 0., 1.), 5.)) * .18 * so;
+  }
+  // Voiles : la lumière traverse la toile.
+  if (pat == 6.) col += albedo * uSunColor * (max(-NdLr, 0.)*.6 + pow(max(dot(-V, L), 0.), 4.)*.35) * sh * (1. - uNight*.6);
+  // Atmosphère : brume plus dense au ras du sable, éclairée côté soleil.
   float dist = length(vWorld - uCam);
-  float fogF = 1. - exp(-dist*uFogDensity);
-  vec3 fd = normalize(vWorld - uCam);
-  col = mix(col, mix(uFog, skyColor(vec3(fd.x, max(fd.y, .02), fd.z)), .5), fogF);
+  vec3 fd = (vWorld - uCam)/max(dist, 1e-3);
+  float hAvg = max(.5*(vWorld.y + uCam.y), 0.);
+  float dens = uFogDensity * (.75 + .9*exp(-hAvg*.08));
+  float fogF = 1. - exp(-dist*dens);
+  float sunAmt = pow(max(dot(fd, L), 0.), 6.);
+  vec3 haze = mix(uFog, skyColor(vec3(fd.x, max(fd.y, .02), fd.z)), .55) + uSunColor*sunAmt*.14*(1. - uNight*.8);
+  col = mix(col, haze, fogF);
   outColor = vec4(col, 1.);
 }`;
 
@@ -271,6 +296,9 @@ void main(){
   vec3 c = skyColor(d);
   float s = max(dot(d, uSunDir), 0.);
   c += uSunColor * smoothstep(.9994, .9997, s) * 6. * (1.-uNight);
+  c += uSunColor * pow(s, 900.) * 1.5 * (1.-uNight);
+  // Bande de brume claire juste au-dessus de l'horizon.
+  c += uHorizon * exp(-abs(d.y)*28.) * .22;
   if (uNight > .5) {
     vec2 g = d.xz/(d.y+.25)*120.;
     float st = hash(floor(g));
@@ -283,10 +311,14 @@ void main(){
   // Nuages effilés.
   if (d.y > 0.) {
     vec2 q = d.xz/(d.y+.08);
-    float cl = fbm(q*vec2(.35, 1.4) + vec2(uTime*.004, 0.));
-    float a = smoothstep(.55, .8, cl) * smoothstep(.0, .12, d.y) * smoothstep(.6, .15, d.y);
-    vec3 cc = mix(uHorizon*1.15, uSunColor*.6 + uHorizon*.5, pow(s, 3.));
-    c = mix(c, cc, a*.55);
+    vec2 wind = vec2(uTime*.006, uTime*.0015);
+    float cl = fbm(q*vec2(.35, 1.4) + wind) + fbm(q*vec2(1.1, 3.2) - wind*1.7)*.35;
+    float a = smoothstep(.62, .95, cl) * smoothstep(.0, .12, d.y) * smoothstep(.6, .15, d.y);
+    float thick = smoothstep(.75, 1.1, cl);
+    vec3 lit = mix(uHorizon*1.2, uSunColor*.55 + uHorizon*.6, pow(s, 3.));
+    vec3 cc = mix(lit, uZenith*.9 + uHorizon*.25, thick*.55);
+    cc += uSunColor * pow(s, 12.) * (1. - thick) * .6;
+    c = mix(c, cc, a*.65);
   }
   o = vec4(c, 1.);
 }`;
@@ -358,11 +390,18 @@ out vec4 o;
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14), 0., 1.); }
 void main(){
-  vec3 c = texture(uTex, vUv).rgb;
+  vec2 q = vUv-.5;
+  // Légère aberration chromatique vers les bords (objectif photo).
+  vec2 ca = q*dot(q, q)*.006;
+  vec3 c = vec3(texture(uTex, vUv - ca).r, texture(uTex, vUv).g, texture(uTex, vUv + ca).b);
   c += (texture(uBloomA, vUv).rgb*.6 + texture(uBloomB, vUv).rgb*.8) * uBloom;
   c = aces(c*uExposure);
   c = pow(c, vec3(1./2.2));
-  vec2 q = vUv-.5;
+  // Étalonnage : un peu plus de contraste et de couleur, ombres froides, lumières chaudes.
+  float l = dot(c, vec3(.2126, .7152, .0722));
+  c = mix(vec3(l), c, 1.08);
+  c = mix(c, c*c*(3.-2.*c), .22);
+  c += vec3(.012, .004, -.01)*smoothstep(.5, 1., l) + vec3(-.006, 0., .012)*(1.-smoothstep(0., .4, l));
   c *= 1. - dot(q, q)*.55;
   c += (hash(vUv*vec2(1733., 977.) + uTime) - .5) * uGrain;
   o = vec4(c, 1.);
@@ -385,8 +424,14 @@ out float vMode;
 void main(){
   float ph = fract(uTime*.22 + aNrm.x);
   vec3 c; float size;
-  vMode = aCol.g;
-  if (aCol.g > .5) {
+  vMode = aCol.b > .5 ? 2. : aCol.g;
+  if (aCol.b > .5) {
+    // Poussières en suspension, éclairées par le soleil : dérive lente, en boucle.
+    float t = uTime*(1.5 + aNrm.y*2.) + aNrm.x*90.;
+    c = aPos + vec3(-mod(t, 90.) + 45., sin(t*.31 + aNrm.z*9.)*1.5, cos(t*.23 + aNrm.x*7.)*1.2);
+    size = .12 + aNrm.y*.22;
+    vA = aCol.r * smoothstep(45., 30., abs(c.x - aPos.x));
+  } else if (aCol.g > .5) {
     // Fumée de cheminée : monte et file vers l'arrière.
     c = aPos + vec3(-ph*22. - aNrm.y*3., ph*16. + ph*ph*6., aNrm.z*ph*5.);
     size = 1.6 + 10.*ph;
@@ -413,5 +458,9 @@ void main(){
   float r = length(q)*2.;
   float n = fbm(vUv*3. + vA*7.);
   float a = (1. - smoothstep(.15, 1., r + (n-.5)*.5)) * vA * .8;
+  if (vMode > 1.5) {
+    o = vec4(uDustColor*2.4 + .08, (1. - smoothstep(.0, 1., r)) * vA);
+    return;
+  }
   o = vec4(vMode > .5 ? uSmokeColor : uDustColor, a);
 }`;

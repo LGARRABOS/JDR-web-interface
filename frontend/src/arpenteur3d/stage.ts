@@ -232,6 +232,31 @@ function dustMesh(parts: ShipParts): import('./geometry').MeshData {
       b.quad(ids[0], ids[1], ids[2], ids[3]);
     }
   }
+  // Poussières en suspension autour du navire.
+  for (let k = 0; k < 160; k++) {
+    const pos: [number, number, number] = [
+      (rnd() - 0.5) * 90,
+      HOVER - 6 + rnd() * 34,
+      (rnd() - 0.3) * 60,
+    ];
+    const ph: [number, number, number] = [rnd(), rnd(), rnd()];
+    const mat = {
+      p: P.PLAIN,
+      color: [0.25 + rnd() * 0.5, 0, 1] as [number, number, number],
+      metal: 0,
+      rough: 1,
+      emit: 1,
+    };
+    const ids = (
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+      ] as const
+    ).map(([u, v]) => b.rawVertex(pos, ph, [u, v], mat));
+    b.quad(ids[0], ids[1], ids[2], ids[3]);
+  }
   for (const st of parts.stacks) {
     for (let k = 0; k < 16; k++) {
       const ph: [number, number, number] = [
