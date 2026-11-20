@@ -364,8 +364,8 @@ export class Hull {
     let y =
       1.6 * sheerStern * Math.pow(1 - s, 3) +
       1.3 * sheerBow * Math.pow(s, 4) +
-      2.4 * Math.pow(Math.abs(s - 0.47) / 0.53, 2) -
-      0.7;
+      1.1 * Math.pow(Math.abs(s - 0.47) / 0.53, 2.2) -
+      0.25;
     if (bow === 'horn') y += 3 * Math.pow(this.bowT(s), 3);
     return y;
   }
@@ -375,8 +375,8 @@ export class Hull {
     // Quille en arc : elle remonte doucement vers l'arrière et l'avant.
     const y =
       -D +
-      (sternRise + D * 0.3) * (1 - smooth(0, 0.42, s)) +
-      D * 0.16 * Math.pow((s - 0.5) * 2, 2);
+      (sternRise + D * 0.18) * (1 - smooth(0, 0.38, s)) +
+      D * 0.06 * Math.pow((s - 0.55) * 2, 2);
     const t = this.bowT(s);
     const rise =
       bow === 'horn'
@@ -399,21 +399,19 @@ export class Hull {
     const yK = this.keelY(s);
     const yD = this.deckY(s);
     const hb = this.halfBeam(s);
-    // Section ronde sur presque toute la hauteur (pas de flanc droit),
-    // puis muraille nettement rentrante jusqu'au pont.
-    const VB = 0.78;
-    const yM = yK + (yD - yK) * 0.8;
+    const yM = yK + (yD - yK) * 0.55;
     let y: number;
     let z: number;
-    if (v < VB) {
-      // Plus en V vers les extrémités, ronde au milieu.
-      const end = Math.max(0, Math.abs(s - 0.5) * 2 - 0.2) / 0.8;
-      const phi = (v / VB) * (Math.PI / 2);
-      z = hb * Math.pow(Math.sin(phi), 0.8 + 1.1 * end);
-      y = yM - (yM - yK) * Math.cos(phi);
+    if (v < 0.66) {
+      // Section en V vers les extrémités, en U arrondi au milieu.
+      const end = Math.max(0, Math.abs(s - 0.5) * 2 - 0.25) / 0.75;
+      const phi = (v / 0.66) * (Math.PI / 2);
+      z = hb * Math.pow(Math.sin(phi), 0.85 + 0.9 * end);
+      y = yM - (yM - yK) * Math.pow(Math.cos(phi), 0.95);
     } else {
-      const t = (v - VB) / (1 - VB);
-      z = hb * (1 - 0.17 * Math.pow(t, 1.4));
+      // Muraille rentrante (« tumblehome ») : la coque se resserre vers le pont.
+      const t = (v - 0.66) / 0.34;
+      z = hb * (1 + 0.025 * Math.sin(t * Math.PI) - 0.14 * Math.pow(t, 1.7));
       y = yM + (yD - yM) * t;
     }
     return [this.x(s) + this.shift(s, v), y, z];
@@ -902,11 +900,11 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     // Fenêtres des flancs.
     for (const side of [1, -1]) {
       const len = (c.b - sa) * hull.L;
-      const n = Math.max(1, Math.floor((len - 1.4) / 2));
+      const n = Math.max(1, Math.floor((len - 1.4) / 3));
       for (let k = 0; k < n; k++) {
         const s = sa + ((k + 0.5) / n) * (c.b - sa);
         const h = height(s);
-        const rows = h > 6.5 ? 3 : h > 4 ? 2 : h > 2.2 ? 1 : 0;
+        const rows = h > 6.5 ? 2 : h > 2.2 ? 1 : 0;
         for (let row = 0; row < rows; row++) {
           const y = base(s) + h - 1.5 - row * 2.2;
           if (y < base(s) + 0.9) continue;
@@ -918,76 +916,29 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
               (width(s) * (1 - CT * ((y - base(s)) / h)) + 0.04) * side,
             ],
             [0, 0, side],
-            0.75,
-            1.15,
+            0.6,
+            0.95,
             glass,
             brass
           );
         }
       }
     }
-    // Pilastres et bandeau entre les étages de fenêtres.
-    for (const side of [1, -1]) {
-      const len = (c.b - sa) * hull.L;
-      const n = Math.max(1, Math.floor((len - 1.4) / 2));
-      for (let k2 = 0; k2 <= n; k2++) {
-        const s = sa + (k2 / n) * (c.b - sa) * 0.999 + 0.0005;
-        const h = height(s);
-        if (h < 2.2) continue;
-        const y0 = base(s) + 0.2;
-        const pts: Vec3[] = [];
-        for (let i = 0; i <= 6; i++) {
-          const y = y0 + ((h - 0.4) * i) / 6;
-          pts.push([
-            cx(s),
-            y,
-            (width(s) * (1 - CT * ((y - base(s)) / h)) + 0.06) * side,
-          ]);
-        }
-        b.tube(
-          pts,
-          0.11,
-          5,
-          castleMat.metal > 0.5
-            ? brass
-            : {
-                ...castleMat,
-                color: [
-                  castleMat.color[0] * 0.7,
-                  castleMat.color[1] * 0.7,
-                  castleMat.color[2] * 0.7,
-                ],
-              }
-        );
-      }
-      if (c.h > 4.2) {
-        const pts: Vec3[] = [];
-        for (let i = 0; i <= 20; i++) {
-          const s = sa + ((c.b - sa) * i) / 20;
-          const h = height(s);
-          const y = base(s) + h - 2.65;
-          if (y < base(s) + 1) continue;
-          pts.push([
-            cx(s),
-            y,
-            (width(s) * (1 - CT * ((y - base(s)) / h)) + 0.07) * side,
-          ]);
-        }
-        if (pts.length > 2) b.tube(pts, 0.09, 5, brass);
-      }
-    }
-    // Corniche de laiton sur le toit.
+    // Rambarde ajourée autour du toit (dunette) : montants et main courante.
     for (const side of [1, -1]) {
       const pts: Vec3[] = [];
-      for (let i = 0; i <= 20; i++) {
-        const s = sa + ((c.b - sa) * i) / 20;
-        pts.push([
-          cx(s),
-          base(s) + height(s) + 0.02,
-          (width(s) * 0.93 - 0.05) * side,
-        ]);
+      const n = Math.max(4, Math.round(((c.b - sa) * hull.L) / 1.3));
+      for (let k = 0; k <= n; k++) {
+        const s = sa + ((c.b - sa) * k) / n;
+        const y = base(s) + height(s);
+        const z = (width(s) * (1 - CT) - 0.12) * side;
+        const xx = secT(s, 0.5)[0];
+        pts.push([xx, y + 0.95, z]);
+        b.push(translation(xx, y + 0.45, z));
+        b.cylinder(0.06, 0.95, 6, brass);
+        b.pop();
       }
-      b.tube(pts, 0.1, 6, brass);
+      b.tube(pts, 0.08, 6, brass);
     }
     roofs.push({
       a: sa,
@@ -1246,12 +1197,18 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       }
     } else {
       const sc = i === mainIdx ? 1 : 0.86;
+      // Brigantine (voile aurique) sur le mât arrière, à la place de la basse voile.
+      const spanker = i === 0 && mastS.length > 1;
+      // Vergues brassées : les voiles prennent le vent de biais.
+      const brace = 0.3 + i * 0.04;
       const tiers = [
         [0.27, 0.52, 15],
         [0.55, 0.75, 11.5],
         [0.78, 0.92, 8],
       ];
       for (const [t0, t1, w0] of tiers) {
+        if (spanker && t0 < 0.3) continue;
+        b.push(rotationY(brace));
         const w = w0 * sc * (S.B / 10);
         const ya = H * t1;
         const yb = H * t0;
@@ -1281,6 +1238,33 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
           sail,
           { uv: (u, v) => [u * w, v * (ya - yb) * 4] }
         );
+        b.pop();
+      }
+      if (spanker) {
+        const s0 = hull.sOf(x);
+        const bl = Math.min(8.5, s0 * hull.L * 0.62);
+        let clear = 3.5;
+        for (const r of roofs)
+          for (let k = 0; k <= 8; k++) {
+            const ss = hull.sOf(x - (bl * k) / 8);
+            if (ss >= r.a && ss <= r.b)
+              clear = Math.max(clear, r.y(ss) - y0 + 1.6);
+          }
+        const yl0 = Math.min(clear, H * 0.4);
+        const yl1 = Math.max(yl0 + 5, H * 0.52);
+        const gaff: Vec3 = [-bl * 0.82, yl1 + 2.2, 0];
+        const boom: Vec3 = [-bl, yl0, 0];
+        foreAft(
+          b,
+          [-0.45, yl0 + 0.2, 0],
+          [-0.45, yl1, 0],
+          gaff,
+          boom,
+          sail,
+          0.9
+        );
+        b.tube([[-0.3, yl1, 0], gaff], 0.12, 6, wood);
+        b.tube([[-0.3, yl0, 0], boom], 0.14, 6, wood);
       }
       // Nid de pie.
       if (i === mainIdx) {
@@ -1341,15 +1325,32 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       );
     else {
       const bp = hull.point(0.995, 1);
-      b.tube(
+      const T: Vec3 = [tx, ty - 0.5, 0];
+      const B: Vec3 = [bp[0], bp[1] + hull.bulwark, 0];
+      b.tube([T, B], 0.04, 3, rope);
+      // Focs triangulaires le long de l'étai.
+      const on = (t: number): Vec3 => [
+        T[0] + (B[0] - T[0]) * t,
+        T[1] + (B[1] - T[1]) * t,
+        0,
+      ];
+      if (mastType !== 'pique')
         [
-          [tx, ty - 0.5, 0],
-          [bp[0], bp[1] + hull.bulwark, 0],
-        ],
-        0.04,
-        3,
-        rope
-      );
+          [0.3, 0.88, 0.42, 0],
+          [0.52, 0.97, 0.18, 0.5],
+        ].forEach(([h, t, back, dz]) => {
+          const head = on(h);
+          const tack = on(t);
+          const cx = tack[0] - (tack[0] - x) * back - 1.5;
+          const clew: Vec3 = [
+            cx,
+            hull.deckY(hull.sOf(cx)) + hull.bulwark + 2.2,
+            dz,
+          ];
+          head[2] = dz;
+          tack[2] = dz;
+          foreAft(b, tack, head, head, clew, sail, 0.7);
+        });
     }
     // Pavillon ou flamme.
     if (i === mainIdx) flag(b, [tx, ty, 0], build);
@@ -1612,6 +1613,41 @@ function nacelle(
     b.torus(0.72 + i * 0.22, 0.06 - i * 0.012, 32, 6, aether(5 - i * 1.2));
     b.pop();
   });
+}
+
+/** Voile aurique ou triangulaire (clew = head pour un triangle), creusée côté z. */
+function foreAft(
+  b: MeshBuilder,
+  luffBottom: Vec3,
+  luffTop: Vec3,
+  leechTop: Vec3,
+  leechBottom: Vec3,
+  mat: Mat,
+  belly: number
+) {
+  const lerp = (a: Vec3, c: Vec3, t: number): Vec3 => [
+    a[0] + (c[0] - a[0]) * t,
+    a[1] + (c[1] - a[1]) * t,
+    a[2] + (c[2] - a[2]) * t,
+  ];
+  for (const side of [1, -1])
+    b.grid(
+      12,
+      12,
+      (u, v) => {
+        const p = lerp(
+          lerp(luffBottom, leechBottom, u),
+          lerp(luffTop, leechTop, u),
+          v
+        );
+        const d =
+          Math.sin(Math.PI * Math.min(1, u * 1.15)) *
+          Math.sin(Math.PI * v * 0.92 + 0.1);
+        return [p[0], p[1], p[2] + d * belly + side * 0.004];
+      },
+      mat,
+      { uv: (u, v) => [u * 8, v * 30], flip: side < 0 }
+    );
 }
 
 function plume(g: MeshBuilder, r0: number, r1: number, len: number) {
