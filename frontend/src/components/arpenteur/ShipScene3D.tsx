@@ -118,8 +118,8 @@ export function ShipScene3D(props: ShipSceneProps) {
       if (!still) adapt(performance.now());
       const wide = canvas.clientWidth / Math.max(1, canvas.clientHeight) > 1.8;
       stage.render(still ? 2 : (performance.now() - t0) / 1000, {
-        yaw: 0.4,
-        elevation: 0.09,
+        yaw: 0.6,
+        elevation: 0.13,
         margin: wide ? 1.2 : 1.05,
         lift: wide ? -0.07 : 0,
       });

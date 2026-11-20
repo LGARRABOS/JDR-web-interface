@@ -364,8 +364,8 @@ export class Hull {
     let y =
       1.6 * sheerStern * Math.pow(1 - s, 3) +
       1.3 * sheerBow * Math.pow(s, 4) +
-      1.1 * Math.pow(Math.abs(s - 0.47) / 0.53, 2.2) -
-      0.25;
+      2.4 * Math.pow(Math.abs(s - 0.47) / 0.53, 2) -
+      0.7;
     if (bow === 'horn') y += 3 * Math.pow(this.bowT(s), 3);
     return y;
   }
@@ -375,8 +375,8 @@ export class Hull {
     // Quille en arc : elle remonte doucement vers l'arrière et l'avant.
     const y =
       -D +
-      (sternRise + D * 0.18) * (1 - smooth(0, 0.38, s)) +
-      D * 0.06 * Math.pow((s - 0.55) * 2, 2);
+      (sternRise + D * 0.3) * (1 - smooth(0, 0.42, s)) +
+      D * 0.16 * Math.pow((s - 0.5) * 2, 2);
     const t = this.bowT(s);
     const rise =
       bow === 'horn'
@@ -399,19 +399,21 @@ export class Hull {
     const yK = this.keelY(s);
     const yD = this.deckY(s);
     const hb = this.halfBeam(s);
-    const yM = yK + (yD - yK) * 0.55;
+    // Section ronde sur presque toute la hauteur (pas de flanc droit),
+    // puis muraille nettement rentrante jusqu'au pont.
+    const VB = 0.78;
+    const yM = yK + (yD - yK) * 0.8;
     let y: number;
     let z: number;
-    if (v < 0.66) {
-      // Section en V vers les extrémités, en U arrondi au milieu.
-      const end = Math.max(0, Math.abs(s - 0.5) * 2 - 0.25) / 0.75;
-      const phi = (v / 0.66) * (Math.PI / 2);
-      z = hb * Math.pow(Math.sin(phi), 0.85 + 0.9 * end);
-      y = yM - (yM - yK) * Math.pow(Math.cos(phi), 0.95);
+    if (v < VB) {
+      // Plus en V vers les extrémités, ronde au milieu.
+      const end = Math.max(0, Math.abs(s - 0.5) * 2 - 0.2) / 0.8;
+      const phi = (v / VB) * (Math.PI / 2);
+      z = hb * Math.pow(Math.sin(phi), 0.8 + 1.1 * end);
+      y = yM - (yM - yK) * Math.cos(phi);
     } else {
-      // Muraille rentrante (« tumblehome ») : la coque se resserre vers le pont.
-      const t = (v - 0.66) / 0.34;
-      z = hb * (1 + 0.025 * Math.sin(t * Math.PI) - 0.14 * Math.pow(t, 1.7));
+      const t = (v - VB) / (1 - VB);
+      z = hb * (1 - 0.17 * Math.pow(t, 1.4));
       y = yM + (yD - yM) * t;
     }
     return [this.x(s) + this.shift(s, v), y, z];
@@ -795,7 +797,10 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     const height = (s: number) => {
       if (c.shape === 'slope')
         return c.h * (1 - 0.8 * smooth(c.a + (c.b - c.a) * 0.25, c.b, s)) + 0.6;
-      return c.h;
+      // Le toit prolonge la tonture : il se relève vers l'extrémité du navire.
+      const rel = (s - c.a) / (c.b - c.a);
+      const toEnd = c.a < 0.05 ? 1 - rel : c.b > 0.95 ? rel : 0;
+      return c.h * (0.9 + 0.22 * toEnd * toEnd);
     };
     // Plan arrondi aux extrémités du château (galerie de poupe galbée).
     const width = (s: number) => {
@@ -803,7 +808,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
         1,
         Math.abs((s - (c.a + c.b) / 2) / ((c.b - c.a) / 2))
       );
-      const round = 0.72 + 0.28 * Math.sqrt(Math.max(0, 1 - Math.pow(e, 6)));
+      const round = 0.6 + 0.4 * Math.sqrt(Math.max(0, 1 - Math.pow(e, 4)));
       return Math.max(0.6, (hull.halfBeam(s) - 0.25) * wf * round);
     };
     const base = (s: number) => hull.deckY(s);
@@ -835,9 +840,13 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       return [x, y1 - r - d, -w];
     };
     const sa = c.a === 0 ? 0.004 : c.a;
+    // Murs rentrants, et mur d'extrémité qui surplombe en montant (poupe galbée).
     const tumble = (p: Vec3, s: number): Vec3 => {
-      const f = (p[1] - base(s)) / height(s);
-      return [p[0], p[1], p[2] * (1 - CT * f)];
+      const f = Math.max(0, (p[1] - base(s)) / height(s));
+      let x = p[0];
+      if (c.a < 0.05) x -= (1 - smooth(sa, sa + 0.07, s)) * f * f * 1.4;
+      if (c.b > 0.95) x += smooth(c.b - 0.07, c.b, s) * f * f * 1.0;
+      return [x, p[1], p[2] * (1 - CT * f)];
     };
     const sec0 = sec;
     const secT = (s: number, t: number) => tumble(sec0(s, t), s);
