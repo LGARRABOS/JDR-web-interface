@@ -12,6 +12,23 @@ function moodNow(): Mood {
   return h >= 20 || h < 7 ? 'night' : 'dusk';
 }
 
+// Point de vue par défaut ; l'utilisateur peut pivoter (glisser) et zoomer (molette, pincement).
+const DEFAULT_CAM = { yaw: 0.6, elevation: 0.13, zoom: 1 };
+const CAM_LIMITS = { elevMin: 0.02, elevMax: 1.1, zoomMin: 0.35, zoomMax: 1.8 };
+type Cam = typeof DEFAULT_CAM;
+const clampCam = (c: Cam): Cam => ({
+  yaw: c.yaw,
+  elevation: Math.min(
+    CAM_LIMITS.elevMax,
+    Math.max(CAM_LIMITS.elevMin, c.elevation)
+  ),
+  zoom: Math.min(CAM_LIMITS.zoomMax, Math.max(CAM_LIMITS.zoomMin, c.zoom)),
+});
+const isDefault = (c: Cam) =>
+  Math.abs(c.yaw - DEFAULT_CAM.yaw) < 1e-3 &&
+  Math.abs(c.elevation - DEFAULT_CAM.elevation) < 1e-3 &&
+  Math.abs(c.zoom - DEFAULT_CAM.zoom) < 1e-3;
+
 function supportsWebGL2() {
   try {
     return !!document.createElement('canvas').getContext('webgl2');
@@ -31,6 +48,14 @@ export function ShipScene3D(props: ShipSceneProps) {
   } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<Stage | null>(null);
+  // Point de vue visé (les entrées le modifient, l'image le rejoint en douceur).
+  const camRef = useRef<Cam>({ ...DEFAULT_CAM });
+  const [moved, setMoved] = useState(false);
+  const setCam = (c: Cam) => {
+    camRef.current = clampCam(c);
+    setMoved(!isDefault(camRef.current));
+    canvasRef.current?.dispatchEvent(new Event('arp-cam'));
+  };
   const [failed, setFailed] = useState(
     () => typeof document !== 'undefined' && !supportsWebGL2()
   );
@@ -64,6 +89,7 @@ export function ShipScene3D(props: ShipSceneProps) {
     let raf = 0;
     let dirty = true;
     const t0 = performance.now();
+    const cur: Cam = { ...camRef.current };
     // Résolution adaptative : on baisse la définition si la machine peine,
     // puis on la remonte quand elle tient la cadence.
     let scale = 1;
@@ -116,12 +142,31 @@ export function ShipScene3D(props: ShipSceneProps) {
       }
       dirty = false;
       if (!still) adapt(performance.now());
+      // La caméra rejoint le point de vue visé avec un léger amorti.
+      const goal = camRef.current;
+      const k = still ? 1 : 0.2;
+      cur.yaw += (goal.yaw - cur.yaw) * k;
+      cur.elevation += (goal.elevation - cur.elevation) * k;
+      cur.zoom += (goal.zoom - cur.zoom) * k;
+      if (
+        Math.abs(goal.yaw - cur.yaw) +
+          Math.abs(goal.elevation - cur.elevation) +
+          Math.abs(goal.zoom - cur.zoom) >
+        1e-4
+      )
+        dirty = true;
       const wide = canvas.clientWidth / Math.max(1, canvas.clientHeight) > 1.8;
+      // En s'éloignant du point de vue par défaut, on recentre peu à peu le navire.
+      const off = Math.min(
+        1,
+        Math.abs(cur.zoom - 1) * 2 +
+          Math.abs(cur.elevation - DEFAULT_CAM.elevation) * 3
+      );
       stage.render(still ? 2 : (performance.now() - t0) / 1000, {
-        yaw: 0.6,
-        elevation: 0.13,
-        margin: wide ? 1.2 : 1.05,
-        lift: wide ? -0.07 : 0,
+        yaw: cur.yaw,
+        elevation: cur.elevation,
+        margin: (wide ? 1.2 : 1.05) * cur.zoom,
+        lift: wide ? -0.07 * (1 - off) : 0,
       });
     };
     raf = requestAnimationFrame(frame);
@@ -129,11 +174,68 @@ export function ShipScene3D(props: ShipSceneProps) {
       dirty = true;
     };
     canvas.addEventListener('arp-ship', onShip);
+    canvas.addEventListener('arp-cam', onShip);
+
+    // Pivoter en glissant (souris ou un doigt), zoomer à la molette ou en pinçant.
+    const pts = new Map<number, { x: number; y: number }>();
+    let pinch = 0;
+    const move = (dyaw: number, delev: number, zoomMul: number) => {
+      const c = camRef.current;
+      camRef.current = clampCam({
+        yaw: c.yaw + dyaw,
+        elevation: c.elevation + delev,
+        zoom: c.zoom * zoomMul,
+      });
+      setMoved(!isDefault(camRef.current));
+      dirty = true;
+    };
+    const spread = () => {
+      const [a, b] = [...pts.values()];
+      return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+    };
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      canvas.setPointerCapture(e.pointerId);
+      pinch = spread();
+    };
+    const onMove = (e: PointerEvent) => {
+      const p = pts.get(e.pointerId);
+      if (!p) return;
+      const dx = e.clientX - p.x;
+      const dy = e.clientY - p.y;
+      p.x = e.clientX;
+      p.y = e.clientY;
+      if (pts.size >= 2) {
+        const d = spread();
+        if (pinch > 0 && d > 0) move(0, 0, pinch / d);
+        pinch = d;
+      } else move(-dx * 0.008, dy * 0.005, 1);
+    };
+    const onUp = (e: PointerEvent) => {
+      pts.delete(e.pointerId);
+      pinch = spread();
+    };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      move(0, 0, Math.exp(e.deltaY * 0.0012));
+    };
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('pointercancel', onUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
       io?.disconnect();
       canvas.removeEventListener('arp-ship', onShip);
+      canvas.removeEventListener('arp-cam', onShip);
+      canvas.removeEventListener('pointerdown', onDown);
+      canvas.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('pointercancel', onUp);
+      canvas.removeEventListener('wheel', onWheel);
       stage.dispose();
       stageRef.current = null;
     };
@@ -149,12 +251,49 @@ export function ShipScene3D(props: ShipSceneProps) {
   }, [use3D, animate, build, guns, crew, damage, scaffolding, desert, mood]);
 
   if (!use3D) return <ShipScene {...props} />;
+  const zoomBy = (m: number) =>
+    setCam({ ...camRef.current, zoom: camRef.current.zoom * m });
+  const btn =
+    'h-8 w-8 rounded-full text-[#cdb68c] hover:bg-white/10 font-heading text-base leading-none flex items-center justify-center';
   return (
-    <canvas
-      ref={canvasRef}
-      className={className}
-      role="img"
-      aria-label={`Arpenteur ${doc.name}`}
-    />
+    <div className={className}>
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
+        style={{ touchAction: 'pan-y' }}
+        role="img"
+        aria-label={`Arpenteur ${doc.name} — glisser pour pivoter, molette ou pincement pour zoomer`}
+      />
+      <div className="absolute top-14 right-3 sm:top-16 sm:right-5 arp-lever rounded-full p-1 flex flex-col gap-0.5">
+        <button
+          type="button"
+          className={btn}
+          onClick={() => zoomBy(0.8)}
+          title="Zoomer"
+          aria-label="Zoomer"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className={btn}
+          onClick={() => zoomBy(1.25)}
+          title="Dézoomer"
+          aria-label="Dézoomer"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className={`${btn} ${moved ? 'arp-lever-on' : 'opacity-50'}`}
+          onClick={() => setCam({ ...DEFAULT_CAM })}
+          disabled={!moved}
+          title="Point de vue par défaut"
+          aria-label="Revenir au point de vue par défaut"
+        >
+          ⟲
+        </button>
+      </div>
+    </div>
   );
 }
