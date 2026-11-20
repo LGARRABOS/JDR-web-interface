@@ -309,6 +309,9 @@ function alignY(o: Vec3, d: Vec3): Mat4 {
   return basis(o, x, y, z);
 }
 
+/** Rentrée des murs des châteaux, du pied au toit. */
+const CT = 0.12;
+
 export class Hull {
   readonly s: AllureSpec;
   readonly D: number;
@@ -333,8 +336,12 @@ export class Hull {
   }
   halfBeam(s: number) {
     const { B, transom, bow } = this.s;
+    // Plan courbe : pas de partie droite au milieu, arrière qui se resserre.
+    const tr = transom * 0.82;
     let hb =
-      (B / 2) * (transom + (1 - transom) * Math.pow(smooth(0, 0.3, s), 0.6));
+      (B / 2) *
+      (tr + (1 - tr) * Math.pow(smooth(0, 0.48, s), 0.55)) *
+      (1 - 0.07 * Math.pow((s - 0.52) / 0.48, 2));
     const t = this.bowT(s);
     if (t > 0) {
       const k =
@@ -353,15 +360,23 @@ export class Hull {
   }
   deckY(s: number) {
     const { sheerBow, sheerStern, bow } = this.s;
+    // Tonture : le pont se creuse au milieu et se relève aux extrémités.
     let y =
-      1.6 * sheerStern * Math.pow(1 - s, 3) + 1.3 * sheerBow * Math.pow(s, 4);
+      1.6 * sheerStern * Math.pow(1 - s, 3) +
+      1.3 * sheerBow * Math.pow(s, 4) +
+      1.1 * Math.pow(Math.abs(s - 0.47) / 0.53, 2.2) -
+      0.25;
     if (bow === 'horn') y += 3 * Math.pow(this.bowT(s), 3);
     return y;
   }
   keelY(s: number) {
     const D = this.D;
     const { bow, sternRise } = this.s;
-    const y = -D + sternRise * (1 - smooth(0, 0.2, s));
+    // Quille en arc : elle remonte doucement vers l'arrière et l'avant.
+    const y =
+      -D +
+      (sternRise + D * 0.18) * (1 - smooth(0, 0.38, s)) +
+      D * 0.06 * Math.pow((s - 0.55) * 2, 2);
     const t = this.bowT(s);
     const rise =
       bow === 'horn'
@@ -388,8 +403,10 @@ export class Hull {
     let y: number;
     let z: number;
     if (v < 0.66) {
+      // Section en V vers les extrémités, en U arrondi au milieu.
+      const end = Math.max(0, Math.abs(s - 0.5) * 2 - 0.25) / 0.75;
       const phi = (v / 0.66) * (Math.PI / 2);
-      z = hb * Math.pow(Math.sin(phi), 0.9);
+      z = hb * Math.pow(Math.sin(phi), 0.85 + 0.9 * end);
       y = yM - (yM - yK) * Math.pow(Math.cos(phi), 0.95);
     } else {
       // Muraille rentrante (« tumblehome ») : la coque se resserre vers le pont.
@@ -397,7 +414,16 @@ export class Hull {
       z = hb * (1 + 0.025 * Math.sin(t * Math.PI) - 0.14 * Math.pow(t, 1.7));
       y = yM + (yD - yM) * t;
     }
-    return [this.x(s), y, z];
+    return [this.x(s) + this.shift(s, v), y, z];
+  }
+  /** Élancement : l'étrave s'avance et la poupe déborde en hauteur. */
+  shift(s: number, v: number) {
+    const k = Math.pow(Math.max(0, v), 1.4);
+    const bow = this.s.bow;
+    const stem = bow === 'ram' ? 0.4 : bow === 'pod' ? 1.2 : 2.4;
+    return (
+      Math.pow(this.bowT(s), 2) * k * stem - (1 - smooth(0, 0.14, s)) * k * 1.5
+    );
   }
   /** Normale extérieure (tribord). */
   normal(s: number, v: number): Vec3 {
@@ -771,9 +797,19 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
         return c.h * (1 - 0.8 * smooth(c.a + (c.b - c.a) * 0.25, c.b, s)) + 0.6;
       return c.h;
     };
-    const width = (s: number) => Math.max(0.6, (hull.halfBeam(s) - 0.25) * wf);
+    // Plan arrondi aux extrémités du château (galerie de poupe galbée).
+    const width = (s: number) => {
+      const e = Math.min(
+        1,
+        Math.abs((s - (c.a + c.b) / 2) / ((c.b - c.a) / 2))
+      );
+      const round = 0.72 + 0.28 * Math.sqrt(Math.max(0, 1 - Math.pow(e, 6)));
+      return Math.max(0.6, (hull.halfBeam(s) - 0.25) * wf * round);
+    };
     const base = (s: number) => hull.deckY(s);
-    const r = 0.5;
+    const r = Math.min(1.1, c.h * 0.22);
+    // Les murs suivent l'élancement de la coque au niveau du pont.
+    const cx = (s: number) => hull.x(s) + hull.shift(s, 1);
     const sec = (s: number, t: number): Vec3 => {
       // t parcourt la section : flanc tribord, toit, flanc bâbord.
       const w = width(s);
@@ -781,7 +817,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       const y1 = y0 + height(s);
       const per = 2 * (y1 - y0 - r) + 2 * (w - r) + Math.PI * r;
       let d = t * per;
-      const x = hull.x(s);
+      const x = cx(s);
       if (d < y1 - y0 - r) return [x, y0 + d, w];
       d -= y1 - y0 - r;
       if (d < (Math.PI / 2) * r) {
@@ -801,7 +837,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     const sa = c.a === 0 ? 0.004 : c.a;
     const tumble = (p: Vec3, s: number): Vec3 => {
       const f = (p[1] - base(s)) / height(s);
-      return [p[0], p[1], p[2] * (1 - 0.07 * f)];
+      return [p[0], p[1], p[2] * (1 - CT * f)];
     };
     const sec0 = sec;
     const secT = (s: number, t: number) => tumble(sec0(s, t), s);
@@ -826,7 +862,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       const ring: Vec3[] = [];
       for (let i = 0; i <= 40; i++) ring.push(secT(s, i / 40));
       const cy = base(s) + height(s) / 2;
-      const ci = b.vertex([hull.x(s), cy, 0], [dir, 0, 0], [0, cy], castleMat);
+      const ci = b.vertex([cx(s), cy, 0], [dir, 0, 0], [0, cy], castleMat);
       const ids = ring.map((p) =>
         b.vertex(p, [dir, 0, 0], [p[2], p[1]], castleMat)
       );
@@ -845,7 +881,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
           if (y < base(s) + 0.8) continue;
           window(
             b,
-            [hull.x(s) + dir * 0.03, y, z],
+            [cx(s) + dir * 0.03, y, z],
             [dir, 0, 0],
             0.7,
             1.1,
@@ -868,9 +904,9 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
           window(
             b,
             [
-              hull.x(s),
+              cx(s),
               y,
-              (width(s) * (1 - 0.07 * ((y - base(s)) / h)) + 0.04) * side,
+              (width(s) * (1 - CT * ((y - base(s)) / h)) + 0.04) * side,
             ],
             [0, 0, side],
             0.75,
@@ -894,9 +930,9 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
         for (let i = 0; i <= 6; i++) {
           const y = y0 + ((h - 0.4) * i) / 6;
           pts.push([
-            hull.x(s),
+            cx(s),
             y,
-            (width(s) * (1 - 0.07 * ((y - base(s)) / h)) + 0.06) * side,
+            (width(s) * (1 - CT * ((y - base(s)) / h)) + 0.06) * side,
           ]);
         }
         b.tube(
@@ -923,9 +959,9 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
           const y = base(s) + h - 2.65;
           if (y < base(s) + 1) continue;
           pts.push([
-            hull.x(s),
+            cx(s),
             y,
-            (width(s) * (1 - 0.07 * ((y - base(s)) / h)) + 0.07) * side,
+            (width(s) * (1 - CT * ((y - base(s)) / h)) + 0.07) * side,
           ]);
         }
         if (pts.length > 2) b.tube(pts, 0.09, 5, brass);
@@ -937,7 +973,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       for (let i = 0; i <= 20; i++) {
         const s = sa + ((c.b - sa) * i) / 20;
         pts.push([
-          hull.x(s),
+          cx(s),
           base(s) + height(s) + 0.02,
           (width(s) * 0.93 - 0.05) * side,
         ]);
