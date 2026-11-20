@@ -467,6 +467,25 @@ export interface ShipParts {
   radius: number;
   top: number;
   bottom: number;
+  /** Équipage animé (repère du navire), et ses couleurs. */
+  crew: CrewMember[];
+  crewStyle: CrewStyle;
+}
+
+export type CrewRole = 'walk' | 'helm' | 'haul' | 'scrub' | 'look' | 'capstan';
+export interface CrewMember {
+  role: CrewRole;
+  /** Position (pied) ; pour « walk », départ du trajet ; pour « capstan », centre. */
+  pos: Vec3;
+  /** Arrivée du trajet (« walk »). */
+  to?: Vec3;
+  /** Orientation (radians autour de y, 0 = vers la proue). */
+  yaw: number;
+  seed: number;
+}
+export interface CrewStyle {
+  body: string;
+  accent: string;
 }
 
 export interface ShipOptions {
@@ -1628,7 +1647,12 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     aether,
     glass,
   });
-  crew(b, hull, roofs, opts.crew ?? 0, build);
+  const crewMembers = crewPlan(
+    hull,
+    roofs,
+    opts.crew ?? 0,
+    mastS.map((m) => hull.x(m))
+  );
   deckGear(b, hull, roofs, iron, brass);
   if (opts.scaffolding) scaffold(b, hull, iron);
   damage(b, hull, opts.damage ?? 0, stacks);
@@ -1644,6 +1668,8 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     radius: Math.max(hull.L / 2 + 4, (top - bottom) / 2),
     top,
     bottom,
+    crew: crewMembers,
+    crewStyle: { body: build.tenue.color, accent: build.tenue.accent },
   };
 }
 
@@ -2268,23 +2294,108 @@ function deckGear(
   }
 }
 
-function crew(
-  b: MeshBuilder,
+/**
+ * Équipage : où se tient chacun et ce qu'il fait. L'animation se fait à
+ * l'image (Stage) : marche sur le pont, barre, cabestan, drisses, brosse,
+ * vigie sur la dunette. Au moins trois personnes pour que le navire vive.
+ */
+function crewPlan(
   hull: Hull,
   roofs: Roof[],
   count: number,
-  build: Build
-) {
-  const n = Math.min(10, Math.max(0, count));
+  mastX: number[]
+): CrewMember[] {
+  const n = Math.min(12, Math.max(3, count));
+  const out: CrewMember[] = [];
+  const free = (s: number) =>
+    s > 0.1 &&
+    s < 0.9 &&
+    !roofs.some((r) => s > r.a - 0.025 && s < r.b + 0.025);
+  const at = (s: number, z: number): Vec3 => [hull.x(s), hull.deckY(s), z];
+  const sOfX = (x: number) => hull.sOf(x);
+  const aft = roofs.find((r) => r.a < 0.05);
+  const hs = aft ? aft.b + 0.025 : 0.08;
+  // 1. Barreur, derrière la roue, face à la proue.
+  out.push({
+    role: 'helm',
+    pos: [hull.x(hs) - 0.55, hull.deckY(hs), 0],
+    yaw: 0,
+    seed: 1,
+  });
+  // 2. Cabestan, poussé en tournant.
+  if (free(0.82))
+    out.push({ role: 'capstan', pos: at(0.82, 0), yaw: 0, seed: 2 });
+  // 3. Vigie sur la dunette.
+  if (aft) {
+    const sv = aft.a + (aft.b - aft.a) * 0.18;
+    out.push({
+      role: 'look',
+      pos: [hull.x(sv), aft.y(sv), aft.w(sv) * 0.45],
+      yaw: 0.6,
+      seed: 3,
+    });
+  }
+  // Intervalles libres du pont pour les marcheurs.
+  const spans: [number, number][] = [];
+  let st = -1;
+  for (let k = 0; k <= 200; k++) {
+    const s = k / 200;
+    if (free(s) && st < 0) st = s;
+    if ((!free(s) || k === 200) && st >= 0) {
+      if (s - st > 0.08) spans.push([st, s - 0.005]);
+      st = -1;
+    }
+  }
+  let k = 0;
+  while (out.length < n && k < 60) {
+    const seed = 10 + k;
+    const r1 = rand(seed * 7 + 1);
+    const r2 = rand(seed * 13 + 5);
+    const role: CrewRole = (['walk', 'haul', 'walk', 'scrub'] as const)[k % 4];
+    k++;
+    if (role === 'haul') {
+      const mx = mastX[(k >> 2) % mastX.length];
+      if (mx === undefined) continue;
+      const side = r1 < 0.5 ? 1 : -1;
+      const s = sOfX(mx + 0.5);
+      if (!free(s)) continue;
+      out.push({
+        role,
+        pos: [mx + 0.5, hull.deckY(s), side * 1.15],
+        yaw: side * (Math.PI / 2),
+        seed,
+      });
+      continue;
+    }
+    if (!spans.length) break;
+    const [a, b] = spans[Math.floor(r1 * spans.length) % spans.length];
+    const hb = (s: number) => Math.max(0.8, hull.halfBeam(s) - 1.4);
+    if (role === 'walk') {
+      const s0 = a + 0.01;
+      const s1 = b - 0.01;
+      const z = (r2 * 2 - 1) * Math.min(hb(s0), hb(s1));
+      const zz = Math.abs(z) < 1.2 ? Math.sign(z || 1) * 1.4 : z;
+      out.push({ role, pos: at(s0, zz), to: at(s1, zz), yaw: 0, seed });
+    } else {
+      const s = a + (b - a) * r2;
+      const z = (r1 * 2 - 1) * hb(s);
+      out.push({ role, pos: at(s, z), yaw: r1 * 6.28, seed });
+    }
+  }
+  return out;
+}
+
+/** Pièces d'un matelot (pivots : hanche pour le tronc et les jambes, épaule pour les bras). */
+export function crewMeshes(style: CrewStyle) {
   const body: Mat = {
     p: P.PLAIN,
-    color: linear(build.tenue.color),
+    color: linear(style.body),
     metal: 0,
     rough: 0.85,
   };
   const accent: Mat = {
     p: P.PLAIN,
-    color: linear(build.tenue.accent),
+    color: linear(style.accent),
     metal: 0,
     rough: 0.7,
   };
@@ -2294,47 +2405,68 @@ function crew(
     metal: 0,
     rough: 0.7,
   };
-  const hat: Mat = {
+  const shirt: Mat = {
+    p: P.SAIL,
+    color: linear('#e4dccb'),
+    metal: 0,
+    rough: 0.9,
+  };
+  const trousers: Mat = {
+    p: P.PLAIN,
+    color: linear('#3b3027'),
+    metal: 0,
+    rough: 0.9,
+  };
+  const dark: Mat = {
     p: P.PLAIN,
     color: linear('#1c1714'),
     metal: 0,
     rough: 0.8,
   };
-  const free = (s: number) =>
-    !roofs.some((r) => s > r.a - 0.02 && s < r.b + 0.02);
-  let placed = 0;
-  for (let i = 0; i < 40 && placed < n; i++) {
-    const s = 0.2 + rand(i * 7 + 1) * 0.65;
-    if (!free(s)) continue;
-    const p = hull.point(s, 1);
-    const z = (rand(i * 13 + 2) * 2 - 1) * (p[2] - 1.2);
-    b.push(
-      chain(translation(p[0], hull.deckY(s), z), rotationY(rand(i) * 6.28))
-    );
-    b.lathe(
-      [
-        [0.22, 0],
-        [0.26, 0.9],
-        [0.3, 1.35],
-        [0.18, 1.5],
-        [0, 1.5],
-      ],
-      8,
-      body
-    );
-    b.push(translation(0, 1.1, 0));
-    b.torus(0.29, 0.05, 8, 4, accent);
-    b.pop();
-    b.push(translation(0, 1.72, 0));
-    b.sphere(0.2, 8, skin);
-    b.push(translation(0, 0.12, 0));
-    b.cylinder(0.3, 0.03, 10, hat);
-    b.cylinder(0.17, 0.3, 10, hat);
-    b.pop();
-    b.pop();
-    b.pop();
-    placed++;
-  }
+  // Tronc (de la hanche, y = 0, aux épaules) + tête et chapeau.
+  const torso = new MeshBuilder();
+  torso.lathe(
+    [
+      [0, -0.05],
+      [0.2, -0.05],
+      [0.22, 0.15],
+      [0.2, 0.32],
+      [0.25, 0.52],
+      [0.24, 0.6],
+      [0.08, 0.66],
+      [0, 0.66],
+    ],
+    10,
+    body
+  );
+  torso.push(translation(0, 0.08, 0));
+  torso.torus(0.215, 0.04, 10, 4, accent);
+  torso.pop();
+  torso.push(translation(0, 0.68, 0));
+  torso.cylinder(0.07, 0.08, 6, skin);
+  torso.pop();
+  torso.push(translation(0, 0.86, 0));
+  torso.sphere(0.13, 10, skin);
+  torso.push(translation(0, 0.08, 0));
+  torso.cylinder(0.21, 0.025, 10, dark);
+  torso.cylinder(0.12, 0.17, 10, dark);
+  torso.pop();
+  torso.pop();
+  // Jambe (pend de la hanche) avec botte.
+  const leg = new MeshBuilder();
+  leg.push(translation(0, -0.86, 0));
+  leg.cylinder(0.075, 0.86, 6, trousers);
+  leg.box(0.26, 0.14, 0.12, dark);
+  leg.pop();
+  leg.push(translation(0.04, -0.86, 0));
+  leg.pop();
+  // Bras (pend de l'épaule) avec main.
+  const arm = new MeshBuilder();
+  arm.push(translation(0, -0.6, 0));
+  arm.cylinder(0.055, 0.6, 6, shirt);
+  arm.sphere(0.065, 6, skin);
+  arm.pop();
+  return { torso: torso.build(), leg: leg.build(), arm: arm.build() };
 }
 
 interface Kit {

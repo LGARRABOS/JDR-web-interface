@@ -14,6 +14,7 @@ import {
   rotationX,
   rotationY,
   rotationZ,
+  scaling,
   translation,
   type Mat4,
   type Vec3,
@@ -25,7 +26,12 @@ import {
   type Lighting,
 } from './renderer';
 import { MeshBuilder, P } from './geometry';
-import { buildShip, type ShipParts } from './shipModel';
+import {
+  buildShip,
+  crewMeshes,
+  type CrewMember,
+  type ShipParts,
+} from './shipModel';
 import { transformPoint } from './math';
 
 // Mise en scène : décor + navire, cadrage de trois-quarts, animation.
@@ -57,6 +63,7 @@ export interface ViewOptions {
 }
 
 const HOVER = 13;
+const CREW_SCALE = 1.4;
 
 export class Stage {
   readonly r: Renderer;
@@ -67,6 +74,7 @@ export class Stage {
     glows: GpuMesh;
     dust: GpuMesh;
     fans: { mesh: GpuMesh; place: Mat4; speed: number }[];
+    crew: { torso: GpuMesh; leg: GpuMesh; arm: GpuMesh };
   } | null = null;
   private light: Lighting;
   private mood: Mood = 'dusk';
@@ -99,6 +107,14 @@ export class Stage {
         place: f.place,
         speed: f.speed,
       })),
+      crew: (() => {
+        const m = crewMeshes(parts.crewStyle);
+        return {
+          torso: this.r.upload(m.torso),
+          leg: this.r.upload(m.leg),
+          arm: this.r.upload(m.arm),
+        };
+      })(),
     };
   }
 
@@ -108,6 +124,9 @@ export class Stage {
     this.r.release(this.ship.glows);
     this.r.release(this.ship.dust);
     this.ship.fans.forEach((f) => this.r.release(f.mesh));
+    this.r.release(this.ship.crew.torso);
+    this.r.release(this.ship.crew.leg);
+    this.r.release(this.ship.crew.arm);
     this.ship = null;
   }
 
@@ -144,6 +163,7 @@ export class Stage {
         shadow: false,
       });
     glows.push({ mesh: this.ship.glows, model: shipM });
+    for (const c of parts.crew) poseCrew(items, this.ship.crew, shipM, c, time);
 
     const aspect = this.r.width / this.r.height;
     const fov = view.fov ?? 0.36;
@@ -285,4 +305,147 @@ function dustMesh(parts: ShipParts): import('./geometry').MeshData {
     }
   }
   return b.build();
+}
+
+/** Pose d'un matelot à l'instant t : position, orientation et angles des membres. */
+function poseCrew(
+  items: DrawItem[],
+  mesh: { torso: GpuMesh; leg: GpuMesh; arm: GpuMesh },
+  shipM: Mat4,
+  c: CrewMember,
+  time: number
+) {
+  const t = time + c.seed * 7.31;
+  let pos: Vec3 = c.pos;
+  let yaw = c.yaw;
+  let lean = 0;
+  let bob = 0;
+  let legL = 0;
+  let legR = 0;
+  let armL = 0.08;
+  let armR = 0.08;
+  let crouch = 0;
+  const gait = (dist: number, amp = 1) => {
+    const ph = dist * ((Math.PI * 2) / 1.5);
+    legL = Math.sin(ph) * 0.45 * amp;
+    legR = -legL;
+    armL = -Math.sin(ph) * 0.35 * amp + 0.08;
+    armR = Math.sin(ph) * 0.35 * amp + 0.08;
+    bob = Math.abs(Math.cos(ph)) * 0.05 * amp;
+  };
+  switch (c.role) {
+    case 'walk': {
+      // Va-et-vient avec une courte pause à chaque bout.
+      const to = c.to ?? c.pos;
+      const len = Math.max(1, Math.hypot(to[0] - pos[0], to[2] - pos[2]));
+      const speed = 1.1 + (c.seed % 3) * 0.15;
+      const leg = len / speed;
+      const cyc = (t % (2 * leg + 3)) - 0;
+      let u: number;
+      let dir: number;
+      if (cyc < leg) {
+        u = cyc / leg;
+        dir = 1;
+      } else if (cyc < leg + 1.5) {
+        u = 1;
+        dir = 0;
+      } else if (cyc < 2 * leg + 1.5) {
+        u = 1 - (cyc - leg - 1.5) / leg;
+        dir = -1;
+      } else {
+        u = 0;
+        dir = 0;
+      }
+      pos = [
+        pos[0] + (to[0] - pos[0]) * u,
+        pos[1] + (to[1] - pos[1]) * u,
+        pos[2] + (to[2] - pos[2]) * u,
+      ];
+      const heading = Math.atan2(-(to[2] - c.pos[2]), to[0] - c.pos[0]);
+      if (dir !== 0) {
+        yaw = dir > 0 ? heading : heading + Math.PI;
+        gait(u * len);
+      } else {
+        yaw =
+          (cyc < leg + 1.5 ? heading : heading + Math.PI) + Math.sin(t) * 0.3;
+      }
+      break;
+    }
+    case 'helm':
+      lean = 0.05;
+      armL = 1.25 + Math.sin(t * 0.6) * 0.18;
+      armR = 1.25 - Math.sin(t * 0.6) * 0.18;
+      yaw = Math.sin(t * 0.25) * 0.06;
+      break;
+    case 'capstan': {
+      // Pousse une barre du cabestan en tournant autour.
+      const r = 1.45;
+      const a = t * 0.28;
+      pos = [c.pos[0] + Math.cos(a) * r, c.pos[1], c.pos[2] - Math.sin(a) * r];
+      yaw = a + Math.PI / 2;
+      gait(a * r, 0.7);
+      lean = 0.35;
+      armL = armR = 1.45;
+      break;
+    }
+    case 'haul': {
+      // Tire sur une drisse, main sur main.
+      const ph = t * 2.2;
+      armL = 2.5 + Math.sin(ph) * 0.45;
+      armR = 2.5 - Math.sin(ph) * 0.45;
+      lean = -0.15 + Math.sin(ph * 2) * 0.05;
+      legL = 0.25;
+      legR = -0.15;
+      break;
+    }
+    case 'scrub': {
+      // Brique le pont, à genoux, en se déplaçant lentement.
+      crouch = 0.45;
+      lean = 0.85;
+      armR = 1.1 + Math.sin(t * 4.5) * 0.45;
+      armL = 0.7;
+      legL = legR = -1.3;
+      pos = [pos[0] + Math.sin(t * 0.15) * 1.5, pos[1], pos[2]];
+      break;
+    }
+    case 'look': {
+      // Vigie : balaie l'horizon, une main en visière de temps en temps.
+      yaw = c.yaw + Math.sin(t * 0.3) * 0.9;
+      if (Math.sin(t * 0.21) > 0.3) armR = 2.6;
+      break;
+    }
+  }
+  // Un peu plus grands que nature pour rester lisibles à l'échelle du navire.
+  const P0 = chain(
+    shipM,
+    translation(pos[0], pos[1], pos[2]),
+    rotationY(yaw),
+    scaling(CREW_SCALE, CREW_SCALE, CREW_SCALE)
+  );
+  const hip = chain(P0, translation(0, 0.9 - crouch + bob, 0));
+  const torso = chain(hip, rotationZ(-lean));
+  items.push({ mesh: mesh.torso, model: torso, shadow: true });
+  for (const [side, ang] of [
+    [1, legR],
+    [-1, legL],
+  ] as const)
+    items.push({
+      mesh: mesh.leg,
+      model: chain(hip, translation(0, 0, side * 0.11), rotationZ(ang)),
+      shadow: true,
+    });
+  for (const [side, ang] of [
+    [1, armR],
+    [-1, armL],
+  ] as const)
+    items.push({
+      mesh: mesh.arm,
+      model: chain(
+        torso,
+        translation(0, 0.56, side * 0.29),
+        rotationX(side * -0.08),
+        rotationZ(ang)
+      ),
+      shadow: true,
+    });
 }
