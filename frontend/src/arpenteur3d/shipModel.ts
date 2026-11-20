@@ -792,7 +792,16 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
   }[] = [];
   for (const c of S.castles) {
     const wf = c.w ?? 0.97;
-    const height = (s: number) => {
+    const sa = c.a === 0 ? 0.004 : c.a;
+    // Château de poupe en deux niveaux : gaillard bas sur toute la longueur,
+    // dunette plus haute sur l'arrière (comme sur un galion).
+    const stepped =
+      (c.shape === 'box' || c.shape === 'dome') &&
+      c.a < 0.05 &&
+      c.b - c.a > 0.17 &&
+      c.h >= 3;
+    const split = stepped ? sa + (c.b - sa) * 0.55 : c.b;
+    const hUp = (s: number) => {
       if (c.shape === 'slope')
         return c.h * (1 - 0.8 * smooth(c.a + (c.b - c.a) * 0.25, c.b, s)) + 0.6;
       // Le toit prolonge la tonture : il se relève vers l'extrémité du navire.
@@ -800,6 +809,9 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       const toEnd = c.a < 0.05 ? 1 - rel : c.b > 0.95 ? rel : 0;
       return c.h * (0.9 + 0.22 * toEnd * toEnd);
     };
+    const hLow = (s: number) => Math.max(2.2, hUp(s) * 0.52);
+    const height = (s: number) =>
+      stepped && s > split + 1e-6 ? hLow(s) : hUp(s);
     // Plan arrondi aux extrémités du château (galerie de poupe galbée).
     const width = (s: number) => {
       const e = Math.min(
@@ -810,7 +822,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       return Math.max(0.6, (hull.halfBeam(s) - 0.25) * wf * round);
     };
     const base = (s: number) => hull.deckY(s);
-    const r = Math.min(1.1, c.h * 0.22);
+    const r = Math.min(0.9, c.h * 0.16);
     // Les murs suivent l'élancement de la coque au niveau du pont.
     const cx = (s: number) => hull.x(s) + hull.shift(s, 1);
     const sec = (s: number, t: number): Vec3 => {
@@ -837,35 +849,50 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       d -= (Math.PI / 2) * r;
       return [x, y1 - r - d, -w];
     };
-    const sa = c.a === 0 ? 0.004 : c.a;
-    // Murs rentrants, et mur d'extrémité qui surplombe en montant (poupe galbée).
+    // Murs rentrants (même pente pour les deux niveaux), mur arrière en surplomb.
     const tumble = (p: Vec3, s: number): Vec3 => {
-      const f = Math.max(0, (p[1] - base(s)) / height(s));
+      const f = Math.max(0, (p[1] - base(s)) / hUp(s));
       let x = p[0];
       if (c.a < 0.05) x -= (1 - smooth(sa, sa + 0.07, s)) * f * f * 1.4;
       if (c.b > 0.95) x += smooth(c.b - 0.07, c.b, s) * f * f * 1.0;
       return [x, p[1], p[2] * (1 - CT * f)];
     };
-    const sec0 = sec;
-    const secT = (s: number, t: number) => tumble(sec0(s, t), s);
-    b.grid(
-      Math.max(8, Math.round((c.b - sa) * 80)),
-      40,
-      (u, t) => secT(sa + (c.b - sa) * u, t),
-      castleMat,
-      {
-        uv: (u, t) => {
-          const p = secT(sa + (c.b - sa) * u, t);
-          return [p[0], p[1] + Math.abs(p[2]) * (t > 0.3 && t < 0.7 ? 1 : 0)];
-        },
-        flip: true,
-      }
-    );
-    // Murs d'extrémité.
-    for (const [s, dir] of [
-      [sa, -1],
-      [c.b, 1],
-    ] as const) {
+    const secT = (s: number, t: number) => tumble(sec(s, t), s);
+    const zAt = (s: number, y: number) =>
+      width(s) * (1 - CT * ((y - base(s)) / hUp(s)));
+    const ranges: [number, number][] = stepped
+      ? [
+          [sa, split],
+          [split + 1e-5, c.b],
+        ]
+      : [[sa, c.b]];
+    const trimMat: Mat = {
+      ...castleMat,
+      color: [
+        castleMat.color[0] * 0.55,
+        castleMat.color[1] * 0.55,
+        castleMat.color[2] * 0.55,
+      ],
+    };
+    for (const [r0, r1] of ranges)
+      b.grid(
+        Math.max(6, Math.round((r1 - r0) * 80)),
+        40,
+        (u, t) => secT(r0 + (r1 - r0) * u, t),
+        castleMat,
+        {
+          uv: (u, t) => {
+            const p = secT(r0 + (r1 - r0) * u, t);
+            return [p[0], p[1] + Math.abs(p[2]) * (t > 0.3 && t < 0.7 ? 1 : 0)];
+          },
+          flip: true,
+        }
+      );
+    // Murs d'extrémité (et front de la dunette au-dessus du gaillard).
+    const ends: [number, number, number][] = [[sa, -1, 0]];
+    if (stepped) ends.push([split, 1, hLow(split) + 0.5]);
+    ends.push([c.b, 1, 0]);
+    for (const [s, dir, minH] of ends) {
       const ring: Vec3[] = [];
       for (let i = 0; i <= 40; i++) ring.push(secT(s, i / 40));
       const cy = base(s) + height(s) / 2;
@@ -877,44 +904,63 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
         if (dir > 0) b.tri(ci, ids[i], ids[i + 1]);
         else b.tri(ci, ids[i + 1], ids[i]);
       }
-      // Fenêtres du mur arrière / avant.
+      const front = stepped && s === split;
       const w = width(s);
-      const n = Math.max(1, Math.floor((w * 2 - 1.2) / 1.6));
-      const rows = height(s) > 5 ? 2 : 1;
+      const n = Math.max(1, Math.floor((w * 2 - 1.2) / 1.8));
+      const rows = height(s) - minH > 4.5 ? 2 : 1;
       for (let row = 0; row < rows; row++)
         for (let k = 0; k < n; k++) {
           const z = -w + 0.6 + (k + 0.5) * ((w * 2 - 1.2) / n);
           const y = base(s) + height(s) - 1.6 - row * 2.2;
-          if (y < base(s) + 0.8) continue;
+          if (y < base(s) + Math.max(0.8, minH)) continue;
+          if (front && Math.abs(z) < 1) continue;
           window(
             b,
             [cx(s) + dir * 0.03, y, z],
             [dir, 0, 0],
-            0.7,
-            1.1,
+            0.6,
+            1.0,
             glass,
             brass
           );
         }
+      // Porte de la dunette, encadrée de laiton.
+      if (front) {
+        const y = base(s) + hLow(s);
+        b.push(translation(cx(s) + 0.04, y, 0));
+        b.box(0.1, 2.1, 1.2, trimMat);
+        b.pop();
+        b.push(
+          chain(translation(cx(s) + 0.1, y + 2.1, 0), rotationZ(Math.PI / 2))
+        );
+        b.cylinder(0.07, 0.04, 6, brass);
+        b.pop();
+        b.tube(
+          [
+            [cx(s) + 0.1, y, -0.66],
+            [cx(s) + 0.1, y + 2.2, -0.66],
+            [cx(s) + 0.1, y + 2.2, 0.66],
+            [cx(s) + 0.1, y, 0.66],
+          ],
+          0.06,
+          5,
+          brass
+        );
+      }
     }
-    // Fenêtres des flancs.
+    // Fenêtres des flancs : une rangée par niveau.
     for (const side of [1, -1]) {
-      const len = (c.b - sa) * hull.L;
-      const n = Math.max(1, Math.floor((len - 1.4) / 3));
-      for (let k = 0; k < n; k++) {
-        const s = sa + ((k + 0.5) / n) * (c.b - sa);
-        const h = height(s);
-        const rows = h > 6.5 ? 2 : h > 2.2 ? 1 : 0;
-        for (let row = 0; row < rows; row++) {
-          const y = base(s) + h - 1.5 - row * 2.2;
-          if (y < base(s) + 0.9) continue;
+      for (const [r0, r1] of ranges) {
+        const len = (r1 - r0) * hull.L;
+        const n = Math.max(1, Math.floor((len - 1.2) / 2.8));
+        for (let k = 0; k < n; k++) {
+          const s = r0 + ((k + 0.5) / n) * (r1 - r0);
+          const h = height(s);
+          if (h < 2.2) continue;
+          const y = base(s) + h - 1.4;
           window(
             b,
-            [
-              cx(s),
-              y,
-              (width(s) * (1 - CT * ((y - base(s)) / h)) + 0.04) * side,
-            ],
+            [cx(s), y, (zAt(s, y) + 0.04) * side],
             [0, 0, side],
             0.6,
             0.95,
@@ -924,21 +970,98 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
         }
       }
     }
-    // Rambarde ajourée autour du toit (dunette) : montants et main courante.
-    for (const side of [1, -1]) {
-      const pts: Vec3[] = [];
-      const n = Math.max(4, Math.round(((c.b - sa) * hull.L) / 1.3));
-      for (let k = 0; k <= n; k++) {
-        const s = sa + ((c.b - sa) * k) / n;
-        const y = base(s) + height(s);
-        const z = (width(s) * (1 - CT) - 0.12) * side;
-        const xx = secT(s, 0.5)[0];
-        pts.push([xx, y + 0.95, z]);
-        b.push(translation(xx, y + 0.45, z));
-        b.cylinder(0.06, 0.95, 6, brass);
-        b.pop();
+    // Moulure sombre sous chaque toit, et rambarde ajourée (montants, main courante).
+    const rail = (pts: Vec3[], posts = true) => {
+      if (posts)
+        for (const p of pts) {
+          b.push(translation(p[0], p[1] - 0.95, p[2]));
+          b.cylinder(0.055, 0.95, 6, brass);
+          b.pop();
+        }
+      b.tube(pts, 0.07, 6, brass);
+    };
+    for (const [r0, r1] of ranges) {
+      const n = Math.max(3, Math.round(((r1 - r0) * hull.L) / 1.2));
+      for (const side of [1, -1]) {
+        const top: Vec3[] = [];
+        const mold: Vec3[] = [];
+        for (let k = 0; k <= n; k++) {
+          const s = r0 + ((r1 - r0) * k) / n;
+          const y = base(s) + height(s);
+          const xx = secT(s, 0.5)[0];
+          top.push([xx, y + 0.95, (zAt(s, y) - 0.15) * side]);
+          mold.push([xx, y - 0.25, (zAt(s, y - 0.25) + 0.06) * side]);
+        }
+        rail(top);
+        b.tube(mold, 0.13, 6, trimMat);
       }
-      b.tube(pts, 0.08, 6, brass);
+      // Rambarde en travers à l'avant de chaque niveau.
+      const s = r1;
+      const y = base(s) + height(s) + 0.95;
+      const w = zAt(s, y - 0.95) - 0.15;
+      const xs = cx(s) - 0.15;
+      const across: Vec3[] = [];
+      for (let k = 0; k <= 6; k++) across.push([xs, y, -w + (2 * w * k) / 6]);
+      rail(across);
+    }
+    // Rambarde arrière.
+    {
+      const y = base(sa) + height(sa) + 0.95;
+      const w = zAt(sa, y - 0.95) - 0.15;
+      const xs = secT(sa, 0.5)[0] + 0.2;
+      const pts: Vec3[] = [];
+      for (let k = 0; k <= 6; k++) pts.push([xs, y, -w + (2 * w * k) / 6]);
+      rail(pts);
+    }
+    // Poupe : balcon de la galerie arrière et tourelles d'angle (bouteilles).
+    if (c.a < 0.05 && hUp(sa) > 4.2) {
+      const fb = 0.42;
+      const yb = base(sa) + hUp(sa) * fb;
+      const xw = cx(sa) - fb * fb * 1.4;
+      const wb = zAt(sa, yb) * 0.85;
+      b.push(translation(xw - 0.55, yb - 0.14, 0));
+      b.box(1.2, 0.14, wb * 2, trimMat);
+      b.pop();
+      const pts: Vec3[] = [];
+      for (let k = 0; k <= 8; k++)
+        pts.push([xw - 1.1, yb + 0.9, -wb + (2 * wb * k) / 8]);
+      rail(pts);
+      for (const side of [1, -1]) {
+        const s = sa + 0.03;
+        const y0 = base(s) + hUp(s) * 0.28;
+        const hg = hUp(s) * 0.5;
+        const z = (zAt(s, y0 + hg * 0.5) + 0.25) * side;
+        const x = cx(s) - 0.15;
+        b.push(translation(x, y0, z));
+        b.lathe(
+          [
+            [0, -1.1],
+            [0.45, -0.85],
+            [0.95, -0.1],
+            [0.95, hg],
+            [0.75, hg + 0.35],
+            [0.35, hg + 0.85],
+            [0, hg + 1.2],
+          ],
+          18,
+          castleMat
+        );
+        for (const yy of [0, hg]) {
+          b.push(translation(0, yy, 0));
+          b.torus(0.97, 0.06, 18, 4, brass);
+          b.pop();
+        }
+        b.pop();
+        window(
+          b,
+          [x, y0 + hg * 0.5, z + 0.96 * side],
+          [0, 0, side],
+          0.5,
+          0.85,
+          glass,
+          brass
+        );
+      }
     }
     roofs.push({
       a: sa,
@@ -948,15 +1071,15 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       shape: c.shape,
     });
     if (c.shape === 'dome') {
-      const s = (sa + c.b) / 2;
+      const s = (sa + split) / 2;
       const y = base(s) + height(s);
-      const rx = ((c.b - sa) * hull.L) / 2 - 0.6;
-      const rz = width(s) - 0.3;
-      b.push(chain(translation(hull.x(s), y, 0), scaling(rx, 2.6, rz)));
+      const rx = Math.min(3.4, ((split - sa) * hull.L) / 2 - 0.8);
+      const rz = Math.min(3.2, width(s) - 0.5);
+      b.push(chain(translation(hull.x(s), y, 0), scaling(rx, 2.1, rz)));
       b.sphere(
         1,
         40,
-        { p: P.PATINA, color: linear('#b8703e'), metal: 1, rough: 0.4 },
+        { p: P.PATINA, color: linear('#a8683a'), metal: 1, rough: 0.5 },
         true
       );
       for (let k = 0; k < 12; k++) {
@@ -971,11 +1094,11 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       }
       b.pop();
       // Coupole vitrée.
-      b.push(translation(hull.x(s), y + 2.5, 0));
-      b.sphere(1.6, 28, { ...glass, emit: (glass.emit ?? 0) * 0.6 }, true);
+      b.push(translation(hull.x(s), y + 2.0, 0));
+      b.sphere(1.0, 28, { ...glass, emit: (glass.emit ?? 0) * 0.6 }, true);
       for (let k = 0; k < 8; k++) {
         b.push(rotationY((k / 8) * Math.PI * 2));
-        b.push(chain(rotationZ(-0.02), scaling(1.62, 1.62, 1.62)));
+        b.push(chain(rotationZ(-0.02), scaling(1.02, 1.02, 1.02)));
         const arc: Vec3[] = [];
         for (let i = 0; i <= 10; i++) {
           const a = (i / 10) * (Math.PI / 2);
@@ -985,8 +1108,8 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
         b.pop();
         b.pop();
       }
-      b.push(translation(0, 1.6, 0));
-      b.sphere(0.25, 12, brass);
+      b.push(translation(0, 1.0, 0));
+      b.sphere(0.18, 12, brass);
       b.pop();
       b.pop();
     }
@@ -995,7 +1118,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
         b,
         hull,
         sa,
-        c.b,
+        split,
         (s) => base(s) + height(s),
         (s) => width(s) * 0.93,
         iron
