@@ -1200,7 +1200,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       // Brigantine (voile aurique) sur le mât arrière, à la place de la basse voile.
       const spanker = i === 0 && mastS.length > 1;
       // Vergues brassées : les voiles prennent le vent de biais.
-      const brace = 0.3 + i * 0.04;
+      const brace = -(0.26 + i * 0.04);
       const tiers = [
         [0.27, 0.52, 15],
         [0.55, 0.75, 11.5],
@@ -1225,15 +1225,25 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
           22,
           16,
           (u, v) => {
+            // Voile pleine : surface bombée, tenue droite le long de la vergue,
+            // creux maximal vers les deux tiers, bordure basse ramenée vers la
+            // vergue inférieure ; les bords latéraux avancent aussi un peu.
             const c = u * 2 - 1;
-            const z = c * (w / 2) * (1 + v * 0.12);
-            const foot = (1 - c * c) * 0.55 * v * v;
+            const depth = Math.min(3.4, w * 0.21);
+            const fv = Math.pow(Math.sin(Math.PI * (v * 0.8 + 0.02)), 0.7);
+            const across = 1 - 0.72 * c * c;
+            const z =
+              c *
+              (w / 2) *
+              (1 + v * 0.12) *
+              (1 - 0.07 * fv) *
+              (1 - 0.05 * Math.sin(Math.PI * v));
+            const foot = (1 - c * c) * 0.7 * v * v;
             const yy = ya - 0.2 - v * (ya - yb - 0.3) + foot;
-            const edge = Math.pow(1 - c * c, 0.7);
             const belly =
-              edge * Math.sin(v * Math.PI * 0.85 + 0.25) * 2.1 +
-              Math.sin(u * 9 + v * 3) * 0.06 * edge;
-            return [0.3 + belly, yy, z];
+              depth * across * fv +
+              Math.sin(u * 9 + v * 3) * 0.05 * (1 - c * c);
+            return [0.25 + belly, yy, z];
           },
           (u, v) =>
             flutter(sail, Math.sqrt(1 - (u * 2 - 1) ** 2) * Math.pow(v, 0.8)),
@@ -1262,7 +1272,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
           gaff,
           boom,
           sail,
-          0.9
+          1.5
         );
         b.tube([[-0.3, yl1, 0], gaff], 0.12, 6, wood);
         b.tube([[-0.3, yl0, 0], boom], 0.14, 6, wood);
@@ -1350,7 +1360,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
           ];
           head[2] = dz;
           tack[2] = dz;
-          foreAft(b, tack, head, head, clew, sail, 0.7);
+          foreAft(b, tack, head, head, clew, sail, 1.2);
         });
     }
     // Pavillon ou flamme.

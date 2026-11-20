@@ -193,7 +193,7 @@ void main(){
     float weave = noise(uv*vec2(160., 160.))*.06*detail(mpp, 160.);
     float wrinkle = (sin(uv.y*7. + noise(uv*.8)*5.) * .5 + .5) * detail(mpp, 2.);
     float dirt = fbm(uv*vec2(.5, .8));
-    albedo *= mix(.78, 1., seam) * (.94 + weave) * mix(.8, 1.05, dirt);
+    albedo *= mix(.68, 1., seam) * (.94 + weave) * mix(.8, 1.05, dirt);
     // Toile vieillie : jaunie vers le bas, auréoles de sable.
     albedo *= mix(vec3(1.), vec3(.92, .86, .74), smoothstep(.4, .9, fbm(uv*vec2(.3, .15) + 7.)));
     h = (1.-seam)*.002 + wrinkle*.004;
@@ -239,7 +239,7 @@ void main(){
   vec3 L = uSunDir;
   float NdLr = dot(N, L);
   // La toile diffuse la lumière : éclairage « enveloppant » pour les voiles.
-  float NdL = pat == 6. ? max((NdLr + .35)/1.35, 0.) : max(NdLr, 0.);
+  float NdL = pat == 6. ? max((NdLr + .18)/1.18, 0.) : max(NdLr, 0.);
   float sh = shadowAt(vLight, NdLr);
   vec3 H = normalize(L + V);
   float NdH = max(dot(N, H), 0.), NdV = max(dot(N, V), 1e-3), VdH = max(dot(V, H), 0.);
@@ -256,7 +256,7 @@ void main(){
   vec3 amb = mix(uGround*.9, uZenith, N.y*.5+.5) * mix(.55, 1., clamp(N.y*.5+.6, 0., 1.));
   // Occlusion approchée : ce que le soleil ne voit pas reçoit aussi moins de ciel.
   // Les voiles, fines et claires, reçoivent la lumière renvoyée par le sable et les autres voiles.
-  amb *= pat == 6. ? 1.35 : mix(.62, 1., sh);
+  amb *= pat == 6. ? 1.12 : mix(.62, 1., sh);
   if (pat == 6.) amb += uGround*.35*(1. - sh);
   vec3 R = reflect(-V, N);
   vec3 Fr = F0 + (max(vec3(1.-rough), F0) - F0)*pow(clamp(1.-NdV, 0., 1.), 5.);
