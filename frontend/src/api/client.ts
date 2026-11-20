@@ -54,9 +54,11 @@ export const AuthAPI = {
     displayName?: string;
     email?: string;
     password?: string;
+    currentPassword?: string;
   }) => api.patch('/auth/me', data),
   purgeAssets: () => api.post('/auth/me/purge-assets'),
-  deleteAccount: () => api.delete('/auth/me'),
+  deleteAccount: (password: string) =>
+    api.delete('/auth/me', { data: { password } }),
 };
 
 export const GamesAPI = {

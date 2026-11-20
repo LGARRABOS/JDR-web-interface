@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -36,6 +37,8 @@ func (s *Server) handleListMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"messages": messages})
 }
 
+const maxMessageLen = 4000
+
 type createMessageReq struct {
 	Content string `json:"content"`
 }
@@ -64,8 +67,13 @@ func (s *Server) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Requête invalide"})
 		return
 	}
+	req.Content = strings.TrimSpace(req.Content)
 	if req.Content == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Contenu requis"})
+		return
+	}
+	if len([]rune(req.Content)) > maxMessageLen {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Message trop long (4000 caractères au plus)"})
 		return
 	}
 

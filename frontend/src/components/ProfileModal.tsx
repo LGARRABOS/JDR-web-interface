@@ -22,6 +22,8 @@ export function ProfileModal({
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [purgeConfirmOpen, setPurgeConfirmOpen] = useState(false);
@@ -34,6 +36,8 @@ export function ProfileModal({
       setDisplayName(user.displayName ?? '');
       setEmail(user.email ?? '');
       setPassword('');
+      setCurrentPassword('');
+      setDeletePassword('');
       setError(null);
     }
   }, [open, user]);
@@ -43,8 +47,12 @@ export function ProfileModal({
     setError(null);
     setSaving(true);
     try {
-      const data: { displayName?: string; email?: string; password?: string } =
-        {};
+      const data: {
+        displayName?: string;
+        email?: string;
+        password?: string;
+        currentPassword?: string;
+      } = {};
       if (displayName.trim() !== (user?.displayName ?? '')) {
         data.displayName = displayName.trim();
       }
@@ -53,6 +61,9 @@ export function ProfileModal({
       }
       if (password) {
         data.password = password;
+      }
+      if (data.email !== undefined || data.password !== undefined) {
+        data.currentPassword = currentPassword;
       }
       if (Object.keys(data).length === 0) {
         setError('Aucune modification');
@@ -94,7 +105,7 @@ export function ProfileModal({
     setDeleting(true);
     setError(null);
     try {
-      await AuthAPI.deleteAccount();
+      await AuthAPI.deleteAccount(deletePassword);
       setDeleteConfirmOpen(false);
       onClose();
       onAccountDeleted?.();
@@ -109,6 +120,8 @@ export function ProfileModal({
   };
 
   if (!user) return null;
+  const sensitiveChange =
+    !!password || email.trim().toLowerCase() !== (user.email ?? '');
 
   return (
     <Modal open={open} onClose={onClose} title="Mon profil">
@@ -164,6 +177,28 @@ export function ProfileModal({
             Minimum 6 caractères
           </p>
         </div>
+        {sensitiveChange && (
+          <div>
+            <label
+              htmlFor="profile-current-password"
+              className="block text-sm font-medium text-fantasy-text-soft mb-1"
+            >
+              Mot de passe actuel
+            </label>
+            <input
+              id="profile-current-password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="w-full rounded bg-fantasy-input-soft px-3 py-2 text-fantasy-text-soft border border-fantasy-border-soft"
+            />
+            <p className="text-xs text-fantasy-muted-soft mt-1">
+              Demandé pour changer l&apos;email ou le mot de passe.
+            </p>
+          </div>
+        )}
         <div>
           <p className="block text-sm font-medium text-fantasy-text-soft mb-2">
             Palette de couleurs
@@ -214,6 +249,21 @@ export function ProfileModal({
             Supprimer définitivement votre compte ? Toutes vos parties, messages
             et données seront perdus. Cette action est irréversible.
           </p>
+          <label
+            htmlFor="delete-password"
+            className="block text-sm font-medium text-fantasy-text-soft mb-1"
+          >
+            Mot de passe
+          </label>
+          <input
+            id="delete-password"
+            type="password"
+            autoComplete="current-password"
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
+            className="w-full rounded bg-fantasy-input-soft px-3 py-2 mb-4 text-fantasy-text-soft border border-fantasy-border-soft"
+          />
+          {error && <p className="text-sm text-fantasy-error mb-3">{error}</p>}
           <ModalButtons>
             <button
               type="button"
@@ -226,7 +276,7 @@ export function ProfileModal({
             <button
               type="button"
               onClick={handleDeleteAccountConfirm}
-              disabled={deleting}
+              disabled={deleting || !deletePassword}
               className="px-4 py-2 rounded bg-fantasy-danger hover:bg-fantasy-error text-white disabled:opacity-50"
             >
               {deleting ? 'Suppression...' : 'Supprimer mon compte'}

@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"strconv"
 
@@ -22,14 +24,27 @@ const actAsHeader = "X-Act-As"
 // getSessionUser renvoie l'utilisateur au nom duquel la requête agit : le
 // compte connecté, ou le joueur fictif qu'il incarne dans une partie test.
 func (s *Server) getSessionUser(r *http.Request) *domain.User {
-	u := s.getRealSessionUser(r)
-	if u == nil {
-		return nil
+	h := holderFrom(r)
+	if h != nil && h.done {
+		return h.user
 	}
-	if bot := s.actingBot(r, u.ID); bot != nil {
-		return bot
+	u := s.getRealSessionUser(r)
+	if u != nil {
+		if bot := s.actingBot(r, u.ID); bot != nil {
+			u = bot
+		}
+	}
+	if h != nil {
+		h.done, h.user = true, u
 	}
 	return u
+}
+
+// passwordVersion : empreinte courte du mot de passe, gardée dans le cookie.
+// Changer de mot de passe invalide ainsi les autres sessions ouvertes.
+func passwordVersion(hash string) string {
+	sum := sha256.Sum256([]byte(hash))
+	return hex.EncodeToString(sum[:6])
 }
 
 // actingBot vérifie que le joueur fictif demandé appartient bien à une partie
@@ -61,6 +76,18 @@ func (s *Server) actingBot(r *http.Request, ownerID int64) *domain.User {
 
 // getRealSessionUser : le compte réellement connecté, sans incarnation.
 func (s *Server) getRealSessionUser(r *http.Request) *domain.User {
+	h := holderFrom(r)
+	if h != nil && h.realDone {
+		return h.real
+	}
+	u := s.loadRealSessionUser(r)
+	if h != nil {
+		h.realDone, h.real = true, u
+	}
+	return u
+}
+
+func (s *Server) loadRealSessionUser(r *http.Request) *domain.User {
 	sess, err := s.getSession(r)
 	if err != nil || sess.Values["userID"] == nil {
 		return nil
@@ -77,6 +104,9 @@ func (s *Server) getRealSessionUser(r *http.Request) *domain.User {
 	if err != nil {
 		return nil
 	}
+	if pv, ok := sess.Values["pv"].(string); ok && pv != passwordVersion(u.PasswordHash) {
+		return nil
+	}
 	return &u
 }
 
@@ -85,12 +115,17 @@ func (s *Server) setSessionUser(r *http.Request, w http.ResponseWriter, u *domai
 	// Régénérer l'ID de session pour éviter la fixation de session
 	sess.ID = ""
 	sess.IsNew = true
-	sess.Values = map[interface{}]interface{}{"userID": u.ID}
+	sess.Values = map[interface{}]interface{}{"userID": u.ID, "pv": passwordVersion(u.PasswordHash)}
+	sess.Options.Secure = sess.Options.Secure || requestIsHTTPS(r)
 	_ = sess.Save(r, w)
+	if h := holderFrom(r); h != nil {
+		h.done, h.realDone = false, false
+	}
 }
 
 func (s *Server) clearSession(w http.ResponseWriter, r *http.Request) {
 	sess, _ := s.getSession(r)
 	sess.Options.MaxAge = -1
+	sess.Options.Secure = sess.Options.Secure || requestIsHTTPS(r)
 	_ = sess.Save(r, w)
 }

@@ -1,14 +1,7 @@
 <!doctype html>
 <html lang="fr">
   <head>
-    <script>
-      // Appliquer le thème choisi avant l'affichage, pour éviter un flash de couleurs.
-      try {
-        var t = localStorage.getItem('jdr-theme');
-        if (t === 'braise' || t === 'arcane' || t === 'foret')
-          document.documentElement.dataset.theme = t;
-      } catch (e) {}
-    </script>
+    <script src="/theme-init.js"></script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/favicon.png" />

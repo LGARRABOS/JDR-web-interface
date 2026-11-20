@@ -293,6 +293,8 @@ func (s *Server) handleGetMapFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
+	// Noms de fichiers uniques (horodatés) : le navigateur peut les garder.
+	w.Header().Set("Cache-Control", "private, max-age=604800")
 
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
@@ -313,6 +315,12 @@ func (s *Server) handleGetMap(w http.ResponseWriter, r *http.Request) {
 	mapID, err := strconv.ParseInt(mapIDStr, 10, 64)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "ID invalide"})
+		return
+	}
+
+	u := s.getSessionUser(r)
+	if _, _, ok := s.getMapAccess(mapID, u.ID); !ok {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Accès refusé à cette carte"})
 		return
 	}
 

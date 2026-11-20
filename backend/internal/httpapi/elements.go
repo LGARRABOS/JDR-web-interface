@@ -357,6 +357,8 @@ func (s *Server) handleGetElementFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
+	// Noms de fichiers uniques (horodatés) : le navigateur peut les garder.
+	w.Header().Set("Cache-Control", "private, max-age=604800")
 
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {

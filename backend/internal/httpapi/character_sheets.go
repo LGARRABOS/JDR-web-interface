@@ -579,6 +579,8 @@ func (s *Server) handleGetCharacterSheetAvatarFile(w http.ResponseWriter, r *htt
 		return
 	}
 	defer f.Close()
+	// Noms de fichiers uniques (horodatés) : le navigateur peut les garder.
+	w.Header().Set("Cache-Control", "private, max-age=604800")
 
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import {
@@ -36,7 +44,6 @@ import { HandoutsTab } from '../components/tabletop/HandoutsTab';
 import { HandoutViewer } from '../components/tabletop/HandoutViewer';
 import { NotesTab } from '../components/tabletop/NotesTab';
 import { GuideDrawer } from '../components/guide/GuideDrawer';
-import { ArpenteurView } from '../components/arpenteur/ArpenteurView';
 import { PresenceToasts } from '../components/tabletop/PresenceMenu';
 import type { Handout } from '../realtime/protocol';
 import { MiniPlayer, MusicTab } from '../components/tabletop/MusicControls';
@@ -66,6 +73,14 @@ interface LibraryElement {
  * résultat : c'est l'événement diffusé par le serveur qui met l'écran à jour,
  * de la même façon pour tous les participants.
  */
+
+// Page de l'arpenteur (et moteur 3D) chargée seulement pour ce mode de jeu.
+const ArpenteurView = lazy(() =>
+  import('../components/arpenteur/ArpenteurView').then((m) => ({
+    default: m.ArpenteurView,
+  }))
+);
+
 export function TabletopPage() {
   const { gameId: gameIdParam } = useParams();
   const gameId = gameIdParam ? parseInt(gameIdParam, 10) : 0;
@@ -805,16 +820,24 @@ export function TabletopPage() {
     <div className="fixed inset-0 overflow-hidden bg-fantasy-bg text-fantasy-text">
       {arpenteurView && (
         <>
-          <ArpenteurView
-            gameId={gameId}
-            isGM={isGM}
-            userId={user?.id ?? 0}
-            players={gamePlayers}
-            payload={state.arpenteur}
-            store={store}
-            panelOpen={panelOpen}
-            onRoll={(expr) => handleRoll(expr)}
-          />
+          <Suspense
+            fallback={
+              <div className="absolute inset-0 grid place-items-center text-fantasy-muted">
+                Chargement de l&apos;arpenteur…
+              </div>
+            }
+          >
+            <ArpenteurView
+              gameId={gameId}
+              isGM={isGM}
+              userId={user?.id ?? 0}
+              players={gamePlayers}
+              payload={state.arpenteur}
+              store={store}
+              panelOpen={panelOpen}
+              onRoll={(expr) => handleRoll(expr)}
+            />
+          </Suspense>
           {game.isGemma && (
             <DiceRollOverlay roll={state.lastRoll} durationMs={2500} />
           )}

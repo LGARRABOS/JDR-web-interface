@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -18,6 +19,11 @@ func Open(url string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
+	// Pool borné : évite d'épuiser les connexions de PostgreSQL sous charge.
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(30 * time.Minute)
+	db.SetConnMaxIdleTime(5 * time.Minute)
 	return db, nil
 }
 
@@ -260,6 +266,22 @@ func AutoMigrate(db *sql.DB) error {
 		`ALTER TABLE games ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN bot_game_id INTEGER REFERENCES games(id) ON DELETE CASCADE`,
 		`ALTER TABLE users ADD COLUMN bot_owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE`,
+		// Index des clés étrangères et des listes les plus lues (PostgreSQL
+		// n'indexe pas les clés étrangères tout seul).
+		`CREATE INDEX IF NOT EXISTS idx_game_players_user ON game_players (user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_games_owner ON games (owner_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_maps_game ON maps (game_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_tokens_map ON tokens (map_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_tokens_owner ON tokens (owner_user_id) WHERE owner_user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_fog_patches_map ON fog_patches (map_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_game ON game_messages (game_id, created_at DESC, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_rolls_game ON dice_rolls (game_id, created_at DESC, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_elements_game ON game_elements (game_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_elements_user ON game_elements (user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_map_elements_map ON map_elements (map_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_handouts_game ON handouts (game_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_music_game ON game_music (game_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_bot_game ON users (bot_game_id) WHERE bot_game_id IS NOT NULL`,
 	}
 
 	for _, stmt := range orderedStmts {

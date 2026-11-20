@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"jdr-backend/internal/httpapi"
 	"jdr-backend/internal/storage"
@@ -32,8 +37,30 @@ func main() {
 	}
 
 	addr := ":4000"
+	// Délais : protège des connexions lentes (slowloris). Pas de WriteTimeout,
+	// qui couperait le WebSocket et les longs téléchargements de musique.
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    1 << 20,
+	}
+
+	// Arrêt propre (déploiement) : on finit les requêtes en cours.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-stop
+		log.Printf("arrêt demandé, fin des requêtes en cours…")
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}()
+
 	log.Printf("JDR backend listening on %s", addr)
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("server error: %v", err)
 	}
 }

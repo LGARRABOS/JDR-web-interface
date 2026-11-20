@@ -823,7 +823,9 @@ Un coût en coupons peut être déduit de l'expédition. Chaque amélioration s'
     summary: 'Nom, e-mail, mot de passe.',
     audience: 'tous',
     keywords: ['profil', 'nom', 'email', 'mot de passe'],
-    body: `Sur Mes parties, cliquez sur votre nom en haut à droite, puis « Profil ». Vous pouvez changer votre nom d'affichage, votre adresse e-mail et votre mot de passe.`,
+    body: `Sur Mes parties, cliquez sur votre nom en haut à droite, puis « Profil ». Vous pouvez changer votre nom d'affichage, votre adresse e-mail et votre mot de passe. Pour changer l'e-mail ou le mot de passe, votre mot de passe actuel vous est demandé.
+
+> Après plusieurs mots de passe erronés, la connexion est bloquée quelques minutes pour protéger votre compte. Changer de mot de passe déconnecte vos autres appareils.`,
   },
   {
     id: 'couleurs',
@@ -844,7 +846,7 @@ Un coût en coupons peut être déduit de l'expédition. Chaque amélioration s'
     body: `Dans le profil, « Options avancées » :
 
 - **Purger les assets** : supprime les fichiers que plus aucune de vos parties n'utilise.
-- **Supprimer mon compte** : supprime définitivement votre compte et vos données. C'est irréversible.`,
+- **Supprimer mon compte** : supprime définitivement votre compte et vos données, après confirmation de votre mot de passe. C'est irréversible.`,
   },
 ];
 

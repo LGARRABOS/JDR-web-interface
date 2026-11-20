@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -44,27 +45,88 @@ type updateProfileReq struct {
 	DisplayName *string `json:"displayName"`
 	Email       *string `json:"email"`
 	Password    *string `json:"password"`
+	// CurrentPassword : exigé pour changer d'email ou de mot de passe.
+	CurrentPassword string `json:"currentPassword"`
+}
+
+const (
+	minPasswordLen = 6
+	// bcrypt ignore tout au-delà de 72 octets.
+	maxPasswordBytes = 72
+	maxDisplayName   = 40
+	maxEmailLen      = 254
+)
+
+// limiters : tentatives par adresse et par compte (échecs de connexion,
+// créations de compte, mot de passe redemandé).
+type limiters struct {
+	loginIP      *rateLimiter
+	loginAccount *rateLimiter
+	register     *rateLimiter
+}
+
+func newLimiters() limiters {
+	return limiters{
+		loginIP:      newRateLimiter(40, 15*time.Minute),
+		loginAccount: newRateLimiter(8, 15*time.Minute),
+		register:     newRateLimiter(30, time.Hour),
+	}
+}
+
+var (
+	// dummyHash : comparé quand l'email est inconnu, pour un temps de réponse identique.
+	dummyHash, _ = bcrypt.GenerateFromPassword([]byte("jdr-pas-un-vrai-mot-de-passe"), bcrypt.DefaultCost)
+)
+
+func validPassword(p string) string {
+	if len(p) < minPasswordLen {
+		return "Le mot de passe doit faire au moins 6 caractères"
+	}
+	if len(p) > maxPasswordBytes {
+		return "Le mot de passe est trop long (72 caractères au plus)"
+	}
+	return ""
+}
+
+func cleanDisplayName(v string) string {
+	v = strings.TrimSpace(v)
+	if r := []rune(v); len(r) > maxDisplayName {
+		v = string(r[:maxDisplayName])
+	}
+	return v
+}
+
+func tooManyAttempts(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", "900")
+	writeJSON(w, http.StatusTooManyRequests, map[string]string{"message": "Trop de tentatives, réessayez dans quelques minutes"})
 }
 
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if s.limits.register.limited(ip) {
+		tooManyAttempts(w)
+		return
+	}
+	s.limits.register.hit(ip)
 	var req registerReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Requête invalide"})
 		return
 	}
+	req.DisplayName = cleanDisplayName(req.DisplayName)
 	if req.Email == "" || req.Password == "" || req.DisplayName == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Champs manquants"})
 		return
 	}
 	email := strings.TrimSpace(strings.ToLower(req.Email))
-	if !emailRegex.MatchString(email) {
+	if len(email) > maxEmailLen || !emailRegex.MatchString(email) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Format d'email invalide"})
 		return
 	}
-	if len(req.Password) < 6 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Le mot de passe doit faire au moins 6 caractères"})
+	if msg := validPassword(req.Password); msg != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": msg})
 		return
 	}
 
@@ -88,7 +150,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := domain.User{ID: id, Email: email, DisplayName: req.DisplayName}
+	user := domain.User{ID: id, Email: email, DisplayName: req.DisplayName, PasswordHash: string(hash)}
 	s.setSessionUser(r, w, &user)
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"user": sanitizeUser(&user)})
 }
@@ -103,26 +165,38 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Champs manquants"})
 		return
 	}
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	ipKey := clientIP(r)
+	if s.limits.loginIP.limited(ipKey) || s.limits.loginAccount.limited(email) {
+		tooManyAttempts(w)
+		return
+	}
+	failed := func() {
+		s.limits.loginIP.hit(ipKey)
+		s.limits.loginAccount.hit(email)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Identifiants invalides"})
+	}
 
 	var u domain.User
 	err := s.db.QueryRow(
-		"SELECT id, email, password_hash, display_name FROM users WHERE email = ?",
-		req.Email,
+		"SELECT id, email, password_hash, display_name FROM users WHERE email = ? AND bot_game_id IS NULL",
+		email,
 	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName)
-	if err == sql.ErrNoRows {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Identifiants invalides"})
-		return
-	}
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 		return
 	}
-
+	if err == sql.ErrNoRows {
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(req.Password))
+		failed()
+		return
+	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)); err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Identifiants invalides"})
+		failed()
 		return
 	}
 
+	s.limits.loginAccount.reset(email)
 	s.setSessionUser(r, w, &u)
 	writeJSON(w, http.StatusOK, map[string]interface{}{"user": sanitizeUser(&u)})
 }
@@ -154,9 +228,24 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Changer d'email ou de mot de passe demande le mot de passe actuel
+	// (une session volée ne suffit pas à prendre le compte).
+	if req.Email != nil && strings.TrimSpace(strings.ToLower(*req.Email)) != u.Email || req.Password != nil {
+		key := "profil:" + strconv.FormatInt(u.ID, 10)
+		if s.limits.loginAccount.limited(key) {
+			tooManyAttempts(w)
+			return
+		}
+		if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.CurrentPassword)) != nil {
+			s.limits.loginAccount.hit(key)
+			writeJSON(w, http.StatusForbidden, map[string]string{"message": "Mot de passe actuel incorrect"})
+			return
+		}
+	}
+
 	displayName := u.DisplayName
 	if req.DisplayName != nil {
-		dn := strings.TrimSpace(*req.DisplayName)
+		dn := cleanDisplayName(*req.DisplayName)
 		if dn == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Le pseudo ne peut pas être vide"})
 			return
@@ -171,7 +260,7 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "L'email ne peut pas être vide"})
 			return
 		}
-		if !emailRegex.MatchString(e) {
+		if len(e) > maxEmailLen || !emailRegex.MatchString(e) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Format d'email invalide"})
 			return
 		}
@@ -187,8 +276,8 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	passwordHash := u.PasswordHash
 	if req.Password != nil {
 		p := *req.Password
-		if len(p) < 6 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Le mot de passe doit faire au moins 6 caractères"})
+		if msg := validPassword(p); msg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"message": msg})
 			return
 		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(p), bcrypt.DefaultCost)
@@ -237,6 +326,21 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	u := s.getRealSessionUser(r)
 	if u == nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Non authentifié"})
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	key := "suppression:" + strconv.FormatInt(u.ID, 10)
+	if s.limits.loginAccount.limited(key) {
+		tooManyAttempts(w)
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)) != nil {
+		s.limits.loginAccount.hit(key)
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Mot de passe incorrect"})
 		return
 	}
 

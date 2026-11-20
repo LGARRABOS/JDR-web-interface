@@ -73,10 +73,20 @@ export function ShipScene3D(props: ShipSceneProps) {
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
     resize();
+    // Hors de l'écran (page défilée), on ne dessine plus : économise batterie et GPU.
+    let onScreen = true;
+    const io =
+      typeof IntersectionObserver !== 'undefined'
+        ? new IntersectionObserver((entries) => {
+            onScreen = entries.some((e) => e.isIntersecting);
+            if (onScreen) dirty = true;
+          })
+        : null;
+    io?.observe(canvas);
     const frame = () => {
       raf = requestAnimationFrame(frame);
       if (still && !dirty) return;
-      if (document.hidden) return;
+      if (document.hidden || !onScreen) return;
       dirty = false;
       const wide = canvas.clientWidth / Math.max(1, canvas.clientHeight) > 1.8;
       stage.render(still ? 2 : (performance.now() - t0) / 1000, {
@@ -94,6 +104,7 @@ export function ShipScene3D(props: ShipSceneProps) {
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      io?.disconnect();
       canvas.removeEventListener('arp-ship', onShip);
       stage.dispose();
       stageRef.current = null;
