@@ -172,7 +172,7 @@ export class Stage {
     ];
     const pods = parts.nozzles.map((n) => ({
       pos: transformPoint(shipM, n.pos),
-      power: (this.mood === 'night' ? 7 : 6) * n.size,
+      power: (this.mood === 'night' ? 4.5 : 3.5) * n.size,
     }));
     this.r.render(items, glows, { eye, target, fov }, this.light, {
       time,

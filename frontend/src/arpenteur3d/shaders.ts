@@ -11,6 +11,23 @@ float dune(vec2 p){
 }
 `;
 
+const WIND = /* glsl */ `
+// Vent : aMat.w porte le poids d'animation des toiles.
+// 0..1 = voile (bords tenus à 0), 1..2 = pavillon (1 au mât, 2 au bout libre).
+vec3 wind(vec3 p, vec3 n, vec4 m, float t){
+  if (m.x != 6.) return p;
+  float w = m.w;
+  if (w > 1.) {
+    float f = w - 1.;
+    float wave = sin(p.x*1.9 + t*7.5) + .45*sin(p.x*3.7 - p.y*2. + t*11.);
+    return p + vec3(f*.12*sin(t*5.3 + p.y), f*.08*sin(t*6.1 + p.x*2.), f*(.38*wave + .12));
+  }
+  float gust = .6 + .4*sin(t*.7) * sin(t*.43 + 1.3);
+  float ripple = sin(p.y*1.3 + p.z*.9 + t*3.1)*.5 + sin(p.z*2.1 - t*4.3 + p.y)*.25;
+  return p + n * w * (.35*gust + .14*ripple);
+}
+`;
+
 const SKY_FN = /* glsl */ `
 uniform vec3 uSunDir, uSunColor, uZenith, uHorizon, uGround, uSkyMid;
 uniform float uNight;
@@ -35,13 +52,10 @@ uniform mat4 uModel, uViewProj, uLightVP;
 uniform float uTime, uScroll;
 out vec3 vWorld; out vec3 vNrm; out vec2 vUv; out vec3 vCol; flat out vec4 vMat; out vec4 vLight;
 ${COMMON}
+${WIND}
 void main(){
-  vec3 p = aPos; vec3 n = aNrm;
-  if (aMat.x == 6.) {
-    // Voile : léger souffle.
-    float w = sin(uTime*1.7 + aUv.x*.9 + aUv.y*.4)*.5+.5;
-    p += n * (.05 + .1*w) * sin(clamp(aUv.y*.25, 0., 3.14159));
-  }
+  vec3 n = aNrm;
+  vec3 p = wind(aPos, aNrm, aMat, uTime);
   vec4 wp = uModel * vec4(p, 1.);
   if (aMat.x == 8.) {
     vec2 q = wp.xz + vec2(uScroll, 0.);
@@ -274,9 +288,12 @@ void main(){
 export const DEPTH_VS = /* glsl */ `#version 300 es
 precision highp float;
 layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
 layout(location=4) in vec4 aMat;
 uniform mat4 uModel, uLightVP;
-void main(){ gl_Position = uLightVP * uModel * vec4(aPos, 1.); }`;
+uniform float uTime;
+${WIND}
+void main(){ gl_Position = uLightVP * uModel * vec4(wind(aPos, aNrm, aMat, uTime), 1.); }`;
 
 export const DEPTH_FS = /* glsl */ `#version 300 es
 precision mediump float;

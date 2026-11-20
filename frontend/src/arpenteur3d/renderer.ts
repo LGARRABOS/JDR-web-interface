@@ -349,6 +349,7 @@ export class Renderer {
       gl.clear(gl.DEPTH_BUFFER_BIT);
       gl.useProgram(this.depth);
       gl.uniformMatrix4fv(this.u(this.depth, 'uLightVP'), false, lvp);
+      gl.uniform1f(this.u(this.depth, 'uTime'), opts.time);
       gl.enable(gl.POLYGON_OFFSET_FILL);
       gl.polygonOffset(1.5, 3);
       for (const it of items) {

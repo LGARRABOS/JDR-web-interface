@@ -549,7 +549,7 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     color: AETHER,
     metal: 0,
     rough: 0.4,
-    emit: e * (opts.night ? 1 : 0.6),
+    emit: e * (opts.night ? 0.6 : 0.38),
   });
 
   // --- Coque -----------------------------------------------------------------
@@ -1235,7 +1235,8 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
               Math.sin(u * 9 + v * 3) * 0.06 * edge;
             return [0.3 + belly, yy, z];
           },
-          sail,
+          (u, v) =>
+            flutter(sail, Math.sqrt(1 - (u * 2 - 1) ** 2) * Math.pow(v, 0.8)),
           { uv: (u, v) => [u * w, v * (ya - yb) * 4] }
         );
         b.pop();
@@ -1615,6 +1616,9 @@ function nacelle(
   });
 }
 
+/** Matériau de toile portant le poids d'animation du vent (voir le shader). */
+const flutter = (m: Mat, w: number): Mat => ({ ...m, emit: w });
+
 /** Voile aurique ou triangulaire (clew = head pour un triangle), creusée côté z. */
 function foreAft(
   b: MeshBuilder,
@@ -1645,7 +1649,12 @@ function foreAft(
           Math.sin(Math.PI * v * 0.92 + 0.1);
         return [p[0], p[1], p[2] + d * belly + side * 0.004];
       },
-      mat,
+      (u, v) =>
+        flutter(
+          mat,
+          Math.sin(Math.PI * Math.min(1, u * 1.15)) *
+            Math.sin(Math.PI * v * 0.92 + 0.1)
+        ),
       { uv: (u, v) => [u * 8, v * 30], flip: side < 0 }
     );
 }
@@ -1659,7 +1668,7 @@ function plume(g: MeshBuilder, r0: number, r1: number, len: number) {
       const r = r0 + (r1 - r0) * Math.pow(v, 0.8);
       return [Math.cos(a) * r, -2.75 - v * len, Math.sin(a) * r];
     },
-    { p: P.EMIT, color: linear('#3fd8ff'), metal: 0, rough: 1, emit: 1.6 },
+    { p: P.EMIT, color: linear('#3fd8ff'), metal: 0, rough: 1, emit: 0.85 },
     { uv: (u, v) => [u * 6, v] }
   );
   g.grid(
@@ -1670,7 +1679,7 @@ function plume(g: MeshBuilder, r0: number, r1: number, len: number) {
       const r = r0 * 0.5 * (1 - v * 0.6);
       return [Math.cos(a) * r, -2.75 - v * len * 0.45, Math.sin(a) * r];
     },
-    { p: P.EMIT, color: linear('#e8ffff'), metal: 0, rough: 1, emit: 2.5 },
+    { p: P.EMIT, color: linear('#e8ffff'), metal: 0, rough: 1, emit: 1.3 },
     { uv: (u, v) => [u * 6, v] }
   );
 }
@@ -1685,29 +1694,30 @@ function flag(b: MeshBuilder, top: Vec3, build: Build) {
     { p: P.IRON, color: linear('#2a2a2a'), metal: 0.5, rough: 0.6 },
     false
   );
+  // L'emblème est peint dans la toile (couleur par sommet) pour onduler avec elle.
+  const emblem = build.mats.flagEmblem !== 'aucun';
+  const light = linear('#f0e2c0');
   b.grid(
-    10,
-    5,
+    28,
+    14,
     (u, v) => [-u * 4.4, 3.1 - v * 2.6, Math.sin(u * 5 + v) * 0.35 * u],
-    { p: P.SAIL, color: c, metal: 0, rough: 0.85 },
+    (u, v) => {
+      const d = Math.hypot((u - 0.5) * 4.4, (v - 0.5) * 2.6);
+      const k = emblem ? 1 - smooth(0.48, 0.6, d) : 0;
+      return {
+        p: P.SAIL,
+        color: [
+          c[0] + (light[0] - c[0]) * k,
+          c[1] + (light[1] - c[1]) * k,
+          c[2] + (light[2] - c[2]) * k,
+        ],
+        metal: 0,
+        rough: 0.85,
+        emit: 1 + u,
+      };
+    },
     { uv: (u, v) => [u * 4, v * 2] }
   );
-  // Emblème : disque clair au centre du pavillon.
-  if (build.mats.flagEmblem !== 'aucun') {
-    b.push(
-      chain(
-        translation(-2.2, 1.8, Math.sin(2.5 + 0.5) * 0.35 * 0.5 + 0.06),
-        rotationX(Math.PI / 2)
-      )
-    );
-    b.cylinder(0.55, 0.02, 16, {
-      p: P.PLAIN,
-      color: linear('#f0e2c0'),
-      metal: 0,
-      rough: 0.7,
-    });
-    b.pop();
-  }
   b.pop();
 }
 
@@ -1721,7 +1731,7 @@ function pennant(b: MeshBuilder, top: Vec3, c: Vec3) {
       -0.1 - (v - 0.5) * 0.7 * (1 - u * 0.9),
       Math.sin(u * 6) * 0.25 * u,
     ],
-    { p: P.SAIL, color: c, metal: 0, rough: 0.85 },
+    (u) => ({ p: P.SAIL, color: c, metal: 0, rough: 0.85, emit: 1 + u }),
     { uv: (u, v) => [u * 4, v] }
   );
   b.pop();
