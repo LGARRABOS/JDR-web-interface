@@ -20,6 +20,9 @@ const LibraryPage = lazy(() =>
 const ResourcesPage = lazy(() =>
   import('./pages/ResourcesPage').then((m) => ({ default: m.ResourcesPage }))
 );
+const LabPage = lazy(() =>
+  import('./pages/LabPage').then((m) => ({ default: m.LabPage }))
+);
 const WikiPage = lazy(() =>
   import('./pages/WikiPage').then((m) => ({ default: m.WikiPage }))
 );
@@ -146,6 +149,14 @@ export const App = () => {
           <Route
             path="/games/wiki"
             element={<Navigate to="/guide" replace />}
+          />
+          <Route
+            path="/labo"
+            element={
+              <ProtectedRoute>
+                <LabPage />
+              </ProtectedRoute>
+            }
           />
           <Route path="/404" element={<NotFoundPage />} />
           <Route path="/403" element={<ForbiddenPage />} />
