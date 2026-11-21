@@ -277,6 +277,8 @@ func (d *Doc) Apply(section string, raw json.RawMessage, isGM bool) error {
 		}
 		if !isGM {
 			keepHiddenMarkers(&v, d.Map)
+			// Le hangar s'achète à la table : seul le MJ l'attribue.
+			v.Hangar = d.Map.Hangar
 		}
 		stampTravel(&v, d.Map, time.Now())
 		d.Map = v

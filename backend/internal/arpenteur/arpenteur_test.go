@@ -191,6 +191,35 @@ func TestMapMood(t *testing.T) {
 	}
 }
 
+func TestMapHangarGMOnly(t *testing.T) {
+	d := Default()
+	next := d.Map
+	next.Hangar = "m2"
+	raw, _ := json.Marshal(next)
+	if err := d.Apply(SectionMap, raw, false); err != nil {
+		t.Fatal(err)
+	}
+	if d.Map.Hangar != "" {
+		t.Fatal("un joueur ne peut pas s'attribuer un hangar")
+	}
+	if err := d.Apply(SectionMap, raw, true); err != nil {
+		t.Fatal(err)
+	}
+	if d.Map.Hangar != "M2" {
+		t.Fatalf("hangar du MJ mal enregistré : %q", d.Map.Hangar)
+	}
+	// Une modification de la carte par un joueur le conserve.
+	next = d.Map
+	next.Hangar = ""
+	raw, _ = json.Marshal(next)
+	if err := d.Apply(SectionMap, raw, false); err != nil {
+		t.Fatal(err)
+	}
+	if d.Map.Hangar != "M2" {
+		t.Fatal("le hangar doit survivre aux modifications des joueurs")
+	}
+}
+
 func TestNormalizeBounds(t *testing.T) {
 	d := Default()
 	d.Combat.Decks[0].Guns.A1 = Battery{Slots: 4, Installed: 9, Loaded: 7, Primed: -2}

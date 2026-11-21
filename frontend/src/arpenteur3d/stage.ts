@@ -79,7 +79,8 @@ const CRUISE = 9;
 
 /** Où se trouve le navire : en plein désert, ou amarré dans une ville. */
 export interface Place {
-  city?: { id: string; capital?: boolean };
+  /** `hangar` : l'équipage y possède son hangar, le navire s'amarre dedans. */
+  city?: { id: string; capital?: boolean; hangar?: boolean };
 }
 
 /** Décor d'une position : désert et ville éventuelle. */
@@ -343,8 +344,13 @@ export class Stage {
   }
 
   /** Ville (construite à la demande, gardée en cache). */
-  private cityOf(c: { id: string; capital?: boolean }): CityRt | null {
-    let m = this.cities.get(c.id);
+  private cityOf(c: {
+    id: string;
+    capital?: boolean;
+    hangar?: boolean;
+  }): CityRt | null {
+    const key = `${c.id}${c.hangar ? ':hangar' : ''}`;
+    let m = this.cities.get(key);
     if (!m && this.ship) {
       const night = this.mood === 'night';
       const d = cityMesh({
@@ -354,6 +360,8 @@ export class Stage {
         halfBeam: this.ship.parts.halfBeam,
         length: this.ship.parts.length,
         hover: HOVER_DOCK,
+        keel: HOVER_DOCK + this.ship.parts.bottom,
+        hangar: c.hangar,
       });
       // Autres navires du port, chacun avec sa silhouette et ses couleurs.
       const ships = BERTHS.map((q, k) => {
@@ -372,7 +380,7 @@ export class Stage {
         crowd: d.crowd,
         ships,
       };
-      this.cities.set(c.id, m);
+      this.cities.set(key, m);
     }
     if (!this.folk.length)
       this.folk = FOLK.map((st) => {
@@ -732,7 +740,7 @@ function npcBuild(seed: string, k: number): Build {
 }
 
 const scKey = (s: Scene) =>
-  `${s.desert}:${s.biome ?? ''}:${s.place.city?.id ?? ''}`;
+  `${s.desert}:${s.biome ?? ''}:${s.place.city?.id ?? ''}${s.place.city?.hangar ? ':h' : ''}`;
 
 /** Nuages de sable sous les tuyères qui soufflent vers le bas. */
 function dustMesh(parts: ShipParts): import('./geometry').MeshData {

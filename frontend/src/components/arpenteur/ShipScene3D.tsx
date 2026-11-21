@@ -39,7 +39,7 @@ const isDefault = (c: Cam) =>
   Math.abs(c.zoom - DEFAULT_CAM.zoom) < 1e-3;
 
 /** Décor d'une position : désert, et ville d'escale le cas échéant. */
-function sceneOf(sector: string): Scene {
+function sceneOf(sector: string, hangar = ''): Scene {
   const id = sector.trim().toUpperCase();
   const city = cityById(id);
   if (city) {
@@ -48,7 +48,10 @@ function sceneOf(sector: string): Scene {
     const region = route ? regionById(route[1]) : undefined;
     return {
       desert: region?.desert || desertOf(id),
-      place: { city: { id, capital: city.capital } },
+      // Ville du hangar de l'équipage : le navire s'amarre dans sa cale couverte.
+      place: {
+        city: { id, capital: city.capital, hangar: hangar === id },
+      },
       biome: region?.id ?? id,
     };
   }
@@ -88,6 +91,7 @@ export function ShipScene3D(props: ShipSceneProps) {
   // Moment de la journée : imposé par le MJ, sinon selon l'heure réelle.
   const [clockMood] = useState(moodNow);
   const mood: Mood = doc.map.mood || clockMood;
+  const hangar = doc.map.hangar ?? '';
   const moodRef = useRef(mood);
   moodRef.current = mood;
   const guns = installedGuns(doc.combat).installed;
@@ -298,11 +302,11 @@ export function ShipScene3D(props: ShipSceneProps) {
     const reduced =
       !animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (now && !reduced) {
-      const from = sceneOf(now.from);
-      const to = sceneOf(now.to);
+      const from = sceneOf(now.from, hangar);
+      const to = sceneOf(now.to, hangar);
       stage.setJourney(from, to, moodRef.current, now.start, now.duration);
     } else {
-      const here = sceneOf(sector);
+      const here = sceneOf(sector, hangar);
       stage.setEnvironment(
         here.desert,
         moodRef.current,
@@ -313,7 +317,7 @@ export function ShipScene3D(props: ShipSceneProps) {
     canvasRef.current?.dispatchEvent(new Event('arp-ship'));
     // travelKey résume mapTravel ; le moment de la journée a son propre effet.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [use3D, animate, sector, travelKey]);
+  }, [use3D, animate, sector, travelKey, hangar]);
 
   // Jour / nuit : passage progressif (instantané si les animations sont réduites).
   useEffect(() => {
@@ -338,7 +342,13 @@ export function ShipScene3D(props: ShipSceneProps) {
     const d = sceneOf(id).desert;
     setBanner(
       cityById(id)
-        ? { title: `Arrivée à ${name}`, sub: 'Amarré au quai' }
+        ? {
+            title: `Arrivée à ${name}`,
+            sub:
+              hangar === id
+                ? "Amarré au hangar de l'équipage"
+                : 'Amarré au quai',
+          }
         : {
             title: name,
             sub:

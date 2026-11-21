@@ -25,6 +25,10 @@ export interface CityOptions {
   halfBeam: number;
   length: number;
   hover: number;
+  /** Hauteur de la quille du navire amarré (m), pour les tins de la cale. */
+  keel?: number;
+  /** L'équipage possède son hangar ici : cale sèche couverte au lieu du quai. */
+  hangar?: boolean;
 }
 
 /**
@@ -833,11 +837,400 @@ export function cityMesh(o: CityOptions): {
     b.pop();
   };
   const rope = mat('#8a7458', P.PLAIN, 1);
-  quay(0, 0, true);
+  // --- Hangars : halles voûtées de fer et de verre ------------------------------------
+  const glassM: Mat = {
+    p: P.GLASS,
+    color: linear('#9fb8c0'),
+    metal: 0.3,
+    rough: 0.15,
+  };
+  const ironH = mat('#3a3632', P.IRON, 0.55, 0.7);
+  const beamGlow: Mat = { ...lit, emit: o.night ? 4 : 0.4 };
+  /**
+   * Coque de voûte en berceau le long de x, centrée en (cx, cz) : `half`
+   * borne la voûte (-1 : moitié -z, 1 : moitié +z, 0 : berceau complet).
+   * `clad` : verrière posée (sinon, simple ossature à toit escamoté).
+   */
+  const hallVault = (
+    cx: number,
+    cz: number,
+    L: number,
+    R: number,
+    yW: number,
+    H: number,
+    half: -1 | 0 | 1,
+    clad: boolean,
+    zIn = 0
+  ) => {
+    // Profil (z, y) : demi-ellipse de rayon R (z) et H (y) au-dessus de yW ;
+    // pour une demi-voûte, de la paroi extérieure jusqu'au bord intérieur zIn.
+    const prof = (u: number): [number, number] => {
+      if (half === 0) {
+        const t = Math.PI * (1 - u);
+        return [cz + Math.cos(t) * R, yW + Math.sin(t) * H];
+      }
+      // Demi-voûte : départ vertical sur la paroi (±R), arrivée à
+      // l'horizontale au bord intérieur (±zIn).
+      const t = (u * Math.PI) / 2;
+      return [
+        cz + half * (R - (R - zIn) * (1 - Math.cos(t))),
+        yW + Math.sin(t) * H,
+      ];
+    };
+    const ribs = Math.max(3, Math.round(L / 9));
+    for (let k = 0; k <= ribs; k++) {
+      const x = cx - L / 2 + (L * k) / ribs;
+      const pts: Vec3[] = [];
+      const inner: Vec3[] = [];
+      for (let i = 0; i <= 16; i++) {
+        const [z, y] = prof(i / 16);
+        pts.push([x, y, z]);
+        inner.push([x, y - 1.1, z + (cz - z) * 0.04]);
+      }
+      // Arc en treillis : deux membrures et des montants en zigzag.
+      b.tube(pts, 0.32, 6, ironH);
+      b.tube(inner, 0.22, 6, ironH);
+      for (let i = 0; i < 16; i++) {
+        const a = pts[i];
+        const c = inner[i + 1];
+        b.tube([a, c], 0.1, 4, ironH);
+      }
+    }
+    // Pannes le long de la halle.
+    for (let i = 1; i < 8; i++) {
+      const [z, y] = prof(i / 8);
+      b.tube(
+        [
+          [cx - L / 2, y + 0.1, z],
+          [cx + L / 2, y + 0.1, z],
+        ],
+        0.12,
+        5,
+        ironH
+      );
+    }
+    if (clad)
+      b.grid(
+        ribs * 2,
+        12,
+        (u, v) => {
+          const [z, y] = prof(v);
+          return [cx - L / 2 + L * u, y - 0.05, z];
+        },
+        glassM,
+        { uv: (u, v) => [u * L * 0.25, v * 6], flip: half === 1 }
+      );
+    return prof;
+  };
+  /** Pignon plein (mur maçonné) qui ferme une voûte complète, porte au centre. */
+  const gable = (
+    x: number,
+    cz: number,
+    R: number,
+    yW: number,
+    H: number,
+    dir: number
+  ) => {
+    b.grid(
+      20,
+      2,
+      (u, v) => {
+        const t = Math.PI * u;
+        return [x, yW + Math.sin(t) * H * v, cz + Math.cos(t) * R];
+      },
+      masonry,
+      { uv: (u, v) => [u * R * 2, v * H], flip: dir > 0 }
+    );
+    // Rosace vitrée et porte monumentale.
+    b.push(
+      chain(
+        translation(x + dir * 0.15, yW + H * 0.55, cz),
+        rotationZ(Math.PI / 2)
+      )
+    );
+    b.cylinder(H * 0.22, 0.2, 20, glassM);
+    b.torus(H * 0.22, 0.25, 20, 5, brass);
+    b.pop();
+    b.push(translation(x + dir * 0.2, ground, cz));
+    b.box(0.4, yW + H * 0.25, R * 0.9, mat('#3a2a1c', P.WOOD, 0.85));
+    b.pop();
+    for (const sz of [-1, 1]) {
+      b.push(translation(x + dir * 0.35, ground, cz + sz * R * 0.47));
+      b.box(0.6, yW + H * 0.3, 0.8, brass);
+      b.pop();
+    }
+  };
+  /** Hangar fermé d'une ville (navires d'armateurs), le long de x. */
+  const closedHangar = (cx: number, cz: number, L: number, W: number) => {
+    const R = W / 2;
+    const yW = 7;
+    const H = R * 0.9;
+    // Murs gouttereaux à contreforts, bandeau de fenêtres hautes.
+    for (const sz of [-1, 1]) {
+      b.push(translation(cx, ground, cz + sz * (R - 0.6)));
+      b.box(L, yW + 0.4, 1.2, masonry);
+      b.pop();
+      for (let k = 0; k <= 6; k++) {
+        const x = cx - L / 2 + (L * k) / 6;
+        b.push(translation(x, ground, cz + sz * (R + 0.4)));
+        b.box(1.6, yW + 1, 1.6, dressed);
+        b.pop();
+        if (k < 6) {
+          b.push(
+            translation(x + L / 12, ground + yW - 3.2, cz + sz * (R + 0.02))
+          );
+          b.box(L / 6 - 3, 2, 0.1, win(o.night));
+          b.pop();
+        }
+      }
+    }
+    hallVault(cx, cz, L, R, ground + yW, H, 0, true);
+    gable(cx - L / 2, cz, R, ground + yW, H, -1);
+    gable(cx + L / 2, cz, R, ground + yW, H, 1);
+    // Lanterneau de faîte.
+    b.push(translation(cx, ground + yW + H, cz));
+    b.box(L * 0.9, 1.2, 3, ironH);
+    b.pop();
+  };
+  /**
+   * Hangar de l'équipage : cale sèche maçonnée sous une grande halle de fer et
+   * de verre. Ouverte aux deux bouts (le navire y entre par le chenal), voûte
+   * vitrée côté ville, ossature au toit escamoté côté caméra, faîte ouvert
+   * pour les mâts, portique roulant au-dessus de la proue.
+   */
+  const hangarBay = () => {
+    const hb = o.halfBeam;
+    const L = len + 16;
+    const keel = o.keel ?? o.hover - 6;
+    const zPier = z0; // bord du quai de travail (côté ville)
+    const zBack = -(hb + 30); // mur du fond
+    const zFront = hb + 7; // muret côté caméra
+    const yW = top + 5;
+    // Radier de la cale et tins sous la quille.
+    b.push(translation(0, ground, (zPier + zFront) / 2));
+    b.box(L, 0.42, zFront - zPier, mat('#7d6c58', P.BRICK, 0.95));
+    b.pop();
+    for (let x = -o.length * 0.36; x <= o.length * 0.36; x += 5.5) {
+      const h = Math.max(0.6, keel - ground - 0.5);
+      for (let y = 0; y < h; y += 1) {
+        b.push(translation(x, ground + 0.42 + y, 0));
+        b.box(
+          1.4,
+          Math.min(1, h - y) - 0.08,
+          (y / 1) % 2 ? 2.6 : 2.2,
+          mat('#5a4028', P.WOOD, 0.85)
+        );
+        b.pop();
+      }
+    }
+    // Quai de travail (côté ville), à hauteur du pont, sur arcades.
+    b.push(translation(0, ground, (zPier - 15 + zPier) / 2));
+    b.box(L, top - ground, 15, masonry);
+    b.pop();
+    b.push(translation(0, top, zPier - 7.5));
+    b.box(L, 0.35, 15.2, dressed);
+    b.pop();
+    for (let k = 0; k < 12; k++) {
+      const x = -L / 2 + ((k + 0.5) * L) / 12;
+      b.push(translation(x, ground, zPier + 0.05));
+      b.box(L / 12 - 3.5, (top - ground) * 0.62, 0.1, dark);
+      b.pop();
+    }
+    // Garde-corps du quai.
+    b.tube(
+      [
+        [-L / 2, top + 1.1, zPier - 0.4],
+        [L / 2, top + 1.1, zPier - 0.4],
+      ],
+      0.08,
+      5,
+      brass
+    );
+    for (let x = -L / 2; x <= L / 2; x += 3) {
+      b.push(translation(x, top, zPier - 0.4));
+      b.cylinder(0.06, 1.1, 5, brass);
+      b.pop();
+    }
+    // Escalier vers l'atelier et la porte du fond.
+    const steps = Math.ceil((top - ground) / 0.42);
+    for (let k = 0; k < steps; k++) {
+      b.push(translation(0, ground, zPier - 15 - k * 0.5 - 0.25));
+      b.box(6, top - ground - k * 0.42, 0.5, dressed);
+      b.pop();
+    }
+    // Atelier sous la voûte : établis, caisses, pièces de rechange.
+    for (let k = 0; k < 10; k++) {
+      const x = -L / 2 + 8 + r() * (L - 16);
+      if (Math.abs(x) < 6) continue;
+      const z = zPier - 18 - r() * 9;
+      b.push(chain(translation(x, ground, z), rotationY(r() * 0.4)));
+      if (k % 3 === 0) {
+        b.cylinder(1.4, 2.4, 14, ironH);
+        b.torus(1.42, 0.12, 14, 4, brass);
+      } else {
+        b.box(
+          3 + r() * 2,
+          1 + r() * 1.4,
+          1.6 + r(),
+          mat('#8a6a42', P.WOOD, 0.85)
+        );
+      }
+      b.pop();
+    }
+    // Mur du fond, porte charretière face à la route.
+    b.push(translation(0, ground, zBack));
+    b.box(L, yW - ground, 1.4, masonry);
+    b.pop();
+    b.push(translation(0, ground, zBack + 0.8));
+    b.box(9, 9, 0.2, mat('#3a2a1c', P.WOOD, 0.85));
+    b.pop();
+    for (let k = 0; k <= 8; k++) {
+      const x = -L / 2 + (L * k) / 8;
+      b.push(translation(x, ground, zBack - 0.9));
+      b.box(1.8, yW - ground + 0.6, 1.4, dressed);
+      b.pop();
+    }
+    // Muret de la cale côté caméra : ce côté reste ouvert sur le navire.
+    b.push(translation(0, ground, zFront + 2));
+    b.box(L, 3.2, 4, masonry);
+    b.pop();
+    b.push(translation(0, ground + 3.2, zFront + 2));
+    b.box(L + 0.4, 0.3, 4.4, dressed);
+    b.pop();
+    // Réverbères bas sur le muret (le côté caméra reste ouvert).
+    for (let x = -L / 2 + 6; x <= L / 2 - 6; x += 12) {
+      b.push(translation(x, ground + 3.5, zFront + 2));
+      b.cylinder(0.16, 3.4, 8, ironH);
+      b.pop();
+      b.push(translation(x, ground + 6.9, zFront + 2));
+      b.sphere(0.4, 8, beamGlow);
+      b.pop();
+    }
+    // Grande demi-voûte vitrée au-dessus du quai de travail ; faîte ouvert pour la mâture.
+    const H = 15;
+    const zIn = hb + 9;
+    hallVault(0, 0, L, -zBack, yW, H, -1, true, zIn);
+    const zc = zFront + 2;
+    // Entrées : pylônes en treillis coiffés d'un fanal, de chaque côté.
+    for (const x of [-L / 2 - 2, L / 2 + 2])
+      for (const z of [zc, -zIn]) {
+        const y0 = z > 0 ? ground : top;
+        const h = yW + H - y0;
+        for (const [dx, dz] of [
+          [-0.9, -0.9],
+          [0.9, -0.9],
+          [0.9, 0.9],
+          [-0.9, 0.9],
+        ])
+          b.tube(
+            [
+              [x + dx * 1.6, y0, z + dz * 1.6],
+              [x + dx * 0.7, y0 + h, z + dz * 0.7],
+            ],
+            0.2,
+            5,
+            ironH
+          );
+        for (let y = y0 + 4; y < y0 + h; y += 4) {
+          const k = 1.6 - 0.9 * ((y - y0) / h);
+          b.push(translation(x, y, z));
+          b.box(k * 2, 0.2, k * 2, ironH);
+          b.pop();
+        }
+        b.push(translation(x, y0 + h, z));
+        b.cylinder(0.9, 1.6, 10, beamGlow);
+        b.push(translation(0, 1.6, 0));
+        b.lathe(
+          [
+            [1.2, 0],
+            [0.6, 1],
+            [0, 2.2],
+          ],
+          10,
+          copper
+        );
+        b.pop();
+        b.pop();
+      }
+    // Portique roulant au-delà de la proue, sur rails.
+    {
+      const gx = o.length / 2 + 4;
+      const yB = yW + H + 6;
+      for (const z of [zPier - 10, zFront + 2]) {
+        b.tube(
+          [
+            [-L / 2, z < 0 ? top + 0.4 : ground + 3.6, z],
+            [L / 2, z < 0 ? top + 0.4 : ground + 3.6, z],
+          ],
+          0.18,
+          5,
+          ironH
+        );
+        const y0 = z < 0 ? top + 0.4 : ground + 3.6;
+        for (const dx of [-2.2, 2.2])
+          b.tube(
+            [
+              [gx + dx, y0, z],
+              [gx + dx * 0.4, yB, z],
+            ],
+            0.45,
+            8,
+            ironH
+          );
+      }
+      for (const dy of [0, 1.8])
+        b.tube(
+          [
+            [gx, yB + dy, zPier - 11],
+            [gx, yB + dy, zFront + 3],
+          ],
+          0.4,
+          8,
+          dy ? ironH : brass
+        );
+      b.push(translation(gx - 1.6, yB - 2.2, -2));
+      b.box(3.2, 2.2, 4, mat('#6a4a2a', P.WOOD, 0.85));
+      b.pop();
+      b.tube(
+        [
+          [gx, yB - 2.2, -2],
+          [gx, top + 4, -2],
+        ],
+        0.06,
+        4,
+        iron
+      );
+      b.push(translation(gx, top + 3.2, -2));
+      b.torus(0.5, 0.12, 10, 4, iron);
+      b.pop();
+    }
+    // Amarres vers le quai de travail, passerelle.
+    for (const fx of [-0.32, 0.05, 0.32]) {
+      const x = fx * o.length;
+      m.push(translation(x, top, zPier - 1.5));
+      m.cylinder(0.35, 1, 8, ironH);
+      m.pop();
+      m.tube(
+        [
+          [x, top + 0.8, zPier - 1.5],
+          [x + 1, top - 0.4, (zPier - hb) / 2 - 0.5],
+          [x + 2, top + 0.6, -hb + 0.6],
+        ],
+        0.07,
+        4,
+        rope
+      );
+    }
+    m.push(chain(translation(-o.length * 0.12, top + 0.15, (zPier - hb) / 2)));
+    m.box(3.2, 0.2, Math.abs(zPier) - hb + 1.6, plank);
+    m.pop();
+  };
   for (const q of BERTHS) quay(q.x, q.z, false);
 
   // --- La ville ---------------------------------------------------------------------
   const ground = -1;
+  if (o.hangar) hangarBay();
+  else quay(0, 0, true);
   const wood = mat('#5a3e28', P.WOOD, 0.85);
   const iron2 = mat('#3a3430', P.IRON, 0.6, 0.6);
   // Emprises au sol déjà bâties (x, z, rayon) : rien ne se chevauche.
@@ -1777,6 +2170,20 @@ export function cityMesh(o: CityOptions): {
     if (Math.abs(x) < 76 + rad && z > 0 && z - rad < 118) return true;
     return false;
   };
+  // Hangars des armateurs de la ville, de part et d'autre du port, porte
+  // monumentale face au grand axe.
+  {
+    const trunkX = len / 2 + 26;
+    const HL = 58;
+    const HW = 30;
+    const hz = -(o.halfBeam + 8 + 4 + HW / 2);
+    for (const sx of [-1, 1]) {
+      const hx = sx * (trunkX + 9 + HL / 2);
+      closedHangar(hx, hz, HL, HW);
+      for (let k = -2; k <= 2; k++)
+        occ.push([hx + (k * HL) / 5, hz, HW * 0.62]);
+    }
+  }
   // Place du marché devant le quai : étals, palmiers, fontaine.
   const palm = (x: number, z: number) => {
     const h = 7 + r() * 5;

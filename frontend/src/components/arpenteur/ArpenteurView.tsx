@@ -323,7 +323,12 @@ export function ArpenteurView({
             />
           )}
           {tab === 'atelier' && (
-            <AtelierPanel doc={doc} rights={rights} update={update} />
+            <AtelierPanel
+              doc={doc}
+              rights={rights}
+              update={update}
+              isGM={isGM}
+            />
           )}
           {tab === 'reglages' && isGM && (
             <SettingsPanel

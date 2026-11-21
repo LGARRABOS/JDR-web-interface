@@ -22,7 +22,9 @@ import type {
   Material,
   Room,
 } from '../../arpenteur/types';
+import { cityById } from '../../arpenteur/keld';
 import { ShipThumb3D } from './ShipThumb3D';
+import { useTravel } from './useTravel';
 import {
   Btn,
   Card,
@@ -36,6 +38,8 @@ interface Props {
   doc: ArpenteurDoc;
   rights: Rights;
   update: UpdateFn;
+  /** Le MJ peut lancer des travaux hors du hangar. */
+  isGM?: boolean;
 }
 
 const label = <T extends string | number>(
@@ -106,8 +110,15 @@ export function buildChanges(a: Build, b: Build): string[] {
   return out;
 }
 
-export function AtelierPanel({ doc, rights, update }: Props) {
+export function AtelierPanel({ doc, rights, update, isGM = false }: Props) {
   const can = rights.ship && !doc.pending;
+  // Les améliorations se font au hangar de l'équipage, navire amarré.
+  const travel = useTravel(doc.map.travel);
+  const hangar = doc.map.hangar ?? '';
+  const atHangar = !!hangar && doc.map.sector === hangar && !travel;
+  const hangarName = hangar
+    ? doc.map.sectorNames[hangar] || cityById(hangar)?.name || hangar
+    : '';
   const [draft, setDraft] = useState<Build>(doc.build);
   const [dirty, setDirty] = useState(false);
   const [title, setTitle] = useState('');
@@ -331,13 +342,27 @@ export function AtelierPanel({ doc, rights, update }: Props) {
                     {doc.expedition.coupons} restants)
                   </label>
                 )}
+                {!atHangar && (
+                  <p className="mt-3 text-xs text-fantasy-accent">
+                    {travel
+                      ? "L'arpenteur est en route : les travaux attendront l'amarrage au hangar."
+                      : hangar
+                        ? `Les travaux se font au hangar de l'équipage, à ${hangarName} : l'arpenteur doit s'y trouver.`
+                        : "L'équipage n'a pas de hangar : le MJ peut en attribuer un dans une ville, depuis l'onglet Carte."}
+                    {isGM && ' En tant que MJ, vous pouvez passer outre.'}
+                  </p>
+                )}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Btn variant="primary" onClick={apply}>
+                  <Btn
+                    variant="primary"
+                    onClick={apply}
+                    disabled={!atHangar && !isGM}
+                  >
                     Appliquer maintenant
                   </Btn>
                   <Btn
                     onClick={startWorks}
-                    disabled={!duration.trim()}
+                    disabled={!duration.trim() || (!atHangar && !isGM)}
                     title={duration.trim() ? undefined : 'Indiquez une durée'}
                   >
                     Lancer les travaux

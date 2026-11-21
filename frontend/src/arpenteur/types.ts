@@ -241,6 +241,8 @@ export interface MapState {
   travel?: Travel | null;
   /** Moment de la journée imposé par le MJ ('' : selon l'heure réelle). */
   mood?: '' | 'dusk' | 'night';
+  /** Ville (id) où l'équipage possède son hangar, attribué par le MJ ('' : aucun). */
+  hangar?: string;
 }
 
 export interface Travel {

@@ -280,6 +280,9 @@ type MapState struct {
 	Travel *Travel `json:"travel"`
 	// Mood : moment de la journée imposé par le MJ ("" = selon l'heure).
 	Mood string `json:"mood"`
+	// Hangar : secteur de la ville où l'équipage possède son hangar ("" : aucun).
+	// Attribué par le MJ ; le navire s'y amarre et l'atelier n'y travaille que là.
+	Hangar string `json:"hangar"`
 }
 
 // Travel : départ de From vers To à StartedAt (horodaté par le serveur),

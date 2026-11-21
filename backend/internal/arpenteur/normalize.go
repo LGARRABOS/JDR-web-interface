@@ -399,6 +399,7 @@ func NormalizeMap(m *MapState) {
 	if m.Mood != "dusk" && m.Mood != "night" {
 		m.Mood = ""
 	}
+	m.Hangar = strings.ToUpper(text(m.Hangar, 12))
 	if t := m.Travel; t != nil {
 		t.From = strings.ToUpper(text(t.From, 12))
 		t.To = strings.ToUpper(text(t.To, 12))

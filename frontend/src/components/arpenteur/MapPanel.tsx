@@ -171,6 +171,7 @@ export function MapPanel({
               selected={selected}
               reachable={reachable}
               travel={travel}
+              hangar={map.hangar}
               onSelect={setSelected}
             />
             <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pt-2 text-xs text-fantasy-muted">
@@ -283,6 +284,45 @@ export function MapPanel({
                             </Btn>
                           )}
                         </>
+                      )}
+                    </div>
+                  )}
+                  {sel.city && (map.hangar === sel.id || (isGM && can)) && (
+                    <div className="flex flex-col gap-1.5 rounded-lg bg-black/25 p-2.5">
+                      <span className="text-sm text-fantasy-text">
+                        {map.hangar === sel.id
+                          ? "🏗 Hangar de l'équipage : l'arpenteur s'y amarre et l'atelier y travaille."
+                          : 'Pas de hangar dans cette ville.'}
+                      </span>
+                      {isGM && can && (
+                        <div className="flex flex-wrap gap-2">
+                          {map.hangar === sel.id ? (
+                            <Btn
+                              variant="ghost"
+                              onClick={() =>
+                                save(
+                                  { ...map, hangar: '' },
+                                  `Hangar de ${nodeName(sel.id, map.sectorNames)} cédé`
+                                )
+                              }
+                            >
+                              Retirer le hangar
+                            </Btn>
+                          ) : (
+                            <Btn
+                              onClick={() =>
+                                save(
+                                  { ...map, hangar: sel.id },
+                                  `Hangar acquis à ${nodeName(sel.id, map.sectorNames)}`
+                                )
+                              }
+                            >
+                              {map.hangar
+                                ? `Déplacer le hangar ici (remplace ${nodeName(map.hangar, map.sectorNames)})`
+                                : 'Attribuer un hangar ici'}
+                            </Btn>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}

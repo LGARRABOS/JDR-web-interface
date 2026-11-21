@@ -70,6 +70,7 @@ export function KeldMap({
   reachable,
   onSelect,
   travel = null,
+  hangar = '',
 }: {
   current: string;
   destination: string;
@@ -78,6 +79,8 @@ export function KeldMap({
   markers: Marker[];
   selected: string | null;
   reachable: Set<string>;
+  /** Ville du hangar de l'équipage. */
+  hangar?: string;
   onSelect: (id: string) => void;
   /** Voyage en cours : le navire glisse le long du trajet. */
   travel?: TravelNow | null;
@@ -357,6 +360,18 @@ export function KeldMap({
               strokeWidth={active ? 5 : 3}
               rx={3}
             />
+            {hangar === c.id && (
+              <g transform={`translate(${c.x + 20} ${c.y - 34})`}>
+                <title>Hangar de l'équipage</title>
+                <path
+                  d="M-13,10 L-13,-2 Q0,-14 13,-2 L13,10 Z"
+                  fill="#f0c869"
+                  stroke="#1b140e"
+                  strokeWidth={3}
+                />
+                <rect x={-5} y={1} width={10} height={9} fill="#1b140e" />
+              </g>
+            )}
             {c.capital && (
               <rect
                 x={c.x - 8}
