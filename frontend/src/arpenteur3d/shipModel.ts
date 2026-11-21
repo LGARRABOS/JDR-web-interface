@@ -310,7 +310,7 @@ function alignY(o: Vec3, d: Vec3): Mat4 {
 }
 
 /** Élargissement général des coques (le gréement suit la largeur). */
-const BEAM_SCALE = 1.18;
+const BEAM_SCALE = 1.42;
 
 /** Rentrée des murs des châteaux, du pied au toit. */
 const CT = 0.12;
@@ -1654,13 +1654,19 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     aether,
     glass,
   });
+  const gear = deckGear(b, hull, roofs, iron, brass, {
+    masts: mastS,
+    stacks: S.chimneys,
+    reactor: S.reactor,
+    turret: build.allure === 'escorteur' ? 0.82 : null,
+  });
   const crewMembers = crewPlan(
     hull,
     roofs,
     opts.crew ?? 0,
-    mastS.map((m) => hull.x(m))
+    mastS.map((m) => hull.x(m)),
+    gear
   );
-  deckGear(b, hull, roofs, iron, brass);
   if (opts.scaffolding) scaffold(b, hull, iron);
   damage(b, hull, opts.damage ?? 0, stacks);
 
@@ -2145,106 +2151,346 @@ function lanterns(
   }
 }
 
+/**
+ * Accastillage du pont, disposé comme sur un vrai navire : écoutilles entre
+ * les mâts avec leur cargaison arrimée, râteliers à cabillots et glènes au
+ * pied des mâts, manches à air de part et d'autre des cheminées et du cœur
+ * d'Aether, tonneaux en rangs contre le pavois, cabestan à l'avant, roue et
+ * habitacle devant la dunette, canots sur bossoirs dans les grands espaces
+ * libres. Rien ne se chevauche : chaque élément réserve sa place.
+ */
 function deckGear(
   b: MeshBuilder,
   hull: Hull,
   roofs: Roof[],
   iron: Mat,
-  brass: Mat
-) {
-  const crate: Mat = {
+  brass: Mat,
+  o: {
+    masts: number[];
+    stacks: number[];
+    reactor: number;
+    turret: number | null;
+  }
+): { helm: number; capstan: number | null } {
+  let capstan: number | null = null;
+  const L = hull.L;
+  const wood = (hex: string, rough = 0.8): Mat => ({
     p: P.WOOD,
-    color: linear('#8a6a42'),
+    color: linear(hex),
     metal: 0,
-    rough: 0.8,
+    rough,
+  });
+  const crate = wood('#8a6a42');
+  const darkWood = wood('#4a3220');
+  const rope: Mat = {
+    p: P.PLAIN,
+    color: linear('#8a7458'),
+    metal: 0,
+    rough: 1,
   };
-  const free = (s: number) =>
-    !roofs.some((r) => s > r.a - 0.03 && s < r.b + 0.03);
-  const items: [number, number, 'box' | 'barrel' | 'vent'][] = [
-    [0.43, 0.5, 'barrel'],
-    [0.445, 0.6, 'barrel'],
-    [0.57, -0.55, 'box'],
-    [0.68, 0.45, 'box'],
-    [0.79, -0.4, 'barrel'],
-    [0.4, -0.55, 'vent'],
-    [0.63, 0.62, 'vent'],
-    [0.75, -0.62, 'vent'],
-  ];
-  for (const [s, zf, kind] of items) {
-    if (!free(s)) continue;
-    const p = hull.point(s, 1);
-    const z = zf * (p[2] - 0.6);
-    b.push(translation(p[0], hull.deckY(s), z));
-    if (kind === 'box') b.box(1, 0.9, 1, crate);
-    else if (kind === 'barrel') {
-      b.lathe(
-        [
-          [0, 0],
-          [0.38, 0],
-          [0.45, 0.45],
-          [0.38, 0.9],
-          [0, 0.9],
-        ],
-        12,
-        crate
-      );
-      for (const y of [0.15, 0.75]) {
-        b.push(translation(0, y, 0));
-        b.torus(0.42, 0.03, 12, 4, iron);
-        b.pop();
-      }
-    } else {
-      // Manche à air.
-      b.cylinder(0.22, 1.6, 12, brass, false);
-      b.push(chain(translation(0, 1.6, 0), rotationZ(-Math.PI / 2)));
-      b.lathe(
-        [
-          [0.22, 0],
-          [0.26, 0.3],
-          [0.42, 0.65],
-          [0.5, 0.75],
-        ],
-        14,
-        brass
-      );
-      b.lathe(
-        [
-          [0.2, 0.05],
-          [0.44, 0.72],
-        ],
-        14,
-        { p: P.IRON, color: linear('#141414'), metal: 0.2, rough: 0.8 }
-      );
+  const grate: Mat = {
+    p: P.IRON,
+    color: linear('#1c1712'),
+    metal: 0.2,
+    rough: 0.9,
+  };
+  const canvas: Mat = {
+    p: P.SAIL,
+    color: linear('#b8a888'),
+    metal: 0,
+    rough: 0.9,
+  };
+
+  // Places déjà prises sur le pont : (s, z, rayon en m).
+  const taken: [number, number, number][] = [];
+  const reserve = (s: number, z: number, r: number) => taken.push([s, z, r]);
+  const clear = (s: number, z: number, r: number) =>
+    s > 0.06 &&
+    s < 0.94 &&
+    !roofs.some((rf) => s > rf.a - (r + 1) / L && s < rf.b + (r + 1) / L) &&
+    !taken.some(([ts, tz, tr]) => Math.hypot((s - ts) * L, z - tz) < r + tr);
+  const halfAt = (s: number) => Math.max(1, hull.point(s, 1)[2] - 0.7);
+  const at = (s: number, z: number) => translation(hull.x(s), hull.deckY(s), z);
+  for (const m of o.masts) reserve(m, 0, 1.3);
+  for (const c of o.stacks) reserve(c, 0, 1.4);
+  reserve(o.reactor, 0, 2.6);
+  if (o.turret !== null) reserve(o.turret, 0, 2.6);
+
+  const barrel = () => {
+    b.lathe(
+      [
+        [0, 0],
+        [0.36, 0],
+        [0.43, 0.45],
+        [0.36, 0.9],
+        [0, 0.9],
+      ],
+      12,
+      crate
+    );
+    for (const y of [0.15, 0.75]) {
+      b.push(translation(0, y, 0));
+      b.torus(0.4, 0.03, 12, 4, iron);
+      b.pop();
+    }
+  };
+  const coil = (r = 0.45) => {
+    for (let k = 0; k < 3; k++) {
+      b.push(translation(0, 0.05 + k * 0.07, 0));
+      b.torus(r - k * 0.08, 0.05, 14, 4, rope);
+      b.pop();
+    }
+  };
+  const vent = (ry: number) => {
+    b.push(rotationY(ry));
+    b.cylinder(0.22, 1.6, 12, brass, false);
+    b.push(chain(translation(0, 1.6, 0), rotationZ(-Math.PI / 2)));
+    b.lathe(
+      [
+        [0.22, 0],
+        [0.26, 0.3],
+        [0.42, 0.65],
+        [0.5, 0.75],
+      ],
+      14,
+      brass
+    );
+    b.lathe(
+      [
+        [0.2, 0.05],
+        [0.44, 0.72],
+      ],
+      14,
+      { p: P.IRON, color: linear('#141414'), metal: 0.2, rough: 0.8 }
+    );
+    b.pop();
+    b.pop();
+  };
+
+  // 1. Pied des mâts : râtelier à cabillots en fer à cheval et glènes de cordage.
+  for (const m of o.masts) {
+    if (roofs.some((rf) => m > rf.a && m < rf.b)) continue;
+    b.push(at(m, 0));
+    const pins: Vec3[] = [];
+    for (let k = 0; k <= 8; k++) {
+      const a = Math.PI * 0.15 + (k / 8) * Math.PI * 1.7;
+      pins.push([Math.cos(a) * 1.15, 0.85, Math.sin(a) * 1.15]);
+    }
+    b.tube(pins, 0.09, 6, darkWood);
+    for (const p of [pins[0], pins[4], pins[8]]) {
+      b.push(translation(p[0], 0, p[2]));
+      b.cylinder(0.08, 0.85, 6, darkWood);
+      b.pop();
+    }
+    for (let k = 0; k <= 8; k += 2) {
+      b.push(translation(pins[k][0], 0.8, pins[k][2]));
+      b.cylinder(0.035, 0.35, 5, brass);
+      b.pop();
+    }
+    for (const sz of [1, -1]) {
+      b.push(translation(-0.9, 0, sz * 1.45));
+      coil(0.38);
       b.pop();
     }
     b.pop();
+    reserve(m, 0, 1.9);
   }
-  // Cabestan.
-  const p = hull.point(0.82, 1);
-  b.push(translation(p[0], hull.deckY(0.82), 0));
-  b.lathe(
-    [
-      [0, 0],
-      [0.7, 0],
-      [0.5, 0.3],
-      [0.45, 1],
-      [0.7, 1.1],
-      [0, 1.15],
-    ],
-    14,
-    brass
-  );
-  b.pop();
-  // Barre à roue, devant le château arrière.
+
+  // 2. Manches à air de part et d'autre des cheminées et du cœur d'Aether.
+  for (const [c, dz] of [
+    ...o.stacks.map((c) => [c, 1.9] as const),
+    [o.reactor, 3] as const,
+  ]) {
+    for (const side of [1, -1]) {
+      const z = side * Math.min(dz, halfAt(c) - 0.6);
+      if (!clear(c, z, 0.5)) continue;
+      b.push(at(c, z));
+      vent(side > 0 ? Math.PI : 0);
+      b.pop();
+      reserve(c, z, 0.6);
+    }
+  }
+
+  // 3. Écoutilles dans les intervalles libres de l'axe, cargaison arrimée autour.
+  const axis = [
+    ...taken
+      .filter(([, z]) => z === 0)
+      .map(([s, , r]) => [s - r / L, s + r / L] as const),
+  ];
+  for (const rf of roofs) axis.push([rf.a - 1.5 / L, rf.b + 1.5 / L]);
+  axis.push([0, 0.08], [0.92, 1]);
+  axis.sort((a, c) => a[0] - c[0]);
+  const gaps: [number, number][] = [];
+  let cur = 0;
+  for (const [a, c] of axis) {
+    if (a > cur) gaps.push([cur, a]);
+    cur = Math.max(cur, c);
+  }
+  let boats = 0;
+  let house = false;
+  for (const [g0, g1] of gaps.sort((a, c) => c[1] - c[0] - (a[1] - a[0]))) {
+    const len = (g1 - g0) * L;
+    if (len < 3.4) continue;
+    const sm = (g0 + g1) / 2;
+    if (!house && len > 11) {
+      // Rouf de la cuisine dans le plus grand espace : cabine et tuyau de poêle.
+      house = true;
+      const dl = Math.min(len - 5, 6);
+      const dw = Math.min(halfAt(sm) * 0.7, 3);
+      b.push(at(sm + 1 / L, 0));
+      b.box(dl, 2.1, dw * 2, darkWood);
+      b.push(translation(0, 2.1, 0));
+      b.box(dl + 0.4, 0.18, dw * 2 + 0.4, wood('#6a4a2e'));
+      b.push(translation(dl * 0.25, 0.18, dw * 0.4));
+      b.cylinder(0.18, 1.6, 8, iron);
+      b.pop();
+      b.pop();
+      for (const sz of [1, -1])
+        for (const dx of [-dl * 0.25, dl * 0.25]) {
+          b.push(translation(dx, 1.1, sz * (dw + 0.02)));
+          b.box(0.6, 0.55, 0.06, {
+            p: P.EMIT,
+            color: linear('#ffb45a'),
+            metal: 0,
+            rough: 1,
+            emit: 0.6,
+          });
+          b.pop();
+        }
+      b.push(translation(dl / 2 + 0.03, 0, 0));
+      b.box(0.06, 1.8, 0.9, wood('#3a2616'));
+      b.pop();
+      b.pop();
+      reserve(sm + 1 / L, 0, Math.max(dl, dw * 2) / 2 + 0.5);
+      if (boats < 2) {
+        boats++;
+        lifeboats(sm);
+      }
+      // L'écoutille va dans la partie restante.
+      const g2: [number, number] = [sm + (dl / 2 + 1.6) / L, g1];
+      if ((g2[1] - g2[0]) * L < 3.4) continue;
+      hatchAt((g2[0] + g2[1]) / 2, (g2[1] - g2[0]) * L);
+      continue;
+    }
+    hatchAt(sm, len);
+    if (boats < 2 && len > 5) {
+      boats++;
+      lifeboats(sm);
+    }
+  }
+
+  function hatchAt(sm: number, len: number) {
+    const hl = Math.min(len - 1.6, 5.5);
+    const hw = Math.min(halfAt(sm) * 0.55, 2.4);
+    // Écoutille : hiloire de bois et caillebotis.
+    b.push(at(sm, 0));
+    b.box(hl, 0.45, hw * 2, darkWood);
+    b.push(translation(0, 0.45, 0));
+    b.box(hl - 0.3, 0.03, hw * 2 - 0.3, grate);
+    const nb = Math.max(3, Math.round(hl / 0.45));
+    for (let k = 0; k < nb; k++) {
+      b.push(
+        translation(-hl / 2 + 0.15 + (k + 0.5) * ((hl - 0.3) / nb), 0.03, 0)
+      );
+      b.box(0.14, 0.06, hw * 2 - 0.3, darkWood);
+      b.pop();
+    }
+    b.pop();
+    b.pop();
+    reserve(sm, 0, Math.max(hl, hw * 2) / 2 + 0.4);
+    // Caisses empilées et bâchées à un coin, tonneaux à l'autre.
+    const cs = sm + (hl / 2 + 1) / L;
+    const cz = hw * 0.6;
+    if (clear(cs, cz, 0.9)) {
+      b.push(chain(at(cs, cz), rotationY(0.1)));
+      b.box(1.1, 0.9, 1.1, crate);
+      b.push(translation(0.3, 0.9, -0.1));
+      b.box(0.9, 0.75, 0.9, crate);
+      b.pop();
+      b.push(translation(-0.75, 0, 0.6));
+      b.box(0.8, 0.7, 0.8, crate);
+      b.pop();
+      b.push(translation(0.1, 0.92, 0.1));
+      b.box(1.25, 0.04, 1.25, canvas);
+      b.pop();
+      b.pop();
+      reserve(cs, cz, 1.2);
+    }
+    const ks = sm - (hl / 2 + 0.9) / L;
+    const kz = -hw * 0.5;
+    if (clear(ks, kz, 0.9))
+      for (const [dx, dz] of [
+        [0, 0],
+        [0.85, 0],
+        [0.42, 0.75],
+      ]) {
+        b.push(at(ks + dx / L, kz + dz));
+        barrel();
+        b.pop();
+        reserve(ks + dx / L, kz + dz, 0.5);
+      }
+  }
+
+  // 4. Tonneaux en rangs le long du pavois, glènes près des haubans.
+  for (let s = 0.12; s < 0.9; s += 2.2 / L)
+    for (const side of [1, -1]) {
+      const z = side * (halfAt(s) - 0.15);
+      if (!clear(s, z, 1.1)) continue;
+      const kind = Math.floor((s * 97 + (side > 0 ? 3 : 0)) % 3);
+      if (kind === 0) {
+        for (let k = 0; k < 3; k++) {
+          b.push(at(s + (k - 1) * (0.85 / L), z));
+          barrel();
+          b.pop();
+        }
+        reserve(s, z, 1.4);
+      } else if (kind === 1) {
+        b.push(at(s, z));
+        coil(0.5);
+        b.pop();
+        reserve(s, z, 0.7);
+      }
+    }
+
+  // 5. Cabestan à l'avant du mât de misaine, sur l'axe.
+  const fore = Math.max(...o.masts);
+  for (const sc of [fore + 5 / L, fore + 7 / L, 0.84, 0.78]) {
+    if (!clear(sc, 0, 1.3)) continue;
+    b.push(at(sc, 0));
+    b.lathe(
+      [
+        [0, 0],
+        [0.75, 0],
+        [0.52, 0.3],
+        [0.46, 1],
+        [0.72, 1.1],
+        [0, 1.15],
+      ],
+      14,
+      brass
+    );
+    for (let k = 0; k < 6; k++) {
+      b.push(
+        chain(
+          translation(0, 0.95, 0),
+          rotationY((k / 6) * Math.PI * 2),
+          rotationZ(Math.PI / 2)
+        )
+      );
+      b.cylinder(0.05, 1.4, 5, darkWood, false);
+      b.pop();
+    }
+    b.pop();
+    reserve(sc, 0, 1.6);
+    capstan = sc;
+    break;
+  }
+
+  // 6. Roue et habitacle de compas devant la dunette.
   const aft = roofs.find((r) => r.a < 0.05);
-  const hs = aft ? aft.b + 0.025 : 0.08;
-  b.push(translation(hull.x(hs), hull.deckY(hs), 0));
-  b.box(0.5, 1.1, 0.5, {
-    p: P.WOOD,
-    color: linear('#5a3a22'),
-    metal: 0,
-    rough: 0.7,
-  });
+  const hs = aft ? aft.b + 1.6 / L : 0.1;
+  b.push(at(hs, 0));
+  b.box(0.5, 1.1, 0.5, wood('#5a3a22', 0.7));
   b.push(chain(translation(0.3, 1.5, 0), rotationZ(Math.PI / 2)));
   b.torus(0.75, 0.06, 24, 6, brass);
   for (let k = 0; k < 8; k++) {
@@ -2255,16 +2501,26 @@ function deckGear(
     b.pop();
   }
   b.pop();
+  // Habitacle : colonne de bois et dôme de laiton.
+  b.push(translation(1.4, 0, 0));
+  b.lathe(
+    [
+      [0.3, 0],
+      [0.22, 0.9],
+      [0.32, 1.05],
+      [0.28, 1.25],
+      [0, 1.38],
+    ],
+    12,
+    brass
+  );
   b.pop();
-  // Canots sur bossoirs.
-  const boat: Mat = {
-    p: P.WOOD,
-    color: linear('#9a7048'),
-    metal: 0,
-    rough: 0.7,
-  };
-  for (const s of [0.38, 0.66]) {
-    if (!free(s)) continue;
+  b.pop();
+  reserve(hs, 0, 2);
+  return { helm: hs, capstan };
+
+  function lifeboats(s: number) {
+    const boat = wood('#9a7048', 0.7);
     for (const side of [1, -1]) {
       const pt = hull.point(s, 1);
       const z = (pt[2] + 1.1) * side;
@@ -2296,9 +2552,10 @@ function deckGear(
           ],
           0.02,
           3,
-          { p: P.PLAIN, color: linear('#3a2c1e'), metal: 0, rough: 0.9 }
+          rope
         );
       }
+      reserve(s, (pt[2] - 0.5) * side, 2.4);
     }
   }
 }
@@ -2312,7 +2569,8 @@ function crewPlan(
   hull: Hull,
   roofs: Roof[],
   count: number,
-  mastX: number[]
+  mastX: number[],
+  gear: { helm: number; capstan: number | null }
 ): CrewMember[] {
   const n = Math.min(12, Math.max(3, count));
   const out: CrewMember[] = [];
@@ -2323,7 +2581,7 @@ function crewPlan(
   const at = (s: number, z: number): Vec3 => [hull.x(s), hull.deckY(s), z];
   const sOfX = (x: number) => hull.sOf(x);
   const aft = roofs.find((r) => r.a < 0.05);
-  const hs = aft ? aft.b + 0.025 : 0.08;
+  const hs = gear.helm;
   // 1. Barreur, derrière la roue, face à la proue.
   out.push({
     role: 'helm',
@@ -2332,8 +2590,8 @@ function crewPlan(
     seed: 1,
   });
   // 2. Cabestan, poussé en tournant.
-  if (free(0.82))
-    out.push({ role: 'capstan', pos: at(0.82, 0), yaw: 0, seed: 2 });
+  if (gear.capstan !== null)
+    out.push({ role: 'capstan', pos: at(gear.capstan, 0), yaw: 0, seed: 2 });
   // 3. Vigie sur la dunette.
   if (aft) {
     const sv = aft.a + (aft.b - aft.a) * 0.18;
