@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { detectQuality, type Quality } from '../quality';
 import { buildDesert, groundY } from './desert';
@@ -74,7 +75,9 @@ void main(){
   vec3 d = normalize(vDir);
   float y = max(d.y, 0.);
   float s = max(dot(d, uSun), 0.);
-  float sh = max(dot(normalize(vec3(d.x, 0., d.z)), normalize(vec3(uSun.x, 0., uSun.z))), -1.) * .5 + .5;
+  vec2 hd = d.xz / max(length(d.xz), 1e-4);
+  vec2 hs = uSun.xz / max(length(uSun.xz), 1e-4);
+  float sh = clamp(dot(hd, hs) * .5 + .5, 0., 1.);
   vec3 zen = vec3(.16, .2, .38);
   vec3 horSun = vec3(1.9, .82, .34);
   vec3 horAnti = vec3(.95, .55, .55);
@@ -187,7 +190,23 @@ export class RefViewer {
     });
     this.composer = new EffectComposer(r, rt);
     this.composer.renderTarget2.depthTexture = depth;
+    this.composer.setPixelRatio(1);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    // Garde-fou : un pixel NaN ou infini, étalé par le flou du bloom,
+    // deviendrait un grand carré noir. On le neutralise avant tout effet.
+    const clean = new ShaderPass({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader:
+        'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+      fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+void main(){ vec4 c = texture2D(tDiffuse, vUv);
+  if (any(isnan(c)) || any(isinf(c))) c = vec4(0., 0., 0., 1.);
+  gl_FragColor = vec4(min(c.rgb, vec3(2000.)), c.a); }`,
+    });
+    // Ne touche pas à la profondeur partagée (lue par l'occlusion ambiante).
+    clean.material.depthTest = false;
+    clean.material.depthWrite = false;
+    this.composer.addPass(clean);
     if (q.ao) {
       this.gtao = new GTAOPass(this.scene, this.camera, 1, 1);
       this.gtao.setGBuffer(depth);
@@ -357,9 +376,8 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
   setSize(w: number, h: number) {
     this.renderer.setSize(w, h, false);
     const pr = this.renderer.getPixelRatio();
-    this.composer.setSize(w * pr, h * pr);
-    this.gtao?.setSize(w * pr, h * pr);
-    this.bloom.resolution.set(w * pr, h * pr);
+    // Le compositeur travaille en pixels réels (son propre ratio est 1).
+    this.composer.setSize(Math.round(w * pr), Math.round(h * pr));
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     const scale = (h * pr) / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
