@@ -500,20 +500,21 @@ export function cityMesh(o: CityOptions): {
     b.push(translation(0, top + 5.6, gz));
     b.box(gl + 1.6, 0.6, 8.6, dressed);
     b.pop();
-    b.push(
-      chain(translation(-gl / 2 - 0.8, top + 6.2, gz), rotationZ(-Math.PI / 2))
-    );
+    // Voûte en berceau au-dessus de l'entablement.
     b.grid(
-      1,
+      14,
       14,
       (u, v) => {
         const a = Math.PI * v;
-        return [Math.sin(a) * 4.3, u * (gl + 1.6), Math.cos(a) * 4.3];
+        return [
+          -gl / 2 - 0.8 + u * (gl + 1.6),
+          top + 6.2 + Math.sin(a) * 4.3,
+          gz + Math.cos(a) * 4.3,
+        ];
       },
       copper,
-      { flip: true }
+      {}
     );
-    b.pop();
     // Lanternes suspendues sous la galerie.
     for (let x = -gl / 2 + 2.25; x < gl / 2; x += 9) {
       b.tube(
@@ -1628,7 +1629,7 @@ export function cityMesh(o: CityOptions): {
       )
         return true;
     // Place du marché, devant le quai.
-    if (Math.abs(x) < 150 + rad && z > 0 && z - rad < 150) return true;
+    if (Math.abs(x) < 76 + rad && z > 0 && z - rad < 118) return true;
     return false;
   };
   // Place du marché devant le quai : étals, palmiers, fontaine.
@@ -1658,12 +1659,18 @@ export function cityMesh(o: CityOptions): {
       b.tube([crown, mid, tip], 0.32, 4, leaf);
     }
   };
-  // Dallage de la place et du boulevard du port.
-  b.push(translation(0, ground - 0.02, 82));
-  b.box(300, 0.12, 136, mat(st.walls[st.walls.length - 1], P.ROCK, 0.95));
-  b.pop();
-  b.push(translation(0, ground - 0.02, o.halfBeam + 12));
-  b.box(720, 0.1, 14, mat('#a88a64', P.ROCK, 0.95));
+  // Place du marché : sol de sable tassé (pas de dalle à bord franc),
+  // seul le parvis rond de la fontaine est pavé.
+  b.push(translation(0, ground + 0.02, 70));
+  b.lathe(
+    [
+      [0, 0.12],
+      [9, 0.12],
+      [9.6, 0],
+    ],
+    32,
+    mat(st.walls[st.walls.length - 1], P.ROCK, 0.95)
+  );
   b.pop();
   // Place du marché ordonnée : palmiers en alignement sur le pourtour, deux
   // allées d'étals qui se font face, fontaine au centre.
@@ -1711,26 +1718,26 @@ export function cityMesh(o: CityOptions): {
     b.pop();
   };
   for (const [z, ry] of [
-    [58, 0],
-    [66, Math.PI],
-    [98, 0],
-    [106, Math.PI],
+    [46, 0],
+    [54, Math.PI],
+    [86, 0],
+    [94, Math.PI],
   ] as const)
-    for (let x = -126; x <= 126; x += 5.5) {
-      if (Math.abs(x) < 22 || r() < 0.15) continue;
+    for (let x = -62; x <= 62; x += 5.5) {
+      if (Math.abs(x) < 14 || r() < 0.15) continue;
       stall(x, z, ry);
     }
   if (st.palms > 0) {
-    for (let x = -144; x <= 144; x += 16) {
-      palm(x, 34);
-      palm(x, 140);
+    for (let x = -70; x <= 70; x += 14) {
+      palm(x, 24);
+      palm(x, 116);
     }
-    for (let z = 50; z <= 125; z += 18) {
-      palm(-148, z);
-      palm(148, z);
+    for (let z = 38; z <= 104; z += 16.5) {
+      palm(-76, z);
+      palm(76, z);
     }
   }
-  b.push(translation(0, ground, 82));
+  b.push(translation(0, ground, 70));
   b.cylinder(4.5, 0.9, 20, stone);
   b.push(translation(0, 0.9, 0));
   b.cylinder(0.6, 2.2, 10, stone);
@@ -1752,12 +1759,16 @@ export function cityMesh(o: CityOptions): {
         const z = gz + (r() - 0.5) * step * 0.5;
         const dist = Math.hypot(x, z);
         if (dist < 40 || dist > R || r() > keep(dist)) continue;
+        if (front && z > 0) continue;
         if (blocked(x, z, rad)) continue;
         out.push([x, z, dist]);
       }
     return out;
   };
   const corridor = (z: number, rad: number) => z > 0 && z - rad < 150;
+  // Côté caméra (z > 0), les villes sans trame de rues reçoivent un quartier
+  // bas aligné sur des rues, pour que la ville entoure la place.
+  const front = st.layout !== 'trame' && st.layout !== 'remparts';
   /**
    * Lots alignés sur les rues : des îlots entre rues parallèles au port, des
    * rangées de maisons mitoyennes sur chaque front, porte côté rue ; des
@@ -2341,7 +2352,7 @@ export function cityMesh(o: CityOptions): {
           const a = (k / n) * Math.PI * 2;
           const x = cx + Math.cos(a) * rad;
           const z = cz + Math.sin(a) * rad;
-          if (blocked(x, z, 5)) continue;
+          if (blocked(x, z, 5) || z > 0) continue;
           const low = corridor(z, 5);
           const h = low ? 4 : (6 + r() * 10) * (1.3 - ring * 0.12);
           const rr = 3 + r() * 2;
@@ -2408,6 +2419,28 @@ export function cityMesh(o: CityOptions): {
       break;
     }
   }
+  if (front)
+    for (const l of streetLots(30, 7, 11, 10)) {
+      if (l.z <= 0) continue;
+      if (st.layout === 'huttes') {
+        hut(l.x - l.w * 0.2, l.z, 2.4 + r() * 1.2, 3.6 + r() * 1.8);
+        if (r() < 0.6)
+          hut(l.x + l.w * 0.3, l.z + (r() - 0.5) * 3, 1.8 + r(), 3 + r() * 1.5);
+        continue;
+      }
+      const h = 3.5 + r() * 7 * st.height * Math.max(0.3, 1.2 - l.dist / R);
+      const low = corridor(l.z, l.d / 2);
+      house(
+        l.x,
+        l.z,
+        l.w,
+        l.d,
+        low ? Math.min(h, 6) : h,
+        l.ry,
+        l.dist < 220,
+        low
+      );
+    }
   if (st.layout !== 'colline')
     monument(st.monument, -20, -150, o.capital ? 1.6 : 1);
   const towers = st.layout === 'industriel' ? 12 : o.capital ? 9 : 5;
@@ -2459,14 +2492,14 @@ export function cityMesh(o: CityOptions): {
   }
   // Chalands dans les allées du marché (entre les rangées d'étals) et sur le pourtour.
   for (let k = 0; k < 20; k++) {
-    const z = [62, 102, 44, 124][k % 4] + (r() - 0.5) * 2;
-    const x1 = (r() - 0.5) * 230;
+    const z = [50, 90, 30, 110][k % 4] + (r() - 0.5) * 2;
+    const x1 = (r() - 0.5) * 120;
     walk(
       [x1, ground, z],
       [
         Math.max(
-          -130,
-          Math.min(130, x1 + (r() < 0.5 ? -1 : 1) * (20 + r() * 40))
+          -62,
+          Math.min(62, x1 + (r() < 0.5 ? -1 : 1) * (20 + r() * 40))
         ),
         ground,
         z,
