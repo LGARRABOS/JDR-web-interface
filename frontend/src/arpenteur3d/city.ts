@@ -254,7 +254,6 @@ export function cityMesh(o: CityOptions): {
     rough,
   });
   const stone = mat('#8e7a64', P.ROCK, 0.95);
-  const darkStone = mat('#5e5044', P.ROCK, 0.95);
   const plank = mat('#6a4a30', P.WOOD, 0.85);
   const iron = mat('#2a2622', P.IRON, 0.6, 0.6);
   const brass = mat('#b8893a', P.BRASS, 0.35, 1);
@@ -280,22 +279,34 @@ export function cityMesh(o: CityOptions): {
   const len = o.length + 24;
   // Un quai : tablier sur arches, bornes, grues, caisses, réverbères, entrepôt.
   // `xc`, `zs` : centre du navire amarré ; le quai est côté -z.
-  // Embarcadère : une terrasse massive qui monte du sol jusqu'au niveau du
-  // pont des navires (maçonnerie à arcades, charpente de bois à Fardel,
-  // poutrelles de fer à Garkal), escaliers vers la rue, entrepôt posé dessus.
-  const back = 16; // profondeur de l'entrepôt, sur la terrasse
-  const quayKind =
-    st.layout === 'pilotis'
-      ? 'bois'
-      : st.layout === 'industriel'
-        ? 'fer'
-        : 'pierre';
+  // Port aérien : viaduc à deux étages d'arches qui porte le quai à hauteur
+  // des ponts, tours d'amarrage à coupole et fanal d'Aether aux deux bouts
+  // (avec leur bras d'amarrage), galerie couverte à colonnade, grand
+  // escalier vers la ville, mâts à pavillons et guirlandes de lanternes.
+  const back = 20; // au-delà du bord du quai : galerie puis escalier
   const wallT = linear(st.walls[0]);
+  const stonePat = st.layout === 'industriel' ? P.BRICK : P.PLASTER;
   const masonry: Mat = {
-    p: P.PLASTER,
-    color: [wallT[0] * 0.8, wallT[1] * 0.78, wallT[2] * 0.75],
+    p: stonePat,
+    color: [wallT[0] * 0.86, wallT[1] * 0.82, wallT[2] * 0.78],
     metal: 0,
     rough: 0.95,
+  };
+  const dressed: Mat = {
+    p: stonePat,
+    color: [
+      Math.min(1, wallT[0] * 1.08),
+      Math.min(1, wallT[1] * 1.05),
+      Math.min(1, wallT[2]) * 1.0,
+    ],
+    metal: 0,
+    rough: 0.9,
+  };
+  const vault: Mat = {
+    p: stonePat,
+    color: [wallT[0] * 0.45, wallT[1] * 0.42, wallT[2] * 0.4],
+    metal: 0,
+    rough: 1,
   };
   const paving: Mat = {
     p: P.ROCK,
@@ -303,144 +314,452 @@ export function cityMesh(o: CityOptions): {
     metal: 0,
     rough: 0.95,
   };
+  const beacon: Mat = {
+    p: P.EMIT,
+    color: linear('#7ff3ff'),
+    metal: 0,
+    rough: 1,
+    emit: o.night ? 4 : 1.2,
+  };
+  const GROUND = -1.5;
+
+  /** Mur à arche (face avant en z, épaisseur vers -z) : écoinçons et voûte. */
+  const arch = (
+    x0: number,
+    hw: number,
+    ys: number,
+    rad: number,
+    ytop: number,
+    z: number,
+    thick: number
+  ) => {
+    const edge = (a: number): Vec3 => {
+      const dx = Math.cos(a);
+      const dy = Math.sin(a);
+      const t = Math.min(
+        Math.abs(dx) > 1e-4 ? hw / Math.abs(dx) : 1e9,
+        dy > 1e-4 ? (ytop - ys) / dy : 1e9
+      );
+      return [x0 + dx * t, ys + dy * t, 0];
+    };
+    for (const [zz, flip] of [
+      [z, false],
+      [z - thick, true],
+    ] as const)
+      b.grid(
+        16,
+        1,
+        (u, v) => {
+          const a = Math.PI * (1 - u);
+          const c: Vec3 = [x0 + Math.cos(a) * rad, ys + Math.sin(a) * rad, zz];
+          const e = edge(a);
+          return [c[0] + (e[0] - c[0]) * v, c[1] + (e[1] - c[1]) * v, zz];
+        },
+        dressed,
+        { flip }
+      );
+    // Intrados de la voûte.
+    b.grid(
+      16,
+      2,
+      (u, v) => {
+        const a = Math.PI * u;
+        return [x0 + Math.cos(a) * rad, ys + Math.sin(a) * rad, z - v * thick];
+      },
+      vault,
+      {}
+    );
+    // Claveau central saillant.
+    b.push(translation(x0, ys + rad - 0.2, z + 0.12));
+    b.box(0.9, 1.1, 0.3, masonry);
+    b.pop();
+  };
+
   const quay = (xc: number, zs: number, main: boolean) => {
     b.push(translation(xc, 0, zs));
-    const zf = z0; // bord côté navire
-    const zb = z0 - depth - back; // fond
-    const D = zf - zb;
-    const zm = (zf + zb) / 2;
-    const H = top + 1.5; // du sol (-1.5) au dessus du tablier
-    if (quayKind === 'pierre') {
-      b.push(translation(0, -1.5, zm));
-      b.box(len, H - 0.3, D, masonry);
+    const zf = z0;
+    const D = 22;
+    const zb = zf - D;
+    const zm = zf - D / 2;
+    const L2 = len / 2;
+    // --- Viaduc : grandes arches sur toute la profondeur ---
+    const W = 10;
+    const nb = Math.max(4, Math.round(len / W));
+    const bw = len / nb;
+    const rad = bw / 2 - 1.3;
+    const ys = 1.6;
+    const yBand = ys + rad + 0.6;
+    for (let k = 0; k < nb; k++) {
+      const x0 = -L2 + (k + 0.5) * bw;
+      arch(x0, bw / 2, ys, rad, yBand, zf, D);
+    }
+    for (let k = 0; k <= nb; k++) {
+      const x = -L2 + k * bw;
+      // Piles avec leur avant-bec en éperon côté navire.
+      b.push(translation(x, GROUND, zm));
+      b.box(2.6, ys - GROUND, D, masonry);
       b.pop();
-      // Façade côté navire : arcades sombres (magasins), pilastres, corniche.
-      const n = Math.max(3, Math.round(len / 7));
-      for (let k = 0; k < n; k++) {
-        const x = -len / 2 + (k + 0.5) * (len / n);
-        b.push(translation(x, -1, zf + 0.05));
-        b.box((len / n) * 0.62, top * 0.62, 0.1, dark);
-        b.push(
-          chain(
-            translation(0, top * 0.62, 0),
-            scaling((len / n) * 0.31, (len / n) * 0.22, 0.06)
-          )
-        );
-        b.sphere(1, 10, dark, true);
-        b.pop();
-        b.pop();
-        b.push(translation(x + len / n / 2, -1.5, zf + 0.25));
-        b.box(1.1, H - 0.4, 0.5, mat(st.walls[0]));
-        b.pop();
-      }
-      b.push(translation(0, top - 1.2, zf + 0.2));
-      b.box(len + 0.6, 0.5, 0.7, mat(st.walls[0]));
-      b.pop();
-    } else {
-      // Charpente ajourée : poteaux rapprochés et contreventements en croix.
-      const post =
-        quayKind === 'bois'
-          ? mat('#5a3e28', P.WOOD, 0.85)
-          : mat('#3a3430', P.IRON, 0.5, 0.7);
-      const pr = quayKind === 'bois' ? 0.35 : 0.28;
-      const sx = 4;
-      const sz = 4;
-      for (let x = -len / 2 + 1; x <= len / 2 - 1; x += sx)
-        for (let z = zf - 1; z >= zb + 1; z -= sz) {
-          b.push(translation(x, -1.5, z));
-          b.cylinder(pr, top + 1.1, 6, post);
-          b.pop();
-          if (z === zf - 1 || x + sx > len / 2 - 1) continue;
-          for (const [ax, az] of [
-            [sx, 0],
-            [0, -sz],
-          ])
-            b.tube(
-              [
-                [x, -1, z],
-                [x + ax, top - 1.2, z + az],
-              ],
-              pr * 0.45,
-              4,
-              post
-            );
-        }
-      // Front contreventé côté navire.
-      for (let x = -len / 2 + 1; x + sx <= len / 2 - 1; x += sx) {
-        b.tube(
-          [
-            [x, -1, zf - 1],
-            [x + sx, top - 1.2, zf - 1],
-          ],
-          pr * 0.45,
-          4,
-          post
-        );
-        b.tube(
-          [
-            [x + sx, -1, zf - 1],
-            [x, top - 1.2, zf - 1],
-          ],
-          pr * 0.45,
-          4,
-          post
-        );
-      }
-      b.push(translation(0, top - 1.3, zm));
-      b.box(len, 0.9, D, post);
+      b.push(translation(x, GROUND, zf + 0.6));
+      b.box(2.9, ys - GROUND + 0.6, 1.2, dressed);
       b.pop();
     }
-    // Tablier : dallage, bordure de bois (défense) côté navire.
+    // Remplissage au-dessus des voûtes, bandeau, arcature haute, corniche.
+    b.push(translation(0, yBand, zm));
+    b.box(len, top - 0.6 - yBand, D, masonry);
+    b.pop();
+    b.push(translation(0, yBand - 0.2, zf + 0.1));
+    b.box(len + 0.4, 0.5, 0.5, dressed);
+    b.pop();
+    const ua = Math.max(6, Math.round(len / 2.6));
+    for (let k = 0; k < ua; k++) {
+      const x = -L2 + (k + 0.5) * (len / ua);
+      b.push(translation(x, yBand + 0.5, zf + 0.04));
+      b.box(1.1, top - 2.4 - yBand, 0.08, vault);
+      b.push(
+        chain(translation(0, top - 2.4 - yBand, 0), scaling(0.55, 0.45, 0.04))
+      );
+      b.sphere(1, 8, vault, true);
+      b.pop();
+      b.pop();
+      b.push(translation(x + len / ua / 2, yBand + 0.3, zf + 0.12));
+      b.cylinder(0.18, top - 2.1 - yBand, 8, dressed);
+      b.pop();
+    }
+    b.push(translation(0, top - 1.2, zf + 0.35));
+    b.box(len + 0.8, 0.35, 0.9, dressed);
+    b.pop();
+    b.push(translation(0, top - 0.85, zf + 0.25));
+    b.box(len + 0.6, 0.45, 0.7, masonry);
+    b.pop();
+    // Tablier dallé et défense de bois côté navire.
     b.push(translation(0, top - 0.4, zm));
     b.box(len, 0.4, D, paving);
     b.pop();
-    b.push(translation(0, top - 1.4, zf + 0.35));
-    b.box(len, 1.1, 0.5, plank);
+    b.push(translation(0, top - 2.6, zf + 1.05));
+    b.box(len - 6, 0.9, 0.5, plank);
     b.pop();
-    // Garde-corps sur trois côtés (ouvert face au navire, sauf aux extrémités).
-    const rail = (pts: Vec3[]) => {
-      b.tube(pts, 0.07, 5, iron);
-      for (const p of pts) {
-        b.push(translation(p[0], top, p[2]));
-        b.cylinder(0.06, 1, 4, iron);
-        b.pop();
-      }
-    };
-    for (const sx of [-1, 1]) {
-      const pts: Vec3[] = [];
-      for (let z = zf; z >= zb + 6; z -= 3)
-        pts.push([(sx * len) / 2 - 0.2, top + 1, z]);
-      rail(pts);
-    }
-    // Escaliers monumentaux aux deux bouts, du tablier jusqu'à la rue.
-    const steps = Math.ceil((top + 1) / 0.45);
-    for (const sx of [-1, 1])
-      for (let k = 0; k < steps; k++) {
-        const y = top - 0.4 - k * 0.45;
+    // Balustrade sur les côtés et le fond (le bord du navire reste libre).
+    const balusters = (a: Vec3, c: Vec3) => {
+      const n = Math.max(
+        2,
+        Math.round(Math.hypot(c[0] - a[0], c[2] - a[2]) / 0.7)
+      );
+      for (let k = 0; k <= n; k++) {
+        const t = k / n;
         b.push(
-          translation(sx * (len / 2 + 0.3 + k * 0.55), -1.5, zf - depth / 2)
+          translation(a[0] + (c[0] - a[0]) * t, top, a[2] + (c[2] - a[2]) * t)
         );
-        b.box(0.56, y + 1.5, 6, quayKind === 'pierre' ? masonry : plank);
+        b.lathe(
+          [
+            [0.16, 0],
+            [0.09, 0.2],
+            [0.15, 0.5],
+            [0.08, 0.85],
+            [0.14, 0.95],
+          ],
+          6,
+          dressed
+        );
         b.pop();
       }
-    // Bornes d'amarrage et cordages vers le navire.
+      b.push(
+        chain(
+          translation((a[0] + c[0]) / 2, top + 0.95, (a[2] + c[2]) / 2),
+          rotationY(-Math.atan2(c[2] - a[2], c[0] - a[0]))
+        )
+      );
+      b.box(Math.hypot(c[0] - a[0], c[2] - a[2]), 0.16, 0.36, dressed);
+      b.pop();
+    };
+    balusters([-L2 + 0.3, 0, zf - 1], [-L2 + 0.3, 0, zb + 0.3]);
+    balusters([L2 - 0.3, 0, zf - 1], [L2 - 0.3, 0, zb + 0.3]);
+    balusters([-L2 + 0.3, 0, zb + 0.3], [-7, 0, zb + 0.3]);
+    balusters([7, 0, zb + 0.3], [L2 - 0.3, 0, zb + 0.3]);
+
+    // --- Galerie couverte : colonnade et voûte de cuivre ---
+    const gz = zb + 5;
+    const gl = len - 18;
+    for (const cz of [zb + 1.6, zb + 8.4])
+      for (let x = -gl / 2; x <= gl / 2 + 0.01; x += 4.5) {
+        b.push(translation(x, top, cz));
+        b.lathe(
+          [
+            [0.55, 0],
+            [0.55, 0.35],
+            [0.36, 0.5],
+            [0.32, 5],
+            [0.5, 5.3],
+            [0.62, 5.6],
+            [0, 5.6],
+          ],
+          10,
+          dressed
+        );
+        b.pop();
+      }
+    b.push(translation(0, top + 5.6, gz));
+    b.box(gl + 1.6, 0.6, 8.6, dressed);
+    b.pop();
+    b.push(
+      chain(translation(-gl / 2 - 0.8, top + 6.2, gz), rotationZ(-Math.PI / 2))
+    );
+    b.grid(
+      1,
+      14,
+      (u, v) => {
+        const a = Math.PI * v;
+        return [Math.sin(a) * 4.3, u * (gl + 1.6), Math.cos(a) * 4.3];
+      },
+      copper,
+      { flip: true }
+    );
+    b.pop();
+    // Lanternes suspendues sous la galerie.
+    for (let x = -gl / 2 + 2.25; x < gl / 2; x += 9) {
+      b.tube(
+        [
+          [x, top + 5.6, gz],
+          [x, top + 4.4, gz],
+        ],
+        0.03,
+        3,
+        iron
+      );
+      b.push(translation(x, top + 3.8, gz));
+      b.cylinder(0.3, 0.6, 8, lit);
+      b.pop();
+    }
+    // Mur du fond de la galerie : portes et fenêtres (boutiques, bureaux du port).
+    b.push(translation(0, top, zb + 0.5));
+    b.box(gl, 5.4, 0.5, masonry);
+    b.pop();
+
+    // --- Grand escalier vers la ville, entre deux murs d'échiffre ---
+    const steps = Math.ceil((top - GROUND) / 0.4);
+    for (let k = 0; k < steps; k++) {
+      const y = top - 0.4 - k * 0.4;
+      b.push(translation(0, GROUND, zb - 0.3 - k * 0.5));
+      b.box(12, y - GROUND, 0.52, k % 2 ? masonry : dressed);
+      b.pop();
+    }
+    for (const sx of [-1, 1]) {
+      b.grid(
+        1,
+        1,
+        (u, v) => [
+          sx * 6.6,
+          GROUND + v * (top + 1 - GROUND - u * (top - GROUND)),
+          zb - u * steps * 0.5,
+        ],
+        masonry,
+        { flip: sx < 0 }
+      );
+      b.push(translation(sx * 6.6, GROUND, zb - steps * 0.5 - 0.5));
+      b.box(1.2, 2.2, 1.2, dressed);
+      b.pop();
+      b.push(translation(sx * 6.6, GROUND + 2.2, zb - steps * 0.5 - 0.5));
+      b.cylinder(0.25, 2.6, 6, iron);
+      b.push(translation(0, 2.6, 0));
+      b.cylinder(0.35, 0.7, 8, lit);
+      b.pop();
+      b.pop();
+    }
+
+    // --- Tours d'amarrage aux deux bouts ---
+    for (const sx of [-1, 1]) {
+      const tx = sx * (L2 + 6);
+      const tz = zf - 6;
+      // Bastion rond qui prolonge le quai.
+      b.push(translation(tx, GROUND, tz));
+      b.lathe(
+        [
+          [8.6, 0],
+          [7.6, top - GROUND - 1.4],
+          [8.2, top - GROUND - 1],
+          [8.2, top - GROUND - 0.4],
+          [0, top - GROUND - 0.4],
+        ],
+        28,
+        masonry
+      );
+      b.pop();
+      // Pont qui relie le bastion au quai.
+      b.push(translation(sx * (L2 + 1), top - 1.6, tz));
+      b.box(4.2, 1.6, 10, masonry);
+      b.pop();
+      const TH = 24;
+      b.push(translation(tx, top - 0.4, tz));
+      b.lathe(
+        [
+          [4.2, 0],
+          [4.2, 1.2],
+          [3.6, 1.6],
+          [3.3, TH * 0.55],
+          [3.9, TH * 0.6],
+          [3.9, TH * 0.64],
+          [3.2, TH * 0.66],
+          [3.0, TH * 0.9],
+          [3.6, TH * 0.92],
+          [3.6, TH * 0.95],
+          [0, TH * 0.95],
+        ],
+        24,
+        dressed
+      );
+      // Balcon circulaire et garde-corps.
+      b.push(translation(0, TH * 0.64, 0));
+      b.torus(4.4, 0.08, 28, 4, iron);
+      b.pop();
+      b.push(translation(0, TH * 0.64 - 0.9, 0));
+      b.torus(4.4, 0.06, 28, 4, iron);
+      b.pop();
+      // Fenêtres en spirale (escalier intérieur).
+      for (let k = 0; k < 10; k++) {
+        const a = k * 1.1;
+        const y = 2.5 + k * (TH * 0.5) * 0.1;
+        b.push(
+          chain(
+            translation(Math.cos(a) * 3.42, y, Math.sin(a) * 3.42),
+            rotationY(-a + Math.PI / 2)
+          )
+        );
+        b.box(0.7, 1.3, 0.14, win(true));
+        b.pop();
+      }
+      // Lanterne du fanal : colonnettes, vitrage d'Aether, coupole et flèche.
+      b.push(translation(0, TH * 0.95, 0));
+      b.cylinder(2.2, 2.6, 12, beacon);
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        b.push(translation(Math.cos(a) * 2.35, 0, Math.sin(a) * 2.35));
+        b.cylinder(0.12, 2.6, 5, brass);
+        b.pop();
+      }
+      b.push(translation(0, 2.6, 0));
+      b.lathe(
+        [
+          [2.9, 0],
+          [2.6, 0.6],
+          [1.7, 2],
+          [0.5, 3.2],
+          [0.2, 3.6],
+          [0.12, 6],
+          [0, 6.2],
+        ],
+        18,
+        copper
+      );
+      b.pop();
+      b.pop();
+      // Bras d'amarrage : potence de fer au-dessus du navire.
+      const arm: Vec3[] = [
+        [0, TH * 0.6, 0],
+        [-sx * 3, TH * 0.6 + 0.8, 6],
+        [-sx * 6, TH * 0.6 + 0.6, 12],
+      ];
+      b.tube(arm, 0.35, 8, iron);
+      b.tube([[0, TH * 0.4, 0], [-sx * 2, TH * 0.5, 4], arm[2]], 0.2, 6, iron);
+      b.pop();
+      if (main) {
+        const tip: Vec3 = [tx - sx * 6, top - 0.4 + TH * 0.6 + 0.6, tz + 12];
+        const ship: Vec3 = [sx * o.length * 0.42, top + 2.2, -o.halfBeam * 0.5];
+        m.tube(
+          [
+            tip,
+            [
+              (tip[0] + ship[0]) / 2,
+              (tip[1] + ship[1]) / 2 - 1.2,
+              (tip[2] + ship[2]) / 2,
+            ],
+            ship,
+          ],
+          0.07,
+          4,
+          rope
+        );
+      }
+      // Pavillon au sommet.
+      const fc = awning[0];
+      b.push(translation(tx, top - 0.4 + TH * 0.95 + 8.6, tz));
+      b.cylinder(0.06, 4, 4, iron);
+      b.push(translation(0, 3.9, 0));
+      b.grid(
+        10,
+        4,
+        (u, v) => [-u * 4, -v * 2, 0],
+        (u) => ({
+          p: P.SAIL,
+          color: linear(fc),
+          metal: 0,
+          rough: 0.85,
+          emit: 1 + u,
+        }),
+        {}
+      );
+      b.pop();
+      b.pop();
+    }
+
+    // --- Mâts à pavillons et guirlandes de lanternes le long du bord ---
+    const poles: Vec3[] = [];
+    for (let x = -L2 + 8; x <= L2 - 8; x += 16)
+      poles.push([x, top + 7.5, zf - 0.8]);
+    poles.forEach((pt, k) => {
+      b.push(translation(pt[0], top, pt[2]));
+      b.cylinder(0.12, 7.5, 6, brass);
+      b.push(translation(0, 7.4, 0));
+      const c = awning[k % awning.length];
+      b.grid(
+        8,
+        5,
+        (u, v) => [0, -v * 3.4, -u * 1.4],
+        (u) => ({
+          p: P.SAIL,
+          color: linear(c),
+          metal: 0,
+          rough: 0.85,
+          emit: 1 + u * 0.8,
+        }),
+        {}
+      );
+      b.pop();
+      b.pop();
+      const nx = poles[k + 1];
+      if (!nx) return;
+      const sag: Vec3[] = [];
+      for (let t = 0; t <= 1.0001; t += 0.125) {
+        sag.push([
+          pt[0] + (nx[0] - pt[0]) * t,
+          top + 6 - Math.sin(Math.PI * t) * 1.6,
+          pt[2],
+        ]);
+      }
+      b.tube(sag, 0.025, 3, dark);
+      for (let q = 1; q < sag.length - 1; q++) {
+        b.push(translation(sag[q][0], sag[q][1] - 0.25, sag[q][2]));
+        b.sphere(0.18, 6, lit);
+        b.pop();
+      }
+    });
+
+    // --- Bornes, cordages, passerelle ---
     const bollards: Vec3[] = [];
     for (const fx of [-0.36, -0.12, 0.12, 0.36]) {
       const x = fx * o.length;
-      b.push(translation(x, top, zf - 0.8));
+      b.push(translation(x, top, zf - 1.6));
       b.lathe(
         [
           [0, 0],
-          [0.32, 0],
-          [0.24, 0.5],
-          [0.36, 0.7],
-          [0, 0.74],
+          [0.34, 0],
+          [0.26, 0.5],
+          [0.4, 0.7],
+          [0, 0.76],
         ],
         10,
         iron
       );
       b.pop();
-      bollards.push([x, top + 0.55, zf - 0.8]);
+      bollards.push([x, top + 0.55, zf - 1.6]);
     }
     if (main) {
       for (const p of bollards) {
@@ -466,76 +785,49 @@ export function cityMesh(o: CityOptions): {
           brass
         );
     }
-    // Grues sur rail, flèche au-dessus du navire, charge suspendue.
-    for (const fx of [-0.3, 0.28]) {
-      const x = fx * o.length;
-      const zz = zf - depth + 3;
+    // --- Grues et cargaison rangée ---
+    for (const fx of [-0.24, 0.24]) {
+      const x = fx * len;
+      const zz = zf - 5.5;
       b.push(translation(x, top, zz));
-      b.box(2.4, 1, 2.4, darkStone);
-      b.cylinder(0.45, 16, 8, iron);
-      b.push(translation(0, 15.5, 0));
+      b.box(2.4, 0.8, 2.4, masonry);
+      b.cylinder(0.45, 14, 8, iron);
+      b.push(translation(0, 13.4, 0));
       b.cylinder(0.9, 1.2, 10, brass);
       b.pop();
       b.pop();
-      const tip: Vec3 = [x + (fx < 0 ? 4 : -4), top + 17.2, zf - 1];
-      b.tube([[x, top + 16.6, zz], tip], 0.32, 6, iron);
+      const tip: Vec3 = [x + (fx < 0 ? 3 : -3), top + 15.6, zf + 1.5];
+      b.tube([[x, top + 14.6, zz], tip], 0.3, 6, iron);
       b.tube(
         [
-          [x, top + 16.2, zz],
-          [x - (tip[0] - x) * 0.3, top + 16.4, zz - 3],
+          [x, top + 14.2, zz],
+          [x - (tip[0] - x) * 0.3, top + 14.4, zz - 3],
         ],
-        0.25,
+        0.24,
         6,
         iron
       );
-      b.tube([tip, [tip[0], top + 5, tip[2]]], 0.04, 4, rope);
-      b.push(translation(tip[0], top + 3.6, tip[2]));
+      b.tube([tip, [tip[0], top + 6, tip[2]]], 0.04, 4, rope);
+      b.push(translation(tip[0], top + 4.6, tip[2]));
       b.box(1.6, 1.4, 1.6, mat('#7a5a36', P.WOOD, 0.8));
       b.pop();
-      // Cargaison rangée au pied de la grue : caisses en piles, tonneaux en rangs.
       for (let k = 0; k < 3; k++)
         for (let l = 0; l < (k === 0 ? 2 : 1); l++) {
           b.push(
             translation(
-              x + (fx < 0 ? 3.5 : -3.5) + k * 1.5 * (fx < 0 ? 1 : -1),
+              x + (fx < 0 ? 3 : -3) + k * 1.5 * (fx < 0 ? 1 : -1),
               top + l * 1.1,
-              zz + 1
+              zz - 2.5
             )
           );
           b.box(1.4, 1.1, 1.4, mat('#8a6a42', P.WOOD, 0.85));
           b.pop();
         }
       for (let k = 0; k < 4; k++) {
-        b.push(translation(x + (fx < 0 ? -2.5 : 2.5), top, zz + 2.8 - k * 1.1));
+        b.push(translation(x + (fx < 0 ? -2.6 : 2.6), top, zz - 1 - k * 1.1));
         b.cylinder(0.48, 1.1, 10, mat('#6a4a2a', P.WOOD, 0.8));
         b.pop();
       }
-    }
-    // Réverbères le long du bord.
-    for (let x = -len / 2 + 6; x <= len / 2 - 6; x += 14) {
-      b.push(translation(x, top, zf - 1.6));
-      b.cylinder(0.12, 4.2, 6, iron);
-      b.push(translation(0, 4.2, 0));
-      b.cylinder(0.3, 0.6, 8, lit);
-      b.pop();
-      b.pop();
-    }
-    // Entrepôt sur la terrasse, au fond.
-    const wz = zb + back / 2;
-    const wl = len * 0.7;
-    b.push(translation(0, top, wz));
-    b.box(wl, 9, back - 2, mat(st.walls[0]));
-    b.pop();
-    b.push(chain(translation(-wl / 2, top + 9, wz), rotationZ(-Math.PI / 2)));
-    b.cylinder((back - 2) / 2, wl, 18, copper);
-    b.pop();
-    for (let x = -wl / 2 + 3; x <= wl / 2 - 3; x += 6) {
-      b.push(translation(x, top, wz + (back - 2) / 2 + 0.05));
-      b.box(3.2, 4.8, 0.1, mat('#4a3220', P.WOOD, 0.8));
-      b.pop();
-      b.push(translation(x, top + 6, wz + (back - 2) / 2 + 0.05));
-      b.box(1.6, 1.4, 0.12, win(o.night));
-      b.pop();
     }
     b.pop();
   };
@@ -1316,7 +1608,7 @@ export function cityMesh(o: CityOptions): {
   const blocked = (x: number, z: number, rad: number) => {
     // Le navire, le quai et l'avant-plan de la caméra par défaut restent libres.
     if (
-      Math.abs(x) < len / 2 + rad + 18 &&
+      Math.abs(x) < len / 2 + rad + 16 &&
       z > z0 - depth - back - 4 - rad &&
       z < 30 + rad
     )
@@ -1330,7 +1622,7 @@ export function cityMesh(o: CityOptions): {
       if (Math.abs(z - lane) < o.halfBeam + 8 + rad) return true;
     for (const q of BERTHS)
       if (
-        Math.abs(x - q.x) < len / 2 + rad + 18 &&
+        Math.abs(x - q.x) < len / 2 + rad + 16 &&
         z > q.z + z0 - depth - back - 4 - rad &&
         z < q.z + o.halfBeam + 6 + rad
       )
@@ -2133,7 +2425,8 @@ export function cityMesh(o: CityOptions): {
   let seed = 100;
   const walk = (a: Vec3, to: Vec3) =>
     crowd.push({ role: 'walk', pos: a, to, yaw: 0, seed: seed++ });
-  const qz = (k: number) => z0 - 3 - k * (depth - 6);
+  // Sur le quai, entre le bord et la galerie.
+  const qz = (k: number) => z0 - 3 - k * 9;
   // Sur le quai principal, en long.
   for (let k = 0; k < 6; k++) {
     const z = qz(r());
@@ -2141,10 +2434,10 @@ export function cityMesh(o: CityOptions): {
     walk([x1, top, z], [x1 + (r() < 0.5 ? -1 : 1) * (10 + r() * 20), top, z]);
   }
   // Dockers au pied des grues.
-  for (const fx of [-0.3, 0.28])
+  for (const fx of [-0.24, 0.24])
     crowd.push({
       role: 'haul',
-      pos: [fx * o.length + 1.5, top, z0 - depth + 4.5],
+      pos: [fx * len + (fx < 0 ? 1.6 : -1.6), top, z0 - 4],
       yaw: Math.PI,
       seed: seed++,
     });
