@@ -182,12 +182,11 @@ export function MapPanel({
         </span>
         {isGM && can && map.sector && !travel && (
           <Btn
-            variant="ghost"
-            className="!h-8 !px-2.5 text-xs"
+            className="!h-8 !px-3 text-sm"
             onClick={toUnknown}
             title="Le navire franchit un portail d'Aether et disparaît vers la mer de brume"
           >
-            Envoyer en position inconnue
+            ✦ Envoyer en position inconnue
           </Btn>
         )}
       </div>
@@ -225,17 +224,44 @@ export function MapPanel({
             <Card
               title={sel ? nodeName(sel.id, map.sectorNames) : 'Sélection'}
               subtitle={
-                sel?.region
-                  ? `${sel.id} · désert de ${DESERTS[sel.region.desert].name}`
-                  : sel?.city
-                    ? sel.city.capital
-                      ? 'Capitale'
-                      : 'Cité'
-                    : 'Cliquez sur une sous-région ou une ville'
+                sel?.id === UNKNOWN
+                  ? "Mer de brume d'Aether, hors de la carte"
+                  : sel?.region
+                    ? `${sel.id} · désert de ${DESERTS[sel.region.desert].name}`
+                    : sel?.city
+                      ? sel.city.capital
+                        ? 'Capitale'
+                        : 'Cité'
+                      : 'Cliquez sur une sous-région ou une ville'
               }
             >
               {!can && <ReadOnlyHint doc={doc} section="map" />}
-              {sel && (
+              {sel?.id === UNKNOWN && (
+                <div className="flex flex-col gap-3 text-sm text-fantasy-text-soft">
+                  <p>
+                    Un lieu hors des cartes : une mer de brume d'Aether, des
+                    îlots suspendus et des ruines oubliées. On n'y entre et on
+                    n'en sort que par un portail.
+                  </p>
+                  {!map.sector ? (
+                    <span className="text-fantasy-accent">
+                      ⚓ L'arpenteur est ici.
+                      {isGM &&
+                        " Choisissez une zone sur la carte pour l'y faire surgir."}
+                    </span>
+                  ) : isGM && can ? (
+                    <Btn
+                      variant="primary"
+                      onClick={toUnknown}
+                      disabled={!!travel}
+                      title={travel ? 'Attendez la fin du voyage' : undefined}
+                    >
+                      ✦ Envoyer l'arpenteur ici
+                    </Btn>
+                  ) : null}
+                </div>
+              )}
+              {sel && sel.id !== UNKNOWN && (
                 <div className="flex flex-col gap-3">
                   {can && (
                     <TextField

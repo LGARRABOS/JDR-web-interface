@@ -302,7 +302,11 @@ export function cityById(id: string): City | undefined {
 }
 
 /** Position (x, y) d'une sous-région ou d'une ville. */
+/** Tourbillon de la position inconnue, en mer au nord-ouest de Keld. */
+export const UNKNOWN_POS = { x: 238, y: 222 };
+
 export function nodePosition(id: string): { x: number; y: number } | null {
+  if (isUnknown(id)) return UNKNOWN_POS;
   const r = regionById(id);
   if (r) return r.label;
   const c = cityById(id);

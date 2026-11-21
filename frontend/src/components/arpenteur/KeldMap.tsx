@@ -11,6 +11,8 @@ import {
   ROUTES,
   nodeName,
   nodePosition,
+  UNKNOWN,
+  UNKNOWN_POS,
 } from '../../arpenteur/keld';
 import type { Marker } from '../../arpenteur/types';
 
@@ -22,6 +24,8 @@ const STYLE = `
 .arp-map .arp-pulse{animation:arp-pulse 2s ease-out infinite;transform-box:fill-box;transform-origin:50% 50%}
 .arp-map .arp-reach{animation:arp-dash 1.6s linear infinite}
 .arp-map .arp-float{animation:arp-float 3s ease-in-out infinite}
+.arp-map .arp-spin{animation:arp-spin 9s linear infinite;transform-box:fill-box;transform-origin:50% 50%}
+@keyframes arp-spin{to{transform:rotate(360deg)}}
 @keyframes arp-dash{to{stroke-dashoffset:-28}}
 @keyframes arp-pulse{0%{transform:scale(.5);opacity:.9}100%{transform:scale(2.4);opacity:0}}
 @keyframes arp-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
@@ -340,6 +344,54 @@ export function KeldMap({
           )}
         </g>
       ))}
+
+      {/* Position inconnue : tourbillon d'Aether dans la mer. */}
+      <g
+        onClick={() => onSelect(UNKNOWN)}
+        style={{ cursor: 'pointer' }}
+        transform={`translate(${UNKNOWN_POS.x} ${UNKNOWN_POS.y})`}
+      >
+        <title>Position inconnue — mer de brume d'Aether</title>
+        <circle r={58} fill="#7ae8ff" opacity={0.08} />
+        <circle r={38} fill="#b48cf0" opacity={0.12} />
+        <g className="arp-spin">
+          {[0, 1, 2].map((k) => (
+            <path
+              key={k}
+              d="M0,0 C14,-6 26,4 22,20 C18,34 -6,40 -22,30"
+              transform={`rotate(${k * 120})`}
+              fill="none"
+              stroke={k === 1 ? '#c89aff' : '#7ae8ff'}
+              strokeWidth={4}
+              strokeLinecap="round"
+              opacity={0.85}
+            />
+          ))}
+        </g>
+        <circle
+          r={44}
+          fill="none"
+          stroke={selected === UNKNOWN ? '#f0c869' : '#7ae8ff'}
+          strokeWidth={selected === UNKNOWN ? 4 : 2}
+          strokeDasharray="6 7"
+          opacity={0.9}
+        />
+        <circle r={6} fill="#e8f8ff" />
+        <text
+          y={74}
+          textAnchor="middle"
+          fontSize={22}
+          fill="#cfe9ff"
+          style={{
+            fontFamily: 'Cinzel, serif',
+            paintOrder: 'stroke',
+            stroke: '#14100c',
+            strokeWidth: 5,
+          }}
+        >
+          Position inconnue
+        </text>
+      </g>
 
       {CITIES.map((c) => {
         const active = selected === c.id;
