@@ -336,7 +336,15 @@ export class Renderer {
     const gl = this.gl;
     if (!this.msaa || !this.scene || !this.half || !this.quarter) return;
     const aspect = this.width / this.height;
-    const proj = perspective(cam.fov, aspect, 0.5, 2500);
+    // Plan proche suivant la distance de la caméra : plus de précision de
+    // profondeur pour les décors lointains (routes, sol) sans rogner la scène.
+    const camDist = Math.hypot(
+      cam.eye[0] - cam.target[0],
+      cam.eye[1] - cam.target[1],
+      cam.eye[2] - cam.target[2]
+    );
+    const near = Math.min(4, Math.max(0.5, camDist * 0.012));
+    const proj = perspective(cam.fov, aspect, near, 2500);
     const view = lookAt(cam.eye, cam.target, [0, 1, 0]);
     const vp = multiply(proj, view);
     const sun = normalize(light.sunDir);

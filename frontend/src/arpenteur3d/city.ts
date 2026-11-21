@@ -1726,6 +1726,8 @@ export function cityMesh(o: CityOptions): {
       );
       return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t) < w / 2 + rad;
     });
+  // Destinations des routes : pied des escaliers de quai (et place, monument).
+  const landmarks: [number, number, number][] = [];
   {
     const stepsQ = Math.ceil((top + 1.5) / 0.4);
     const foot = z0 - 22 - stepsQ * 0.5 - 4; // pied du grand escalier
@@ -1735,15 +1737,16 @@ export function cityMesh(o: CityOptions): {
       addRoad([sx * trunkX, 118], [sx * trunkX, zFar], 10, 0);
     // Bretelles : quai principal et postes secondaires.
     addRoad([-trunkX, foot], [trunkX, foot], 9, 1);
+    landmarks.push([0, foot, 14]);
     for (const q of BERTHS) {
       const f = q.z + foot;
+      landmarks.push([q.x, f, 14]);
       const tx = q.x < 0 ? -trunkX : trunkX;
       addRoad([q.x, f], [tx, f], 9, 1);
       addRoad([q.x, f], [q.x, f + 6], 9, 1);
     }
-    // Avenue de la place au monument, et boulevard qui borde la place.
+    // Avenue de la place au monument (sous les arches du viaduc).
     addRoad([0, 24], [-20, -132], 11, 0);
-    addRoad([-trunkX, 20], [trunkX, 20], 9, 1);
   }
   const blocked = (x: number, z: number, rad: number) => {
     if (onRoad(x, z, rad)) return true;
@@ -2776,6 +2779,71 @@ export function cityMesh(o: CityOptions): {
     metal: 0,
     rough: 0.95,
   };
+  // Élagage : une chaussée ne traverse pas de sable vide. Chaque point doit
+  // être bordé de bâtiments, toucher une autre route ou une destination
+  // (quai, place, monument) ; les bouts nus sont coupés, et les rues de terre
+  // sont scindées là où elles traversent un long vide.
+  {
+    const STEP = 3;
+    const useful = (x: number, z: number, self: Road) => {
+      if (landmarks.some(([lx, lz, lr]) => Math.hypot(x - lx, z - lz) < lr))
+        return true;
+      if (Math.abs(x) < 100 && z > 16 && z < 122) return true; // place
+      const reach = self.w / 2 + 9;
+      if (occ.some(([ox, oz, or]) => Math.hypot(x - ox, z - oz) - or < reach))
+        return true;
+      return roads.some((q) => {
+        if (q === self) return false;
+        const dx = q.c[0] - q.a[0];
+        const dz = q.c[1] - q.a[1];
+        const l2 = dx * dx + dz * dz || 1;
+        const t = Math.max(
+          0,
+          Math.min(1, ((x - q.a[0]) * dx + (z - q.a[1]) * dz) / l2)
+        );
+        return (
+          Math.hypot(x - q.a[0] - dx * t, z - q.a[1] - dz * t) < q.w / 2 + 1.5
+        );
+      });
+    };
+    for (let pass = 0; pass < 2; pass++) {
+      const next: Road[] = [];
+      for (const rd of roads) {
+        const dx = rd.c[0] - rd.a[0];
+        const dz = rd.c[1] - rd.a[1];
+        const L = Math.hypot(dx, dz);
+        const n = Math.max(1, Math.round(L / STEP));
+        const ok: boolean[] = [];
+        for (let i = 0; i <= n; i++)
+          ok.push(useful(rd.a[0] + (dx * i) / n, rd.a[1] + (dz * i) / n, rd));
+        // Tronçons utiles ; un vide court (traversée de carrefour, porche) est
+        // conservé, un long vide coupe une rue de terre en deux.
+        const maxGap = [70, 45, 24, 24][rd.kind] / STEP;
+        let i0 = -1;
+        let last = -1;
+        const emit = (a: number, c: number) => {
+          if ((c - a) * (L / n) < 10) return;
+          next.push({
+            ...rd,
+            a: [rd.a[0] + (dx * a) / n, rd.a[1] + (dz * a) / n],
+            c: [rd.a[0] + (dx * c) / n, rd.a[1] + (dz * c) / n],
+          });
+        };
+        for (let i = 0; i <= n; i++) {
+          if (!ok[i]) continue;
+          if (i0 < 0) i0 = i;
+          else if (i - last > maxGap) {
+            emit(i0, last);
+            i0 = i;
+          }
+          last = i;
+        }
+        if (i0 >= 0) emit(i0, last);
+      }
+      roads.length = 0;
+      roads.push(...next);
+    }
+  }
   for (const rd of roads) {
     const dx = rd.c[0] - rd.a[0];
     const dz = rd.c[1] - rd.a[1];
@@ -2784,13 +2852,15 @@ export function cityMesh(o: CityOptions): {
     const ang = -Math.atan2(dz, dx);
     const cx = (rd.a[0] + rd.c[0]) / 2;
     const cz = (rd.a[1] + rd.c[1]) / 2;
-    const y = ground - 0.04 + [0.1, 0.12, 0.07, 0.05][rd.kind];
-    b.push(chain(translation(cx, y - 0.1, cz), rotationY(ang)));
-    b.box(L + (rd.kind < 2 ? 0 : 1), 0.1, rd.w, rd.kind < 2 ? paved : dirt);
+    // Dessus nettement au-dessus du sol aplani (-1) et décalé par catégorie :
+    // pas de scintillement de profondeur, même vu de loin.
+    const y = ground + [0.3, 0.36, 0.18, 0.12][rd.kind];
+    b.push(chain(translation(cx, y - 0.5, cz), rotationY(ang)));
+    b.box(L + (rd.kind < 2 ? 0 : 1), 0.5, rd.w, rd.kind < 2 ? paved : dirt);
     if (rd.kind < 2)
       for (const sz of [-1, 1]) {
-        b.push(translation(0, 0, (sz * rd.w) / 2));
-        b.box(L, 0.22, 0.45, curb);
+        b.push(translation(0, 0.3, (sz * rd.w) / 2));
+        b.box(L, 0.42, 0.45, curb);
         b.pop();
       }
     b.pop();
@@ -2806,7 +2876,7 @@ export function cityMesh(o: CityOptions): {
       const nl = Math.hypot(nx, nz) || 1;
       const p = (t: number): Vec3 => [
         rd.a[0] + (rd.c[0] - rd.a[0]) * t + (nx / nl) * side,
-        ground,
+        ground + 0.33,
         rd.a[1] + (rd.c[1] - rd.a[1]) * t + (nz / nl) * side,
       ];
       if (r() < 0.5) walk(p(t0), p(t1));
