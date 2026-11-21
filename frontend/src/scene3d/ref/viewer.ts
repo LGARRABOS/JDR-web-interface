@@ -202,7 +202,11 @@ export class RefViewer {
       fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
 void main(){ vec4 c = texture2D(tDiffuse, vUv);
   if (any(isnan(c)) || any(isinf(c))) c = vec4(0., 0., 0., 1.);
-  gl_FragColor = vec4(min(c.rgb, vec3(2000.)), c.a); }`,
+  // Reflets extrêmes (métal poli tout près d'une lampe) : plafonnés en gardant
+  // la teinte, sinon le bloom en fait un halo blanc géant.
+  float mx = max(max(c.r, c.g), c.b);
+  if (mx > 24.) c.rgb *= 24. / mx;
+  gl_FragColor = vec4(c.rgb, c.a); }`,
     });
     // Ne touche pas à la profondeur partagée (lue par l'occlusion ambiante).
     clean.material.depthTest = false;
@@ -315,8 +319,11 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
       jet.position.copy(p);
       ship.group.add(jet);
       this.jets.push(jet);
-      const l = new THREE.PointLight(AETHER, 0, 16, 2);
-      l.position.copy(p).add(new THREE.Vector3(0, -2.5, 0));
+      // Lueur portée sur le sable : la lampe est près du sol, loin du métal
+      // de la nacelle (un point lumineux contre du cuivre poli éblouit).
+      const l = new THREE.PointLight(AETHER, 0, 14, 2);
+      const gy = groundY(p.x, p.z) - this.shipY;
+      l.position.set(p.x, Math.max(gy + 2.2, p.y - 6), p.z);
       ship.group.add(l);
       this.podLights.push(l);
     });
@@ -368,7 +375,7 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
     }
     this.lamps.forEach((l) => (l.intensity = night ? 40 : 0));
     // Lueur des jets sur le sable : discrète au crépuscule, plus marquée la nuit.
-    this.podLights.forEach((l) => (l.intensity = night ? 14 : 2));
+    this.podLights.forEach((l) => (l.intensity = night ? 8 : 1.5));
     this.jets.forEach(
       (j) =>
         ((j.material as THREE.ShaderMaterial).uniforms.uPower.value = night
