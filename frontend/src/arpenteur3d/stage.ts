@@ -754,7 +754,8 @@ export class Stage {
           bx.dims,
           target[0] + (eye[0] - target[0]) * u - bx.cx,
           target[1] + (eye[1] - target[1]) * u,
-          target[2] + (eye[2] - target[2]) * u
+          target[2] + (eye[2] - target[2]) * u,
+          this.doors
         );
       // Premier obstacle le long de la visée (mur, voûte, pignon hors des
       // portes), affiné par dichotomie.

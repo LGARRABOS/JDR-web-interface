@@ -77,17 +77,28 @@ export function hangarDims(o: { length: number; shipTop: number }): HangarDims {
  * la charpente, en deçà des passerelles, au-dessus du sol ; elle franchit
  * les pignons par les portes ; dehors, au-delà des pignons, rien ne la gêne.
  */
-export function hangarRoom(d: HangarDims, x: number, y: number, z: number) {
+export function hangarRoom(
+  d: HangarDims,
+  x: number,
+  y: number,
+  z: number,
+  doors: readonly [number, number] = [0, 0]
+) {
   const ax = Math.abs(x);
   // Dehors, au-delà des pignons : à l'air libre. Dans l'épaisseur du
-  // pignon : seulement par l'ouverture des portes.
+  // pignon : seulement par la partie ouverte des portes (fermées, rien ne
+  // passe : la caméra ne sort pas derrière elles).
   if (ax > d.hx + 2.5) return true;
-  if (ax > d.hx - 3)
+  if (ax > d.hx - 3) {
+    const open = doors[x < 0 ? 0 : 1];
+    const half = (d.doorHalf - 1.5) * Math.min(1, open * 1.15);
     return (
-      Math.abs(z) < d.doorHalf - 1.5 &&
+      open > 0.05 &&
+      Math.abs(z) < half &&
       y > HANGAR_GROUND + 2 &&
       y < HANGAR_GROUND + d.doorH - 2
     );
+  }
   const zi = d.hz - 6.5;
   if (Math.abs(z) > zi) return false;
   const inset = 2.6;
