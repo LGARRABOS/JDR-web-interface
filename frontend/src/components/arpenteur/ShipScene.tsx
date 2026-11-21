@@ -174,6 +174,8 @@ export interface ShipSceneProps {
   animate?: boolean;
   scaffolding?: boolean;
   onRoom?: (target: CutawayTarget) => void;
+  /** MJ : bascule jour / nuit (absent pour les joueurs). */
+  onMood?: (mood: 'dusk' | 'night') => void;
   className?: string;
 }
 

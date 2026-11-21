@@ -239,6 +239,8 @@ export interface MapState {
   markers: Marker[];
   /** Voyage en cours (ou le dernier) : animé chez tous les joueurs. */
   travel?: Travel | null;
+  /** Moment de la journée imposé par le MJ ('' : selon l'heure réelle). */
+  mood?: '' | 'dusk' | 'night';
 }
 
 export interface Travel {

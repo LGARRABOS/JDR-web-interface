@@ -396,6 +396,9 @@ func NormalizeMap(m *MapState) {
 		m.Ship.Y = clampF(m.Ship.Y, 0, 1)
 	}
 	m.Heading = math.Mod(clampF(m.Heading, -3600, 3600)+3600, 360)
+	if m.Mood != "dusk" && m.Mood != "night" {
+		m.Mood = ""
+	}
 	if t := m.Travel; t != nil {
 		t.From = strings.ToUpper(text(t.From, 12))
 		t.To = strings.ToUpper(text(t.To, 12))

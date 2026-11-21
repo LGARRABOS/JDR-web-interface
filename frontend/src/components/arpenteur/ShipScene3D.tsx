@@ -85,7 +85,11 @@ export function ShipScene3D(props: ShipSceneProps) {
   const [failed, setFailed] = useState(
     () => typeof document !== 'undefined' && !supportsWebGL2()
   );
-  const [mood] = useState(moodNow);
+  // Moment de la journée : imposé par le MJ, sinon selon l'heure réelle.
+  const [clockMood] = useState(moodNow);
+  const mood: Mood = doc.map.mood || clockMood;
+  const moodRef = useRef(mood);
+  moodRef.current = mood;
   const guns = installedGuns(doc.combat).installed;
   const crew = doc.crew.members.length;
   const sector = doc.map.sector;
@@ -296,15 +300,30 @@ export function ShipScene3D(props: ShipSceneProps) {
     if (now && !reduced) {
       const from = sceneOf(now.from);
       const to = sceneOf(now.to);
-      stage.setJourney(from, to, mood, now.start, now.duration);
+      stage.setJourney(from, to, moodRef.current, now.start, now.duration);
     } else {
       const here = sceneOf(sector);
-      stage.setEnvironment(here.desert, mood, here.place, here.biome);
+      stage.setEnvironment(
+        here.desert,
+        moodRef.current,
+        here.place,
+        here.biome
+      );
     }
     canvasRef.current?.dispatchEvent(new Event('arp-ship'));
-    // travelKey résume mapTravel.
+    // travelKey résume mapTravel ; le moment de la journée a son propre effet.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [use3D, animate, sector, travelKey, mood]);
+  }, [use3D, animate, sector, travelKey]);
+
+  // Jour / nuit : passage progressif (instantané si les animations sont réduites).
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!use3D || !stage) return;
+    const reduced =
+      !animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    stage.setMood(mood, !reduced);
+    canvasRef.current?.dispatchEvent(new Event('arp-ship'));
+  }, [use3D, animate, mood]);
 
   // Fin de voyage : bandeau d'arrivée.
   useEffect(() => {
@@ -411,6 +430,23 @@ export function ShipScene3D(props: ShipSceneProps) {
         >
           ⟲
         </button>
+        {props.onMood && (
+          <button
+            type="button"
+            className={btn}
+            onClick={() => props.onMood?.(mood === 'night' ? 'dusk' : 'night')}
+            title={
+              mood === 'night'
+                ? 'Faire lever le jour (pour tous)'
+                : 'Faire tomber la nuit (pour tous)'
+            }
+            aria-label={
+              mood === 'night' ? 'Passer au jour' : 'Passer à la nuit'
+            }
+          >
+            {mood === 'night' ? '☀' : '☾'}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -26,7 +26,7 @@ import {
   type Lighting,
 } from './renderer';
 import { MeshBuilder, P } from './geometry';
-import { BERTHS, cityMesh, veil } from './city';
+import { BERTHS, cityMesh, lerpLighting, veil } from './city';
 import {
   BIOMES,
   biomeLighting,
@@ -131,6 +131,8 @@ const smooth = (a: number, b: number, x: number) => ease((x - a) / (b - a));
 /** Vitesse de pointe pendant un voyage (multiple de la croisière). */
 const VMAX = 7;
 const SAMPLES = 400;
+/** Durée du passage jour / nuit (ms). */
+const FADE_MS = 5000;
 
 /** Vitesse (en multiples de la croisière) à la progression p du voyage. */
 function journeySpeed(p: number, v0: number, v1: number) {
@@ -157,6 +159,15 @@ export class Stage {
   } | null = null;
   private light: Lighting;
   private mood: Mood = 'dusk';
+  private desert: DesertId = 'mahibori';
+  /** Passage progressif du jour à la nuit (ou l'inverse). */
+  private fade: {
+    from: Lighting;
+    to: Mood;
+    start: number;
+    swapped: boolean;
+  } | null = null;
+  private lastShip: { build: Build; opts: StageOptions } | null = null;
   private place: Place = {};
   private cities = new Map<string, CityRt>();
   /** Habillages des habitants (trois tenues). */
@@ -252,7 +263,31 @@ export class Stage {
   }
 
   get traveling() {
-    return !!this.journey;
+    return !!this.journey || !!this.fade;
+  }
+
+  /**
+   * Change le moment de la journée. Avec transition, la lumière glisse en
+   * quelques secondes (le soleil se couche, le ciel s'assombrit) ; les
+   * fenêtres et lanternes s'allument à mi-parcours, quand la lumière baisse.
+   */
+  setMood(mood: Mood, transition = true) {
+    if (mood === this.mood && !this.fade) return;
+    if (!transition) {
+      this.fade = null;
+      this.swapMood(mood);
+      return;
+    }
+    this.fade = {
+      from: this.light,
+      to: mood,
+      start: Date.now(),
+      swapped: false,
+    };
+  }
+
+  private swapMood(mood: Mood) {
+    this.applyEnv(this.desert, mood, this.place, this.biomeKey);
   }
 
   private endJourney() {
@@ -262,15 +297,22 @@ export class Stage {
     this.journey = null;
   }
 
+  private biomeKey = '';
   private applyEnv(desert: DesertId, mood: Mood, place: Place, biome = '') {
+    this.biomeKey = biome;
     if (mood !== this.mood) {
       this.clearCities();
       this.clearBiomes();
     }
+    const moodChanged = mood !== this.mood;
     this.biome = biomeOf(biome, desert);
+    this.desert = desert;
     this.light = biomeLighting(lighting(desert, mood), this.biome);
     this.mood = mood;
     this.place = place;
+    // Lanternes et hublots du navire suivent le jour et la nuit.
+    if (moodChanged && this.lastShip && this.ship)
+      this.setShip(this.lastShip.build, this.lastShip.opts);
   }
 
   /** Lointains et bande de curiosités d'un paysage (construits à la demande). */
@@ -398,6 +440,7 @@ export class Stage {
   }
 
   setShip(build: Build, opts: StageOptions = {}) {
+    this.lastShip = { build, opts };
     this.disposeShip();
     const parts = buildShip(build, { ...opts, night: this.mood === 'night' });
     this.ship = {
@@ -452,6 +495,17 @@ export class Stage {
     // --- Voyage en cours : distance parcourue, décor qui défile, lumière ---
     let dock = this.place.city ? 1 : 0;
     let light = this.light;
+    const fd = this.fade;
+    if (fd) {
+      const t = (Date.now() - fd.start) / FADE_MS;
+      if (t >= 0.5 && !fd.swapped) {
+        fd.swapped = true;
+        this.swapMood(fd.to);
+      }
+      const target = biomeLighting(lighting(this.desert, fd.to), this.biome);
+      light = lerpLighting(fd.from, target, ease(t));
+      if (t >= 1) this.fade = null;
+    }
     const scenery: DrawItem[] = [];
     let calm = 0;
     let calmX = 0;

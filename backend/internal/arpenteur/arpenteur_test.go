@@ -177,6 +177,20 @@ func TestTravelStampedByServer(t *testing.T) {
 	}
 }
 
+func TestMapMood(t *testing.T) {
+	d := Default()
+	d.Map.Mood = "night"
+	Normalize(&d)
+	if d.Map.Mood != "night" {
+		t.Fatal("la nuit choisie par le MJ doit être gardée")
+	}
+	d.Map.Mood = "midi"
+	Normalize(&d)
+	if d.Map.Mood != "" {
+		t.Fatal("un moment inconnu revient à l'heure réelle")
+	}
+}
+
 func TestNormalizeBounds(t *testing.T) {
 	d := Default()
 	d.Combat.Decks[0].Guns.A1 = Battery{Slots: 4, Installed: 9, Loaded: 7, Primed: -2}

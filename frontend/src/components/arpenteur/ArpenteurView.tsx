@@ -174,6 +174,22 @@ export function ArpenteurView({
               view={view}
               scaffolding={!preview && !!doc.pending}
               onRoom={goTo}
+              onMood={
+                isGM
+                  ? (mood) =>
+                      update(
+                        'map',
+                        { ...doc.map, mood },
+                        {
+                          log:
+                            mood === 'night'
+                              ? 'La nuit tombe'
+                              : 'Le jour se lève',
+                          immediate: true,
+                        }
+                      )
+                  : undefined
+              }
               className="absolute inset-0 w-full h-full"
             />
 

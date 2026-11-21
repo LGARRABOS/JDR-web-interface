@@ -278,6 +278,8 @@ type MapState struct {
 	Markers     []Marker          `json:"markers"`
 	// Travel : voyage en cours (ou le dernier), pour l'animer chez tous les joueurs.
 	Travel *Travel `json:"travel"`
+	// Mood : moment de la journée imposé par le MJ ("" = selon l'heure).
+	Mood string `json:"mood"`
 }
 
 // Travel : départ de From vers To à StartedAt (horodaté par le serveur),
