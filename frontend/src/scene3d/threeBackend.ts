@@ -139,7 +139,7 @@ roughnessFactor = clamp(rough, .045, 1.);
 metalnessFactor = metal;
 vec3 bEmit = emit;
 // Toiles : la lumière traverse (le moteur maison faisait de même).
-if (pat == 6.) bEmit += albedo * (uSunColor * max(-dot(N, L), 0.) * .3 + uGround * .32 + uHorizon * .08) * (1. - uNight * .5);`
+if (pat == 6.) bEmit += albedo * (uSunColor * max(-dot(N, L), 0.) * .2 + uGround * .16 + uHorizon * .04) * (1. - uNight * .5);`
       )
       .replace(
         '#include <emissivemap_fragment>',
@@ -509,7 +509,8 @@ export class ThreeBackend implements RenderBackend {
       light.night.toFixed(2),
     ].join('|');
     const now = performance.now();
-    if (key === this.envKey || now - this.envAt < 350) return;
+    // Le premier ciel est calculé tout de suite ; ensuite, au plus ~3 fois par seconde.
+    if (key === this.envKey || (this.envRT && now - this.envAt < 350)) return;
     this.envKey = key;
     this.envAt = now;
     const rt = this.pmrem.fromScene(this.skyScene, 0, 1, 2000);
