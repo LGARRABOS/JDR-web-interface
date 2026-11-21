@@ -24,10 +24,19 @@ import {
   FX_FNS,
   SKY_BODY,
   SKY_FN,
-  SURFACE_BODY,
+  SURFACE_CHAIN,
   SURFACE_FNS,
+  SURFACE_HEAD,
+  SURFACE_TAIL,
   WIND,
 } from '../arpenteur3d/shaders';
+import {
+  loadPbr,
+  PBR_DETAIL,
+  PBR_FNS,
+  PBR_WOOD,
+  placeholderPbr,
+} from './pbrTextures';
 import { detectQuality, type Quality } from './quality';
 
 // Moteur de rendu Three.js de l'arpenteur. Il reçoit exactement ce que la scène
@@ -64,6 +73,8 @@ function sharedUniforms() {
     uSkyMid: { value: new THREE.Vector3() },
     uNight: { value: 0 },
     uMoonDir: { value: new THREE.Vector3(0, 0.3, -1) },
+    uPbr: { value: placeholderPbr() as THREE.Texture },
+    uPbrOn: { value: 0 },
   };
 }
 type Shared = ReturnType<typeof sharedUniforms>;
@@ -109,6 +120,7 @@ varying vec2 vUv2;
 ${COMMON}
 ${SKY_FN}
 ${SURFACE_FNS}
+${PBR_FNS}
 `;
 
 /** Matériau « pont » : PBR de Three, motifs et déformations du moteur maison. */
@@ -132,7 +144,16 @@ function bridgeMaterial(u: Shared, drape: boolean): THREE.MeshStandardMaterial {
         /* glsl */ `#include <normal_fragment_maps>
 vec3 N = normalize((vec4(normal, 0.) * viewMatrix).xyz);
 vec3 L = uSunDir;
-${SURFACE_BODY}
+${SURFACE_HEAD}
+if (uPbrOn > .5 && (pat == 1. || pat == 11.)) {
+${PBR_WOOD}
+} else {
+${SURFACE_CHAIN}
+}
+if (uPbrOn > .5) {
+${PBR_DETAIL}
+}
+${SURFACE_TAIL}
 diffuseColor.rgb = albedo;
 normal = normalize((viewMatrix * vec4(N, 0.)).xyz);
 roughnessFactor = clamp(rough, .045, 1.);
@@ -370,7 +391,12 @@ export class ThreeBackend implements RenderBackend {
 
   constructor(
     canvas: HTMLCanvasElement,
-    opts: { preserve?: boolean; quality?: Quality } = {}
+    opts: {
+      preserve?: boolean;
+      quality?: Quality;
+      /** Dossier des textures photographiques (sans elles : motifs seuls). */
+      textures?: string;
+    } = {}
   ) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -455,7 +481,32 @@ export class ThreeBackend implements RenderBackend {
     this.composer.addPass(new OutputPass());
     this.fx = new ShaderPass(fxShader());
     this.composer.addPass(this.fx);
+    // Textures photographiques : chargées en arrière-plan, puis on redessine.
+    this.ready = opts.textures
+      ? loadPbr(
+          opts.textures,
+          q.texSize,
+          Math.min(q.aniso, r.capabilities.getMaxAnisotropy())
+        )
+          .then((tex) => {
+            if (this.disposed) {
+              tex.dispose();
+              return;
+            }
+            this.u.uPbr.value.dispose();
+            this.u.uPbr.value = tex;
+            this.u.uPbrOn.value = 1;
+            canvas.dispatchEvent(new Event('arp-cam'));
+          })
+          .catch(() => {
+            // textures absentes : on garde les motifs procéduraux
+          })
+      : Promise.resolve();
   }
+
+  /** Résolu quand les textures photographiques sont prêtes (ou absentes). */
+  readonly ready: Promise<void>;
+  private disposed = false;
 
   upload(mesh: MeshData): MeshHandle {
     const g = new THREE.BufferGeometry();
@@ -667,6 +718,8 @@ export class ThreeBackend implements RenderBackend {
   }
 
   dispose() {
+    this.disposed = true;
+    this.u.uPbr.value.dispose();
     this.pool.forEach((m) => this.scene.remove(m));
     this.glowPool.forEach((m) => this.scene.remove(m));
     Object.values(this.mats).forEach((m) => m.dispose());

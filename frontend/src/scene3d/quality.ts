@@ -12,12 +12,36 @@ export interface Quality {
   shadowSize: number;
   msaa: number;
   ao: boolean;
+  /** Côté des textures photographiques (px) et filtrage anisotrope. */
+  texSize: number;
+  aniso: number;
 }
 
 const PRESETS: Record<QualityTier, Quality> = {
-  low: { tier: 'low', shadowSize: 1024, msaa: 0, ao: false },
-  medium: { tier: 'medium', shadowSize: 2048, msaa: 0, ao: true },
-  high: { tier: 'high', shadowSize: 4096, msaa: 4, ao: true },
+  low: {
+    tier: 'low',
+    shadowSize: 1024,
+    msaa: 0,
+    ao: false,
+    texSize: 512,
+    aniso: 2,
+  },
+  medium: {
+    tier: 'medium',
+    shadowSize: 2048,
+    msaa: 0,
+    ao: true,
+    texSize: 1024,
+    aniso: 4,
+  },
+  high: {
+    tier: 'high',
+    shadowSize: 4096,
+    msaa: 4,
+    ao: true,
+    texSize: 1024,
+    aniso: 8,
+  },
 };
 
 /** Choix forcé par le joueur (stockage local), sinon détection. */

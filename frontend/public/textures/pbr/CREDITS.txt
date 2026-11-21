@@ -1,0 +1,5 @@
+Textures photographiques : Poly Haven (https://polyhaven.com), licence CC0.
+cliff_side, dark_wood, rock_face_03, rust_coarse_01, rusty_metal_03,
+sand_03, sandstone_cracks, wood_planks (1K).
+Préparées pour le jeu : *_a = détail d'albédo (photo / couleur moyenne, x0,5,
+gamma 2,2, cavités assombries) ; *_b = normale OpenGL (R,G) + rugosité (B).

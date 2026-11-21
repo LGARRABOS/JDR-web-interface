@@ -139,7 +139,7 @@ vec3 plates(vec2 uv, float mpp){
 `;
 
 /** Motifs des surfaces : entrées N, vWorld, vUv, vCol, vMat ; sorties albedo, metal, rough, emit, N. */
-export const SURFACE_BODY = /* glsl */ `
+export const SURFACE_HEAD = /* glsl */ `
   float pat = vMat.x;
   vec3 albedo = vCol;
   float metal = vMat.y, rough = vMat.z;
@@ -148,6 +148,10 @@ export const SURFACE_BODY = /* glsl */ `
   float k = 1.;
   vec2 uv = vUv;
   float mpp = length(fwidth(uv));
+`;
+
+/** Chaîne des motifs procéduraux (après SURFACE_HEAD). */
+export const SURFACE_CHAIN = /* glsl */ `
   if (pat == 1. || pat == 11.) {
     float pw = pat == 1. ? .3 : .2;
     vec2 q = pat == 1. ? uv : vec2(uv.y, uv.x);
@@ -278,8 +282,14 @@ export const SURFACE_BODY = /* glsl */ `
     rough = .9; metal = .2;
     h = n*.01;
   }
+`;
+
+export const SURFACE_TAIL = /* glsl */ `
   N = bumpN(N, vWorld, h, k);
 `;
+
+/** Motifs des surfaces : entrées N, vWorld, vUv, vCol, vMat ; sorties albedo, metal, rough, emit, N. */
+export const SURFACE_BODY = SURFACE_HEAD + SURFACE_CHAIN + SURFACE_TAIL;
 
 /** Brume atmosphérique : modifie col (entrées vWorld, uCam, L, uFog, uFogDensity). */
 export const FOG_BODY = /* glsl */ `

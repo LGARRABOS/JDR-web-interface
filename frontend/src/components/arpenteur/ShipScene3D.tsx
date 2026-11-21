@@ -313,7 +313,9 @@ export function ShipScene3D(props: ShipSceneProps) {
         .then(({ ThreeBackend }) => {
           if (cancelled) return;
           try {
-            const backend = new ThreeBackend(canvas);
+            const backend = new ThreeBackend(canvas, {
+              textures: '/textures/pbr/',
+            });
             cleanup = run(new Stage(canvas, { backend }));
             setStageGen((g) => g + 1);
           } catch {
