@@ -310,7 +310,15 @@ export function nodePosition(id: string): { x: number; y: number } | null {
 }
 
 /** Nom affiché : nom donné par le groupe, sinon nom par défaut. */
+/**
+ * Position inconnue (la mer de brume d'Aether) : secteur vide sur la carte,
+ * « ? » comme départ ou arrivée d'un voyage par portail.
+ */
+export const UNKNOWN = '?';
+export const isUnknown = (id: string) => !id.trim() || id.trim() === UNKNOWN;
+
 export function nodeName(id: string, names: Record<string, string>): string {
+  if (isUnknown(id)) return 'Position inconnue';
   const custom = names[id.toUpperCase()];
   if (custom) return custom;
   return cityById(id)?.name ?? id;

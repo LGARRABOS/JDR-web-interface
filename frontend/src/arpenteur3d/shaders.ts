@@ -76,6 +76,11 @@ void main(){
       dune(q-ez)+k*swell(q-ez) - dune(q+ez)-k*swell(q+ez)));
   } else {
     n = mat3(uModel) * n;
+    // Mer de brume : houle lente de volutes.
+    if (aMat.x == 16.) {
+      vec2 q = (wp.xz + vec2(uScroll, 0.))*.012;
+      wp.y += (fbm(q + vec2(uTime*.05, uTime*.03)) - .5)*7. + sin(wp.x*.02 + uTime*.4)*sin(wp.z*.017 - uTime*.3)*1.6;
+    }
     // Rochers posés sur le sable : ils épousent la dune sous eux (aMat.w = 1).
     if ((aMat.x == 9. && aMat.w > .5) || uDrape > .5) {
       vec2 q = wp.xz + vec2(uScroll, 0.);
@@ -229,6 +234,18 @@ void main(){
     albedo *= .92 + .1*rip2;
     rough = .95; metal = 0.;
     k = 1.;
+  } else if (pat == 16.) {
+    // Mer de brume d'Aether : volutes lentes qui se replient sur elles-mêmes,
+    // veines lumineuses qui affleurent par endroits.
+    vec2 q = (vWorld.xz + vec2(uScroll, 0.))*.0035 + vec2(uTime*.012, uTime*.007);
+    float w = fbm(q*2.3 - vec2(uTime*.02, -uTime*.015));
+    float m = fbm(q + w*1.7);
+    float v = fbm(q*5. + w*2. + vec2(-uTime*.03, uTime*.025));
+    albedo = mix(vCol*.42, vCol*1.35, smoothstep(.22, .82, m));
+    emit = vCol * vMat.w * (.2 + .55*m + 1.8*smoothstep(.62, .85, v*m*1.5));
+    h = m*.9 + v*.25;
+    k = 1.;
+    rough = 1.; metal = 0.;
   } else if (pat == 14. || pat == 15.) {
     // Façades : coordonnées prises dans le plan du mur (projection selon la normale).
     vec2 q = abs(N.y) > .7 ? vWorld.xz : (abs(N.x) > abs(N.z) ? vWorld.zy : vWorld.xy);
@@ -456,7 +473,7 @@ in vec2 vUv;
 uniform sampler2D uTex, uBloomA, uBloomB;
 uniform float uExposure, uBloom, uGrain, uTime;
 // Tempête de sable plein écran : densité 0..1, couleur, horloge, format.
-uniform float uStorm, uStormT, uAspect;
+uniform float uStorm, uStormT, uAspect, uPortal;
 uniform vec3 uStormColor;
 out vec4 o;
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
@@ -491,6 +508,22 @@ void main(){
     c = mix(c, sc, clamp(dens, 0., .96));
     c += uStormColor*grains*uStorm*.12;
     c *= 1. - uStorm*.18*(1.-vUv.y);
+  }
+  if (uPortal > 0.001) {
+    // Passage du portail d'Aether : tunnel de lumière, traits qui filent
+    // vers les bords, éclair blanc au plus fort (le décor change dessous).
+    vec2 d = vUv - .5;
+    d.x *= uAspect;
+    float r = length(d);
+    float a = atan(d.y, d.x);
+    float t = uStormT;
+    float streak = smoothstep(.6, 1., vnoise(vec2(a*22., r*4. - t*9.)));
+    float rings = .5 + .5*sin(r*38. - t*16.);
+    vec3 pc = mix(vec3(.4, .95, 1.), vec3(.8, .55, 1.), .5 + .5*sin(a*2. + t*1.3));
+    float tun = smoothstep(.04, .8, r);
+    c = mix(c, pc*(.5 + .7*rings*tun), clamp(uPortal*(.2 + .8*tun) + uPortal*uPortal*.55, 0., .97));
+    c += pc*streak*uPortal*tun;
+    c = mix(c, vec3(1.), pow(uPortal, 9.)*.8);
   }
   c += (hash(vUv*vec2(1733., 977.) + uTime) - .5) * uGrain;
   o = vec4(c, 1.);

@@ -324,6 +324,8 @@ export class Renderer {
       calmX?: number;
       /** Tempête de sable plein écran (0..1) et sa couleur (affichage). */
       storm?: number;
+      /** Passage d'un portail d'Aether (effet plein écran), 0..1. */
+      portal?: number;
       /** Amplitude des dunes (paysage du secteur). */
       duneAmp?: number;
       stormColor?: Vec3;
@@ -558,6 +560,7 @@ export class Renderer {
       gl.uniform1f(this.u(this.composite, 'uGrain'), 0.018);
       gl.uniform1f(this.u(this.composite, 'uTime'), opts.time % 10);
       gl.uniform1f(this.u(this.composite, 'uStorm'), opts.storm ?? 0);
+      gl.uniform1f(this.u(this.composite, 'uPortal'), opts.portal ?? 0);
       gl.uniform1f(this.u(this.composite, 'uStormT'), opts.time % 1000);
       gl.uniform1f(
         this.u(this.composite, 'uAspect'),

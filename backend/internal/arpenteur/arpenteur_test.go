@@ -177,6 +177,22 @@ func TestTravelStampedByServer(t *testing.T) {
 	}
 }
 
+func TestTravelThroughPortal(t *testing.T) {
+	// Position inconnue (« ? ») : départ et arrivée des voyages par portail.
+	for _, tr := range []Travel{{From: "?", To: "m1"}, {From: "DARRAKIS", To: "?"}} {
+		d := Default()
+		next := d.Map
+		next.Travel = &Travel{From: tr.From, To: tr.To, StartedAt: "2030-01-01T00:00:00Z", Duration: 25}
+		raw, _ := json.Marshal(next)
+		if err := d.Apply(SectionMap, raw, true); err != nil {
+			t.Fatal(err)
+		}
+		if d.Map.Travel == nil {
+			t.Fatalf("voyage par portail rejeté : %+v", tr)
+		}
+	}
+}
+
 func TestMapMood(t *testing.T) {
 	d := Default()
 	d.Map.Mood = "night"

@@ -9,6 +9,7 @@ import {
   isKnownNode,
   neighbors,
   nodeName,
+  UNKNOWN,
   regionById,
 } from '../../arpenteur/keld';
 import { newId, shortDateTime, type Rights } from '../../arpenteur/logic';
@@ -79,7 +80,9 @@ export function MapPanel({
   // Départ vers une position voisine (voyage animé), ou placement direct par le MJ.
   const moveTo = (id: string, voyage = true) => {
     const name = nodeName(id, map.sectorNames);
-    const go = voyage && !!map.sector && map.sector !== id;
+    // Depuis la position inconnue, le navire surgit toujours d'un portail.
+    const fromUnknown = !map.sector;
+    const go = (voyage && !!map.sector && map.sector !== id) || fromUnknown;
     save(
       {
         ...map,
@@ -88,16 +91,32 @@ export function MapPanel({
         trail: [...map.trail, { sector: id, at: new Date().toISOString() }],
         travel: go
           ? {
-              from: map.sector,
+              from: map.sector || UNKNOWN,
               to: id,
               startedAt: new Date().toISOString(),
               duration: TRAVEL_SECONDS,
             }
           : null,
       },
-      `${go ? 'En route vers' : 'Arrivée :'} ${name}${regionById(id) && name !== id ? ` (${id})` : ''}`
+      `${fromUnknown ? "L'arpenteur surgit d'un portail d'Aether :" : go ? 'En route vers' : 'Arrivée :'} ${name}${regionById(id) && name !== id ? ` (${id})` : ''}`
     );
   };
+  // Le MJ renvoie le navire à la position inconnue, par un portail.
+  const toUnknown = () =>
+    save(
+      {
+        ...map,
+        sector: '',
+        destination: '',
+        travel: {
+          from: map.sector,
+          to: UNKNOWN,
+          startedAt: new Date().toISOString(),
+          duration: TRAVEL_SECONDS,
+        },
+      },
+      "L'arpenteur franchit un portail d'Aether vers l'inconnu"
+    );
 
   const sel = selected
     ? { id: selected, region: regionById(selected), city: cityById(selected) }
@@ -154,9 +173,23 @@ export function MapPanel({
               )}
             </>
           ) : (
-            'Position inconnue'
+            <>
+              Position :{' '}
+              <strong className="text-fantasy-accent">Position inconnue</strong>
+              {travel && <> · franchit un portail d'Aether</>}
+            </>
           )}
         </span>
+        {isGM && can && map.sector && !travel && (
+          <Btn
+            variant="ghost"
+            className="!h-8 !px-2.5 text-xs"
+            onClick={toUnknown}
+            title="Le navire franchit un portail d'Aether et disparaît vers la mer de brume"
+          >
+            Envoyer en position inconnue
+          </Btn>
+        )}
       </div>
 
       {view === 'reseau' ? (
@@ -280,7 +313,9 @@ export function MapPanel({
                           )}
                           {isGM && !reachable.has(sel.id) && (
                             <Btn onClick={() => moveTo(sel.id, false)}>
-                              Placer l'arpenteur ici
+                              {map.sector
+                                ? "Placer l'arpenteur ici"
+                                : "Faire surgir l'arpenteur ici"}
                             </Btn>
                           )}
                         </>

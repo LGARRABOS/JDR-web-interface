@@ -27,6 +27,7 @@ import {
 } from './renderer';
 import { MeshBuilder, P } from './geometry';
 import { BERTHS, cityMesh, lerpLighting, veil } from './city';
+import { portalMesh, voidLighting, voidMeshes } from './voidRealm';
 import {
   doorLeaves,
   hangarLighting,
@@ -85,6 +86,8 @@ const CRUISE = 9;
 
 /** Où se trouve le navire : en plein désert, ou amarré dans une ville. */
 export interface Place {
+  /** Position inconnue : la mer de brume d'Aether. */
+  void?: boolean;
   /** `hangar` : l'équipage y possède son hangar, le navire s'amarre dedans. */
   city?: { id: string; capital?: boolean; hangar?: boolean };
 }
@@ -245,14 +248,8 @@ export class Stage {
       to,
       start: startMs,
       duration: durationMs,
-      fromLight: biomeLighting(
-        lighting(from.desert, mood),
-        biomeOf(from.biome ?? '', from.desert)
-      ),
-      toLight: biomeLighting(
-        lighting(to.desert, mood),
-        biomeOf(to.biome ?? '', to.desert)
-      ),
+      fromLight: sceneLight(from, mood),
+      toLight: sceneLight(to, mood),
       fromBiome: biomeOf(from.biome ?? '', from.desert),
       toBiome: biomeOf(to.biome ?? '', to.desert),
       table,
@@ -324,7 +321,9 @@ export class Stage {
     const moodChanged = mood !== this.mood;
     this.biome = biomeOf(biome, desert);
     this.desert = desert;
-    this.light = biomeLighting(lighting(desert, mood), this.biome);
+    this.light = place.void
+      ? voidLighting(mood)
+      : biomeLighting(lighting(desert, mood), this.biome);
     this.mood = mood;
     this.place = place;
     // Lanternes et hublots du navire suivent le jour et la nuit.
@@ -351,7 +350,50 @@ export class Stage {
     return m;
   }
 
+  /** Mer de brume d'Aether et portail (construits à la demande). */
+  private voidRt: {
+    sea: GpuMesh;
+    far: GpuMesh;
+    islands: { mesh: GpuMesh; phase: number; amp: number; x: number }[];
+    motes: GpuMesh;
+    frame: GpuMesh;
+    rings: GpuMesh;
+  } | null = null;
+  private voidOf() {
+    if (!this.voidRt) {
+      const night = this.mood === 'night';
+      const v = voidMeshes(night);
+      const pm = portalMesh(night);
+      this.voidRt = {
+        sea: this.r.upload(v.sea),
+        far: this.r.upload(v.far),
+        islands: v.islands.map((i) => ({
+          mesh: this.r.upload(i.mesh),
+          phase: i.phase,
+          amp: i.amp,
+          x: i.x,
+        })),
+        motes: this.r.upload(v.motes),
+        frame: this.r.upload(pm.frame),
+        rings: this.r.upload(pm.rings),
+      };
+    }
+    return this.voidRt;
+  }
+  private clearVoid() {
+    const v = this.voidRt;
+    if (!v) return;
+    this.r.release(v.sea);
+    this.r.release(v.far);
+    v.islands.forEach((i) => this.r.release(i.mesh));
+    this.r.release(v.motes);
+    this.r.release(v.frame);
+    this.r.release(v.rings);
+    this.voidRt = null;
+  }
+
   private clearBiomes() {
+    this.clearVoid();
     for (const m of this.biomes.values()) {
       this.r.release(m.far);
       this.r.release(m.band);
@@ -559,7 +601,9 @@ export class Stage {
         fd.swapped = true;
         this.swapMood(fd.to);
       }
-      const target = biomeLighting(lighting(this.desert, fd.to), this.biome);
+      const target = this.place.void
+        ? voidLighting(fd.to)
+        : biomeLighting(lighting(this.desert, fd.to), this.biome);
       light = lerpLighting(fd.from, target, ease(t));
       if (t >= 1) this.fade = null;
     }
@@ -576,6 +620,10 @@ export class Stage {
     // devant lui : on voit le paysage arriver et la ville grandir à l'horizon.
     let chase = 0;
     let jp = 0;
+    let inVoid = false;
+    let portal = 0;
+    let portalAxis = 0;
+    let portalAt: { x: number; open: number } | null = null;
     if (j) {
       const p = Math.min(1, Math.max(0, (Date.now() - j.start) / j.duration));
       jp = p;
@@ -599,18 +647,49 @@ export class Stage {
         calm = 1;
         calmX = cityX;
       }
-      scenery.push({
-        mesh: after ? j.propsB : j.propsA,
-        model: translation(-dist, 0, 0),
-        drape: true,
-      });
-      storm = smooth(0.36, 0.47, p) * (1 - smooth(0.53, 0.66, p));
-      light = veil(after ? j.toLight : j.fromLight, storm * 0.7);
+      const viaPortal = !!(j.from.place.void || j.to.place.void);
+      inVoid = !!(after ? j.to.place.void : j.from.place.void);
+      if (!inVoid)
+        scenery.push({
+          mesh: after ? j.propsB : j.propsA,
+          model: translation(-dist, 0, 0),
+          drape: true,
+        });
+      if (viaPortal) {
+        // Portail d'Aether : il s'ouvre devant le navire, qui s'y engouffre ;
+        // un tunnel de lumière cache le changement de lieu, puis le navire
+        // ressort par un second portail qui se referme derrière lui.
+        const cross = (q: number) => {
+          const fq = q * SAMPLES;
+          const k0 = Math.min(SAMPLES - 1, Math.floor(fq));
+          return j.table[k0] + (j.table[k0 + 1] - j.table[k0]) * (fq - k0);
+        };
+        if (!after)
+          portalAt = {
+            x: cross(0.47) - dist,
+            open: smooth(0.2, 0.32, p),
+          };
+        else
+          portalAt = {
+            x: cross(0.5) - dist - 8,
+            open: 1 - smooth(0.56, 0.72, p),
+          };
+        portal = smooth(0.41, 0.48, p) * (1 - smooth(0.52, 0.6, p));
+        // Caméra dans l'axe, derrière le navire : on voit le portail s'ouvrir
+        // au loin, grandir, puis on le franchit avec lui.
+        portalAxis = smooth(0.14, 0.26, p) * (1 - smooth(0.62, 0.76, p));
+        light = after ? j.toLight : j.fromLight;
+      } else {
+        storm = smooth(0.36, 0.47, p) * (1 - smooth(0.53, 0.66, p));
+        light = veil(after ? j.toLight : j.fromLight, storm * 0.7);
+      }
       stormColor = stormTint(after ? j.toLight : j.fromLight);
       finished = p >= 1;
       chase = smooth(0.04, 0.2, p) * (1 - smooth(0.86, 0.99, p));
     } else {
-      if (!this.place.city) this.scrollPos += CRUISE * dt;
+      inVoid = !!this.place.void;
+      // Dans la brume, le navire dérive lentement.
+      if (!this.place.city) this.scrollPos += CRUISE * dt * (inVoid ? 0.35 : 1);
       const c = this.place.city ? this.cityOf(this.place.city) : null;
       if (c) {
         cityDraw = { rt: c, x: 0, moored: true };
@@ -623,7 +702,7 @@ export class Stage {
     let inHangar = 0;
     // Passage d'une porte : la caméra se place dans l'axe, derrière le navire,
     // pour franchir l'ouverture avec lui.
-    let axis = 0;
+    let axis = portalAxis;
     let enter = 0;
     let hangarBox: { cx: number; dims: HangarDims } | null = null;
     this.doors = [0, 0];
@@ -677,7 +756,46 @@ export class Stage {
     );
     const items: DrawItem[] = [];
     const glows: DrawItem[] = [];
-    if (view.ground !== false) {
+    if (view.ground !== false && inVoid) {
+      // Mer de brume d'Aether : îlots qui dérivent et défilent, poussières.
+      const v = this.voidOf();
+      items.push({ mesh: v.sea, model: identity() });
+      items.push({ mesh: v.far, model: identity() });
+      const LOOP = 1300;
+      for (const isl of v.islands) {
+        let x = isl.x - this.scrollPos;
+        x = ((((x + LOOP / 2) % LOOP) + LOOP) % LOOP) - LOOP / 2;
+        items.push({
+          mesh: isl.mesh,
+          model: translation(
+            x - isl.x,
+            Math.sin(time * 0.25 + isl.phase) * isl.amp,
+            0
+          ),
+          shadow: Math.abs(x) < 200,
+        });
+      }
+      items.push({
+        mesh: v.motes,
+        model: chain(
+          translation(Math.sin(time * 0.1) * 6, Math.sin(time * 0.17) * 3, 0),
+          rotationY(time * 0.01)
+        ),
+      });
+    }
+    if (portalAt) {
+      const v = this.voidOf();
+      const k = Math.max(0.001, portalAt.open);
+      const yc = hover + (parts.top + parts.bottom) / 2;
+      const base = chain(translation(portalAt.x, yc, 0), scaling(1, k, k));
+      items.push({ mesh: v.frame, model: base });
+      items.push({ mesh: v.rings, model: chain(base, rotationX(time * 0.8)) });
+      items.push({
+        mesh: v.rings,
+        model: chain(base, rotationX(-time * 0.5), scaling(1, 0.7, 0.7)),
+      });
+    }
+    if (view.ground !== false && !inVoid) {
       items.push({ mesh: this.env.terrain, model: identity() });
       const bm = this.biomeMeshes(biome);
       items.push({ mesh: bm.far, model: identity() });
@@ -802,6 +920,7 @@ export class Stage {
       calm,
       calmX,
       storm,
+      portal,
       stormColor,
       duneAmp: biome.dune,
       shadowCenter: [shipX * 0.5, hover, 0],
@@ -811,7 +930,8 @@ export class Stage {
         Math.abs(shipX) * 0.5 +
         (hgc ? (hgc.dims.hx - parts.radius) * inHangar : 0),
       pods,
-      dust: view.ground === false || dock > 0.5 ? null : this.ship.dust,
+      dust:
+        view.ground === false || dock > 0.5 || inVoid ? null : this.ship.dust,
     });
     // Arrivée : le décor de destination devient le décor courant.
     if (j && finished) {
@@ -890,8 +1010,15 @@ function npcBuild(seed: string, k: number): Build {
   return b;
 }
 
+/** Lumière d'une scène : désert (et son paysage) ou mer de brume. */
+function sceneLight(s: Scene, mood: Mood): Lighting {
+  return s.place.void
+    ? voidLighting(mood)
+    : biomeLighting(lighting(s.desert, mood), biomeOf(s.biome ?? '', s.desert));
+}
+
 const scKey = (s: Scene) =>
-  `${s.desert}:${s.biome ?? ''}:${s.place.city?.id ?? ''}${s.place.city?.hangar ? ':h' : ''}`;
+  `${s.desert}:${s.biome ?? ''}:${s.place.city?.id ?? ''}${s.place.city?.hangar ? ':h' : ''}${s.place.void ? ':void' : ''}`;
 
 /** Nuages de sable sous les tuyères qui soufflent vers le bas. */
 function dustMesh(parts: ShipParts): import('./geometry').MeshData {

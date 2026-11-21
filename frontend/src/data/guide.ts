@@ -772,6 +772,8 @@ Cliquez sur le schéma pour placer la cible : la distance, le côté du navire (
 
 Depuis la position actuelle, les destinations directes sont entourées. « Mettre le cap » trace la route ; « Partir » lance le voyage : pendant environ 25 secondes, le petit navire glisse le long du trajet avec le temps restant, et tout le groupe voit le même voyage. On ne peut pas repartir avant l'arrivée. Le MJ peut placer le navire n'importe où, instantanément.
 
+**Position inconnue** : c'est la position de départ d'une nouvelle partie. L'arpenteur y dérive au-dessus d'une mer de brume d'Aether, parmi des îlots de roche suspendus, des ruines, des cristaux luminescents et des aurores, avec un astre pâle et un anneau colossal brisé à l'horizon. Le MJ en fait sortir le navire en sélectionnant une zone et en cliquant « Faire surgir l'arpenteur ici » : un portail d'Aether s'ouvre devant lui, il s'y engouffre dans un tunnel de lumière et ressort dans la zone choisie. Le bouton « Envoyer en position inconnue », en haut de la carte, l'y renvoie par le même chemin.
+
 **Hangar** : l'équipage peut posséder un hangar dans une ville (un seul à la fois). L'achat se joue à la table, puis le MJ sélectionne la ville sur la carte et clique « Attribuer un hangar ici » (ou « Déplacer le hangar ici », ce qui remplace l'ancien ; « Retirer le hangar » pour le céder). La ville porte alors un petit hangar doré sur la carte ; en y arrivant, l'arpenteur entre dans la nef du hangar au lieu de s'amarrer au quai, et c'est là que l'atelier peut travailler.
 
 Vous pouvez nommer une sous-région (« Le Désert du phare vert ») et y poser des repères : mission, danger, trésor… Le MJ peut en cacher aux joueurs.

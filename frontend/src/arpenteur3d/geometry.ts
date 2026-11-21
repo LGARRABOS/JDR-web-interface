@@ -35,6 +35,8 @@ export const P = {
   PLASTER: 14,
   /** Briques en assises, joints de mortier. */
   BRICK: 15,
+  /** Brume d'Aether animée (mer de nuages de la position inconnue). */
+  MIST: 16,
 } as const;
 
 export interface Mat {

@@ -7,6 +7,7 @@ import { useTravel } from './useTravel';
 import {
   cityById,
   DESERTS,
+  isUnknown,
   nodeName,
   regionById,
   ROUTES,
@@ -41,6 +42,9 @@ const isDefault = (c: Cam) =>
 /** Décor d'une position : désert, et ville d'escale le cas échéant. */
 function sceneOf(sector: string, hangar = ''): Scene {
   const id = sector.trim().toUpperCase();
+  // Position inconnue : la mer de brume d'Aether.
+  if (isUnknown(id))
+    return { desert: 'keld', place: { void: true }, biome: '' };
   const city = cityById(id);
   if (city) {
     // Une ville prend la couleur et le paysage du désert qu'elle dessert.
@@ -341,21 +345,23 @@ export function ShipScene3D(props: ShipSceneProps) {
     const name = nodeName(id, doc.map.sectorNames);
     const d = sceneOf(id).desert;
     setBanner(
-      cityById(id)
-        ? {
-            title: `Arrivée à ${name}`,
-            sub:
-              hangar === id
-                ? "Amarré au hangar de l'équipage"
-                : 'Amarré au quai',
-          }
-        : {
-            title: name,
-            sub:
-              d === 'keld'
-                ? 'Arrivée'
-                : `Désert de ${DESERTS[d].name}${name !== id ? ` · ${id}` : ''}`,
-          }
+      isUnknown(id)
+        ? { title: 'Position inconnue', sub: "Mer de brume d'Aether" }
+        : cityById(id)
+          ? {
+              title: `Arrivée à ${name}`,
+              sub:
+                hangar === id
+                  ? "Amarré au hangar de l'équipage"
+                  : 'Amarré au quai',
+            }
+          : {
+              title: name,
+              sub:
+                d === 'keld'
+                  ? 'Arrivée'
+                  : `Désert de ${DESERTS[d].name}${name !== id ? ` · ${id}` : ''}`,
+            }
     );
     const t = setTimeout(() => setBanner(null), 5200);
     return () => clearTimeout(t);
