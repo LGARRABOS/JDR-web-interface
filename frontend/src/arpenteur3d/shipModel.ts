@@ -651,12 +651,20 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
     const c: Vec3 = [hull.x(0), (hull.keelY(0) + hull.deckY(0)) / 2, 0];
     const n: Vec3 = [-1, 0, 0];
     const ci = b.vertex(c, n, [0, c[1]], hullMat);
+    const tops: number[] = [];
     for (const side of [1, -1]) {
       const ids = ring.map((p) =>
         b.vertex([p[0], p[1], p[2] * side], n, [p[2] * side, p[1]], hullMat)
       );
-      for (let i = 0; i < ids.length - 1; i++) b.tri(ci, ids[i], ids[i + 1]);
+      // Même orientation (vers l'arrière) des deux côtés.
+      for (let i = 0; i < ids.length - 1; i++)
+        if (side > 0) b.tri(ci, ids[i], ids[i + 1]);
+        else b.tri(ci, ids[i + 1], ids[i]);
+      tops.push(ids[ids.length - 1]);
     }
+    // Les deux demi-éventails s'arrêtent au livet : on referme le haut du
+    // tableau, entre le centre et les deux coins du pont (sinon, trou en V).
+    b.tri(ci, tops[1], tops[0]);
     const top = hull.point(0, 1);
     b.push(translation(top[0] - 0.01, top[1], 0));
     b.box(0.06, hull.bulwark, top[2] * 2, hullMat);
@@ -926,10 +934,15 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
       const ids = ring.map((p) =>
         b.vertex(p, [dir, 0, 0], [p[2], p[1]], castleMat)
       );
-      for (let i = 0; i < ids.length - 1; i++) {
+      // Le contour (flanc, toit, flanc) ne comprend pas le bas du mur : le
+      // dernier triangle le referme (sinon, trou triangulaire sous le balcon).
+      const last = ids.length - 1;
+      for (let i = 0; i < last; i++) {
         if (dir > 0) b.tri(ci, ids[i], ids[i + 1]);
         else b.tri(ci, ids[i + 1], ids[i]);
       }
+      if (dir > 0) b.tri(ci, ids[last], ids[0]);
+      else b.tri(ci, ids[0], ids[last]);
       const front = stepped && s === split;
       const w = width(s);
       const n = Math.max(1, Math.floor((w * 2 - 1.2) / 1.8));
@@ -1211,13 +1224,33 @@ export function buildShip(build: Build, opts: ShipOptions = {}): ShipParts {
             nn
           )
         );
-        b.torus(0.42, 0.08, 18, 6, brass);
-        b.cylinder(0.36, 0.04, 14, gun ? darkIron : iron);
+        b.torus(0.5, 0.1, 18, 6, brass);
         if (gun) {
-          b.cylinder(0.15, 1.1, 10, darkIron, true);
-          b.push(translation(0, 1.05, 0));
-          b.torus(0.17, 0.05, 10, 4, brass);
+          // Sabord ouvert, pièce en batterie : fût bien visible, renfort et
+          // bouche évasée.
+          b.cylinder(0.42, 0.03, 14, darkIron);
+          b.cylinder(0.27, 0.5, 12, darkIron, true);
+          b.push(translation(0, 0.5, 0));
+          b.torus(0.26, 0.07, 12, 5, brass);
+          b.cylinder(0.21, 1.25, 12, darkIron, true);
           b.pop();
+          b.push(translation(0, 1.7, 0));
+          b.lathe(
+            [
+              [0.21, 0],
+              [0.29, 0.12],
+              [0.28, 0.22],
+              [0.12, 0.22],
+              [0.12, 0],
+            ],
+            12,
+            darkIron
+          );
+          b.pop();
+        } else {
+          // Sabord fermé : mantelet de bois cerclé.
+          b.cylinder(0.43, 0.07, 14, hullMat);
+          b.cylinder(0.12, 0.11, 8, iron);
         }
         b.pop();
       }
