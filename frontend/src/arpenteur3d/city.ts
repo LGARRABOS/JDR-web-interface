@@ -1606,7 +1606,55 @@ export function cityMesh(o: CityOptions): {
     b.pop();
     b.pop();
   };
+  // --- Réseau routier ------------------------------------------------------------
+  // Grands axes de part et d'autre du port, bretelles vers le pied de
+  // l'escalier de chaque quai, avenue de la place au monument (elle passe
+  // sous les arches du viaduc), puis rues et ruelles entre les maisons.
+  type Road = {
+    a: [number, number];
+    c: [number, number];
+    w: number;
+    kind: 0 | 1 | 2 | 3;
+  };
+  const roads: Road[] = [];
+  const addRoad = (
+    a: [number, number],
+    c: [number, number],
+    w: number,
+    kind: Road['kind']
+  ) => roads.push({ a, c, w, kind });
+  const onRoad = (x: number, z: number, rad: number) =>
+    roads.some(({ a, c, w }) => {
+      const dx = c[0] - a[0];
+      const dz = c[1] - a[1];
+      const l2 = dx * dx + dz * dz || 1;
+      const t = Math.max(
+        0,
+        Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / l2)
+      );
+      return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t) < w / 2 + rad;
+    });
+  {
+    const stepsQ = Math.ceil((top + 1.5) / 0.4);
+    const foot = z0 - 22 - stepsQ * 0.5 - 4; // pied du grand escalier
+    const trunkX = len / 2 + 26;
+    const zFar = -(o.capital ? 400 : 330);
+    for (const sx of [-1, 1])
+      addRoad([sx * trunkX, 118], [sx * trunkX, zFar], 10, 0);
+    // Bretelles : quai principal et postes secondaires.
+    addRoad([-trunkX, foot], [trunkX, foot], 9, 1);
+    for (const q of BERTHS) {
+      const f = q.z + foot;
+      const tx = q.x < 0 ? -trunkX : trunkX;
+      addRoad([q.x, f], [tx, f], 9, 1);
+      addRoad([q.x, f], [q.x, f + 6], 9, 1);
+    }
+    // Avenue de la place au monument, et boulevard qui borde la place.
+    addRoad([0, 24], [-20, -132], 11, 0);
+    addRoad([-trunkX, 20], [trunkX, 20], 9, 1);
+  }
   const blocked = (x: number, z: number, rad: number) => {
+    if (onRoad(x, z, rad)) return true;
     // Le navire, le quai et l'avant-plan de la caméra par défaut restent libres.
     if (
       Math.abs(x) < len / 2 + rad + 16 &&
@@ -1783,14 +1831,19 @@ export function cityMesh(o: CityOptions): {
       ry: number;
       dist: number;
     }[] = [];
+    // Fronts bâtis de chaque rue (z de la rue -> intervalles en x), ruelles.
+    const fronts = new Map<number, [number, number][]>();
+    const alleys: { x: number; z0: number; z1: number }[] = [];
     for (let zs = -R; zs < R; zs += S) {
       for (const front of [0, 1]) {
         const z = front === 0 ? zs + 4 + dLot / 2 : zs + S - 4 - dLot / 2;
         const ry = front === 0 ? Math.PI : 0;
+        const street = front === 0 ? zs : zs + S;
         let x = -R;
         let nextCross = -R + 40 + r() * 30;
         while (x < R) {
           if (x > nextCross) {
+            alleys.push({ x: x + 3, z0: street, z1: zs + S / 2 });
             x += 6; // ruelle
             nextCross = x + 40 + r() * 30;
             continue;
@@ -1802,9 +1855,36 @@ export function cityMesh(o: CityOptions): {
           if (dist > R || dist < 40) continue;
           if (blocked(cx, z, Math.max(w, dLot) / 2)) continue;
           out.push({ x: cx, z, w: w - 0.1, d: dLot, ry, dist });
+          const f = fronts.get(street) ?? [];
+          f.push([cx - w / 2, cx + w / 2]);
+          fronts.set(street, f);
         }
       }
     }
+    // Rues continues le long des fronts bâtis (les petits trous sont comblés).
+    const pending: Road[] = [];
+    for (const [zst, iv] of fronts) {
+      iv.sort((p, q) => p[0] - q[0]);
+      let [a0, a1] = iv[0];
+      const flush = () => {
+        if (a1 - a0 > 12)
+          pending.push({ a: [a0 - 3, zst], c: [a1 + 3, zst], w: 7, kind: 2 });
+      };
+      for (const [p0, p1] of iv.slice(1)) {
+        if (p0 - a1 < 16) a1 = Math.max(a1, p1);
+        else {
+          flush();
+          [a0, a1] = [p0, p1];
+        }
+      }
+      flush();
+    }
+    for (const al of alleys) {
+      const iv = fronts.get(al.z0);
+      if (iv && iv.some(([p0, p1]) => al.x > p0 - 12 && al.x < p1 + 12))
+        pending.push({ a: [al.x, al.z0], c: [al.x, al.z1], w: 4, kind: 3 });
+    }
+    roads.push(...pending);
     return out;
   };
   const ringWall = (
@@ -2344,6 +2424,25 @@ export function cityMesh(o: CityOptions): {
         rough: 0.15,
         emit: o.night ? 1.4 : 0.25,
       };
+      // Rues circulaires entre les anneaux de tours.
+      for (let ring = 1; ring <= 5; ring++) {
+        const rr = 40 + ring * 55 + 27;
+        const n = 36;
+        for (let k = 0; k < n; k++) {
+          const a0 = (k / n) * Math.PI * 2;
+          const a1 = ((k + 1) / n) * Math.PI * 2;
+          const p0: [number, number] = [
+            cx + Math.cos(a0) * rr,
+            cz + Math.sin(a0) * rr,
+          ];
+          const p1: [number, number] = [
+            cx + Math.cos(a1) * rr,
+            cz + Math.sin(a1) * rr,
+          ];
+          if (p0[1] > 0 || p1[1] > 0 || Math.hypot(p0[0], p0[1]) > R) continue;
+          addRoad(p0, p1, 7, 2);
+        }
+      }
       for (let ring = 1; ring <= 5; ring++) {
         const rad = 40 + ring * 55;
         const n = Math.round((rad * Math.PI * 2) / 15);
@@ -2513,6 +2612,64 @@ export function cityMesh(o: CityOptions): {
       yaw: r() * 6.28,
       seed: seed++,
     });
+  // Chaussées : pavés sur les grands axes et les bretelles (avec bordures),
+  // terre battue pour les rues et ruelles. Hauteurs décalées par catégorie
+  // pour que les carrefours ne scintillent pas.
+  const sand = linear('#a88a64');
+  const paved: Mat = {
+    p: P.BRICK,
+    color: [sand[0] * 1.05, sand[1] * 1.0, sand[2] * 0.95],
+    metal: 0,
+    rough: 0.95,
+  };
+  const dirt: Mat = {
+    p: P.PLAIN,
+    color: [sand[0] * 0.8, sand[1] * 0.72, sand[2] * 0.66],
+    metal: 0,
+    rough: 1,
+  };
+  const curb: Mat = {
+    p: P.ROCK,
+    color: linear('#8a7a64'),
+    metal: 0,
+    rough: 0.95,
+  };
+  for (const rd of roads) {
+    const dx = rd.c[0] - rd.a[0];
+    const dz = rd.c[1] - rd.a[1];
+    const L = Math.hypot(dx, dz);
+    if (L < 1) continue;
+    const ang = -Math.atan2(dz, dx);
+    const cx = (rd.a[0] + rd.c[0]) / 2;
+    const cz = (rd.a[1] + rd.c[1]) / 2;
+    const y = ground - 0.04 + [0.1, 0.12, 0.07, 0.05][rd.kind];
+    b.push(chain(translation(cx, y - 0.1, cz), rotationY(ang)));
+    b.box(L + (rd.kind < 2 ? 0 : 1), 0.1, rd.w, rd.kind < 2 ? paved : dirt);
+    if (rd.kind < 2)
+      for (const sz of [-1, 1]) {
+        b.push(translation(0, 0, (sz * rd.w) / 2));
+        b.box(L, 0.22, 0.45, curb);
+        b.pop();
+      }
+    b.pop();
+  }
+  // Passants et charrettes à bras le long des grands axes.
+  for (const rd of roads.filter((q) => q.kind < 2))
+    for (let k = 0; k < 2; k++) {
+      const t0 = r() * 0.6;
+      const t1 = Math.min(1, t0 + 0.2 + r() * 0.3);
+      const side = (r() < 0.5 ? -1 : 1) * rd.w * 0.3;
+      const nx = -(rd.c[1] - rd.a[1]);
+      const nz = rd.c[0] - rd.a[0];
+      const nl = Math.hypot(nx, nz) || 1;
+      const p = (t: number): Vec3 => [
+        rd.a[0] + (rd.c[0] - rd.a[0]) * t + (nx / nl) * side,
+        ground,
+        rd.a[1] + (rd.c[1] - rd.a[1]) * t + (nz / nl) * side,
+      ];
+      if (r() < 0.5) walk(p(t0), p(t1));
+      else walk(p(t1), p(t0));
+    }
   return { city: b.build(), moor: m.build(), crowd };
 }
 
