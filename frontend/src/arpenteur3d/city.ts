@@ -52,6 +52,17 @@ interface CityStyle {
   domeMetal: boolean;
   awnings: string[];
   roof: 'terrasse' | 'domes' | 'pignons' | 'usine';
+  /** Plan de la ville et type de bâtiments. */
+  layout:
+    | 'trame'
+    | 'colline'
+    | 'remparts'
+    | 'pilotis'
+    | 'huttes'
+    | 'monolithes'
+    | 'cratere'
+    | 'industriel'
+    | 'jardins';
   tower: 'minaret' | 'beffroi' | 'cheminee' | 'phare' | 'cristal';
   monument:
     | 'dome'
@@ -71,6 +82,7 @@ interface CityStyle {
 const STYLES: Record<string, CityStyle> = {
   // Cité blanche du nord, coupoles bleues et minarets.
   ZENIT: {
+    layout: 'colline',
     walls: ['#f0ece2', '#e8e2d4', '#f4f0e8', '#dcd6c8'],
     dome: '#3a6aa8',
     domeMetal: false,
@@ -83,6 +95,7 @@ const STYLES: Record<string, CityStyle> = {
   },
   // Ville du sel : blocs blanc-gris, flèches de cristal.
   FREMIS: {
+    layout: 'monolithes',
     walls: ['#e4e0d8', '#d4d0c8', '#c8c4bc', '#ece8e0'],
     dome: '#a8c8d8',
     domeMetal: false,
@@ -95,6 +108,7 @@ const STYLES: Record<string, CityStyle> = {
   },
   // Port de pisé, dômes de cuivre (ville de référence).
   DARRAKIS: {
+    layout: 'trame',
     walls: ['#c9a27a', '#d8b48a', '#b88a62', '#e0c49c', '#a87a56', '#cfae8c'],
     dome: '#a8683a',
     domeMetal: true,
@@ -107,6 +121,7 @@ const STYLES: Record<string, CityStyle> = {
   },
   // Capitale de pierre rouge : ziggourat royale, beffrois, plus haute.
   RAKDOS: {
+    layout: 'remparts',
     walls: ['#a85a3a', '#b8684a', '#984a2e', '#c87a5a', '#8a4a32'],
     dome: '#c9a227',
     domeMetal: true,
@@ -119,6 +134,7 @@ const STYLES: Record<string, CityStyle> = {
   },
   // Ville de bois et d'ardoise, toits à pignons, phare d'atterrissage.
   FARDEL: {
+    layout: 'pilotis',
     walls: ['#8a6a4a', '#7a5a3a', '#9a7a5a', '#6a4a30'],
     dome: '#3a3a44',
     domeMetal: false,
@@ -131,6 +147,7 @@ const STYLES: Record<string, CityStyle> = {
   },
   // Ville d'os blanchi : colosse de pierre, arène.
   KARTOUM: {
+    layout: 'huttes',
     walls: ['#e4d8c0', '#d8cab0', '#cabca0', '#efe4cc'],
     dome: '#8a6a4a',
     domeMetal: false,
@@ -143,6 +160,7 @@ const STYLES: Record<string, CityStyle> = {
   },
   // Cité violette des cristaux.
   DELROSIS: {
+    layout: 'cratere',
     walls: ['#7a6a8a', '#8a7a9a', '#6a5a7a', '#9a8aa8'],
     dome: '#b07ad8',
     domeMetal: false,
@@ -155,6 +173,7 @@ const STYLES: Record<string, CityStyle> = {
   },
   // Ville-forge : briques sombres, cheminées d'usine, engrenage géant.
   GARKAL: {
+    layout: 'industriel',
     walls: ['#5a4038', '#6a4a40', '#4a3630', '#7a5a4a'],
     dome: '#4a4440',
     domeMetal: true,
@@ -167,6 +186,7 @@ const STYLES: Record<string, CityStyle> = {
   },
   // Cité-jardin du sud : céramiques vertes, temple, palmeraies.
   'CITE-SUD': {
+    layout: 'jardins',
     walls: ['#e0d0a8', '#d8c498', '#e8dcb8', '#cab88a'],
     dome: '#3a8a6a',
     domeMetal: false,
@@ -190,6 +210,11 @@ function styleOf(id: string): CityStyle {
 
 /** Hauteur du quai : le pont du navire amarré arrive à son niveau. */
 export const DOCK_TOP = 0;
+
+const smoothstep01 = (t: number) => {
+  const u = Math.min(1, Math.max(0, t));
+  return u * u * (3 - 2 * u);
+};
 
 function rng(seed: string) {
   let h = 2166136261;
@@ -368,7 +393,7 @@ export function cityMesh(o: CityOptions): {
     }
     // Entrepôt au fond du quai.
     b.push(translation(0, top, z0 - depth - 7));
-    b.box(len * 0.7, 9, 12, mat('#b08a64'));
+    b.box(len * 0.7, 9, 12, mat(st.walls[0]));
     b.pop();
     // Toit en berceau (voûte de cuivre) sur toute la longueur.
     b.push(
@@ -403,10 +428,11 @@ export function cityMesh(o: CityOptions): {
     h: number,
     ry: number,
     near: boolean,
-    low = false
+    low = false,
+    y0 = ground
   ) => {
     const c = adobe[Math.floor(r() * adobe.length)];
-    b.push(chain(translation(x, ground, z), rotationY(ry)));
+    b.push(chain(translation(x, y0, z), rotationY(ry)));
     b.box(w, h, d, mat(c));
     // Acrotère et terrasse.
     b.push(translation(0, h, 0));
@@ -691,10 +717,11 @@ export function cityMesh(o: CityOptions): {
     kind: CityStyle['monument'],
     x: number,
     z: number,
-    k: number
+    k: number,
+    y0 = ground
   ) => {
     const sm = mat(adobe[0]);
-    b.push(translation(x, ground, z));
+    b.push(translation(x, y0, z));
     switch (kind) {
       case 'dome': {
         const big = 16 * k;
@@ -992,50 +1019,6 @@ export function cityMesh(o: CityOptions): {
     if (Math.abs(x) < 150 + rad && z > 0 && z - rad < 150) return true;
     return false;
   };
-  // Îlots alignés sur une trame de rues, plus serrés et plus hauts près du port.
-  const R = o.capital ? 420 : 340;
-  const step = 17;
-  for (let gx = -R; gx <= R; gx += step)
-    for (let gz = -R; gz <= R; gz += step) {
-      const dist = Math.hypot(gx, gz);
-      if (dist < 40 || dist > R) continue;
-      if (r() > 0.78 - dist / (R * 2.2)) continue;
-      const w = 8 + r() * 7;
-      const d = 8 + r() * 7;
-      const x = gx + (r() - 0.5) * 3;
-      const z = gz + (r() - 0.5) * 3;
-      if (blocked(x, z, Math.max(w, d) / 2)) continue;
-      const h =
-        4 +
-        r() *
-          (o.capital ? 20 : 13) *
-          st.height *
-          Math.max(0.25, 1.2 - dist / R);
-      // Dans le couloir de la caméra, maisons basses : elle passe au-dessus.
-      const low = z > 0 && z - Math.max(w, d) / 2 < 150;
-      house(
-        x,
-        z,
-        w,
-        d,
-        low ? Math.min(h, 6) : h,
-        (r() - 0.5) * 0.06,
-        dist < 190,
-        low
-      );
-    }
-  const towers = o.capital ? 9 : 5;
-  for (let k = 0, placed = 0; k < 60 && placed < towers; k++) {
-    const a = r() * Math.PI * 2;
-    const dist = 80 + r() * 300;
-    const x = Math.cos(a) * dist;
-    const z = Math.sin(a) * dist;
-    if (blocked(x, z, 4) || (z > 0 && z < 160)) continue;
-    tower(x, z, 18 + r() * 16);
-    placed++;
-  }
-  // Monument de la ville, visible derrière le quai.
-  monument(st.monument, -20, -150, o.capital ? 1.6 : 1);
   // Place du marché devant le quai : étals, palmiers, fontaine.
   const palm = (x: number, z: number) => {
     const h = 7 + r() * 5;
@@ -1065,7 +1048,7 @@ export function cityMesh(o: CityOptions): {
   };
   // Dallage de la place et du boulevard du port.
   b.push(translation(0, ground - 0.02, 82));
-  b.box(300, 0.12, 136, mat('#b8996f', P.ROCK, 0.95));
+  b.box(300, 0.12, 136, mat(st.walls[st.walls.length - 1], P.ROCK, 0.95));
   b.pop();
   b.push(translation(0, ground - 0.02, o.halfBeam + 12));
   b.box(720, 0.1, 14, mat('#a88a64', P.ROCK, 0.95));
@@ -1114,6 +1097,636 @@ export function cityMesh(o: CityOptions): {
   b.pop();
   b.pop();
   b.pop();
+
+  // --- Le tissu urbain : un plan et des bâtiments propres à chaque ville ---------------
+  const water = mat('#1f4a5a', P.PLAIN, 0.06, 0.2);
+  const wood = mat('#5a3e28', P.WOOD, 0.85);
+  const R = o.capital ? 420 : 340;
+  /** Emplacements libres sur une trame irrégulière (x, z, distance au port). */
+  const spots = (step: number, keep: (dist: number) => number, rad: number) => {
+    const out: [number, number, number][] = [];
+    for (let gx = -R; gx <= R; gx += step)
+      for (let gz = -R; gz <= R; gz += step) {
+        const x = gx + (r() - 0.5) * step * 0.5;
+        const z = gz + (r() - 0.5) * step * 0.5;
+        const dist = Math.hypot(x, z);
+        if (dist < 40 || dist > R || r() > keep(dist)) continue;
+        if (blocked(x, z, rad)) continue;
+        out.push([x, z, dist]);
+      }
+    return out;
+  };
+  const corridor = (z: number, rad: number) => z > 0 && z - rad < 150;
+  const ringWall = (
+    cx: number,
+    cz: number,
+    rad: number,
+    h: number,
+    a0: number,
+    a1: number,
+    m: Mat
+  ) => {
+    const n = Math.max(8, Math.round(((a1 - a0) * rad) / 6));
+    for (let k = 0; k < n; k++) {
+      const a = a0 + ((k + 0.5) / n) * (a1 - a0);
+      const x = cx + Math.cos(a) * rad;
+      const z = cz + Math.sin(a) * rad;
+      if (blocked(x, z, 2) || corridor(z, 2)) continue;
+      b.push(chain(translation(x, ground, z), rotationY(-a)));
+      b.box(3, h, ((a1 - a0) * rad) / n + 0.2, m);
+      // Créneaux.
+      b.push(translation(0, h, 0));
+      b.box(3.4, 1.2, 1.4, m);
+      b.pop();
+      b.pop();
+      if (k % 6 === 0) {
+        b.push(translation(x, ground, z));
+        b.cylinder(4, h + 4, 12, m);
+        b.push(translation(0, h + 4, 0));
+        b.lathe(
+          [
+            [4.6, 0],
+            [0, 5],
+          ],
+          12,
+          copper
+        );
+        b.pop();
+        b.pop();
+      }
+    }
+  };
+  const hut = (x: number, z: number, rad: number, h: number, y0 = ground) => {
+    const c = adobe[Math.floor(r() * adobe.length)];
+    b.push(chain(translation(x, y0, z), rotationY(r() * 6.28)));
+    b.lathe(
+      [
+        [0, -0.5],
+        [rad, -0.5],
+        [rad * 1.02, h * 0.3],
+        [rad * 0.82, h * 0.72],
+        [rad * 0.38, h * 0.96],
+        [0.3, h],
+        [0, h + 0.4],
+      ],
+      14,
+      mat(c)
+    );
+    b.push(translation(0, 0, rad * 0.98));
+    b.box(1.1, 1.9, 0.3, dark);
+    b.pop();
+    if (r() < 0.5) {
+      b.push(translation(0, h * 0.5, -rad * 0.92));
+      b.box(0.6, 0.6, 0.2, win(o.night));
+      b.pop();
+    }
+    b.pop();
+  };
+  const towerHouse = (
+    x: number,
+    z: number,
+    w: number,
+    d: number,
+    h: number
+  ) => {
+    const c = adobe[Math.floor(r() * adobe.length)];
+    const trim = mat('#f0e8d8');
+    b.push(chain(translation(x, ground, z), rotationY((r() - 0.5) * 0.1)));
+    b.box(w, h, d, mat(c));
+    for (let y = 4; y < h - 1; y += 4) {
+      b.push(translation(0, y, 0));
+      b.box(w + 0.25, 0.35, d + 0.25, trim);
+      b.pop();
+      for (const sz of [1, -1])
+        for (let k = 0; k < Math.max(1, Math.floor(w / 2.4)); k++) {
+          const px = (k + 0.5) * (w / Math.max(1, Math.floor(w / 2.4))) - w / 2;
+          b.push(translation(px, y + 1.6, (sz * d) / 2 + sz * 0.06));
+          b.box(0.9, 1.5, 0.1, win(o.night));
+          b.pop();
+          b.push(translation(px, y + 2.5, (sz * d) / 2 + sz * 0.08));
+          b.box(1.2, 0.3, 0.1, trim);
+          b.pop();
+        }
+    }
+    b.push(translation(0, h, 0));
+    for (let k = 0; k < 4; k++)
+      for (const t of [-0.35, 0, 0.35]) {
+        const px = k < 2 ? t * w : (k === 2 ? 0.5 : -0.5) * w;
+        const pz = k < 2 ? (k === 0 ? 0.5 : -0.5) * d : t * d;
+        b.push(translation(px, 0, pz));
+        b.box(0.8, 1.2, 0.8, trim);
+        b.pop();
+      }
+    b.pop();
+    b.pop();
+  };
+  const stiltHouse = (
+    x: number,
+    z: number,
+    w: number,
+    d: number,
+    s: number
+  ) => {
+    for (const [sx, sz] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ]) {
+      b.push(translation(x + (sx * w) / 2.3, ground - 1, z + (sz * d) / 2.3));
+      b.cylinder(0.35, s + 1, 6, wood);
+      b.pop();
+      b.tube(
+        [
+          [x + (sx * w) / 2.3, ground + s * 0.3, z + (sz * d) / 2.3],
+          [x, ground + s * 0.9, z + (sz * d) / 2.3],
+        ],
+        0.15,
+        4,
+        wood
+      );
+    }
+    b.push(translation(x, ground + s - 0.3, z));
+    b.box(w + 3, 0.4, d + 3, plank);
+    b.pop();
+    house(x, z, w, d, 4 + r() * 3, 0, true, false, ground + s);
+  };
+  const windmill = (x: number, z: number, h: number) => {
+    b.push(translation(x, ground, z));
+    b.lathe(
+      [
+        [3, 0],
+        [2, h],
+        [0, h + 0.4],
+      ],
+      8,
+      wood
+    );
+    b.push(chain(translation(0, h - 1, 2.4), rotationZ(r())));
+    for (let k = 0; k < 4; k++) {
+      b.push(rotationZ((k / 4) * Math.PI * 2));
+      b.push(translation(0, 5, 0));
+      b.box(1.8, 9, 0.12, mat('#d8c8a8', P.SAIL));
+      b.pop();
+      b.pop();
+    }
+    b.pop();
+    b.pop();
+  };
+  const mound = (
+    x: number,
+    z: number,
+    sx: number,
+    sy: number,
+    sz: number,
+    m: Mat
+  ) => {
+    const k0 = r() * 10;
+    b.grid(
+      20,
+      10,
+      (u, v) => {
+        const a = u * Math.PI * 2;
+        const ph = v * Math.PI * 0.5;
+        const n =
+          1 +
+          0.12 * Math.sin(a * 3 + k0) +
+          0.06 * Math.sin(a * 7 + ph * 4 + k0);
+        return [
+          x + Math.cos(a) * Math.cos(ph) * sx * n,
+          ground - 1 + Math.sin(ph) * sy,
+          z + Math.sin(a) * Math.cos(ph) * sz * n,
+        ];
+      },
+      m,
+      { flip: true }
+    );
+    // Fenêtres et portes creusées dans la masse.
+    const n = Math.round(sx / 3);
+    for (let k = 0; k < n; k++) {
+      const a = r() * Math.PI * 2;
+      const ph = 0.15 + r() * 0.75;
+      const px = x + Math.cos(a) * Math.cos(ph) * sx * 0.99;
+      const py = ground - 1 + Math.sin(ph) * sy;
+      const pz = z + Math.sin(a) * Math.cos(ph) * sz * 0.99;
+      b.push(chain(translation(px, py, pz), rotationY(-a + Math.PI / 2)));
+      b.box(1.2, ph < 0.3 ? 2.4 : 1.4, 0.4, ph < 0.3 ? dark : win(o.night));
+      b.pop();
+    }
+  };
+  const hall = (x: number, z: number, w: number, d: number, h: number) => {
+    const brick = mat(adobe[Math.floor(r() * adobe.length)]);
+    b.push(translation(x, ground, z));
+    b.box(w, h, d, brick);
+    const n = Math.max(2, Math.round(w / 6));
+    for (let k = 0; k < n; k++) {
+      b.push(translation(-w / 2 + (k + 0.5) * (w / n), h, 0));
+      b.grid(
+        1,
+        1,
+        (u, v) => [(u - 0.5) * (w / n), u * 3, (v - 0.5) * d],
+        copper,
+        {}
+      );
+      b.push(translation(w / n / 2 - 0.05, 0, 0));
+      b.box(0.1, 3, d, win(true));
+      b.pop();
+      b.pop();
+    }
+    for (let k = 0; k < Math.floor(w / 5); k++) {
+      b.push(translation(-w / 2 + 2.5 + k * 5, h * 0.55, d / 2 + 0.06));
+      b.box(2.4, h * 0.45, 0.1, win(o.night));
+      b.pop();
+    }
+    b.pop();
+  };
+  const courtyard = (x: number, z: number, w: number, h: number) => {
+    const c = mat(adobe[Math.floor(r() * adobe.length)]);
+    const t = 4;
+    b.push(
+      chain(
+        translation(x, ground, z),
+        rotationY(Math.round(r() * 3) * (Math.PI / 2))
+      )
+    );
+    for (const [px, pz, bw, bd] of [
+      [0, (w - t) / 2, w, t],
+      [0, -(w - t) / 2, w, t],
+      [(w - t) / 2, 0, t, w - 2 * t],
+      [-(w - t) / 2, 0, t, w - 2 * t],
+    ]) {
+      b.push(translation(px, 0, pz));
+      b.box(bw, h, bd, c);
+      b.pop();
+    }
+    // Arcades intérieures et bassin.
+    b.push(translation(0, -0.9, 0));
+    b.box(w * 0.35, 1, w * 0.35, water);
+    b.pop();
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2;
+      b.push(
+        translation(
+          Math.cos(a) * (w / 2 - t - 0.6),
+          0,
+          Math.sin(a) * (w / 2 - t - 0.6)
+        )
+      );
+      b.cylinder(0.3, h * 0.7, 6, mat('#efe4cc'));
+      b.pop();
+    }
+    b.pop();
+    palm(x + 1, z - 1);
+  };
+
+  switch (st.layout) {
+    case 'trame':
+    case 'industriel': {
+      // Trame de rues ; ville-forge : halles, tuyauteries et passerelles.
+      const pts = spots(
+        st.layout === 'industriel' ? 30 : 17,
+        (d) => 0.78 - d / (R * 2.2),
+        8
+      );
+      const tops: Vec3[] = [];
+      for (const [x, z, dist] of pts) {
+        if (st.layout === 'industriel' && !corridor(z, 16) && r() < 0.6) {
+          const w = 22 + r() * 18;
+          const h = 10 + r() * 10;
+          if (blocked(x, z, w / 2)) continue;
+          hall(x, z, w, 14 + r() * 8, h);
+          tops.push([x, ground + h + 2, z]);
+          continue;
+        }
+        const w = 8 + r() * 7;
+        const d = 8 + r() * 7;
+        const h = 4 + r() * 13 * st.height * Math.max(0.25, 1.2 - dist / R);
+        const low = corridor(z, Math.max(w, d) / 2);
+        house(
+          x,
+          z,
+          w,
+          d,
+          low ? Math.min(h, 6) : h,
+          (r() - 0.5) * 0.06,
+          dist < 190,
+          low
+        );
+      }
+      if (st.layout === 'industriel') {
+        // Conduites entre les halles, sur pylônes.
+        for (let k = 0; k + 1 < tops.length; k++) {
+          const a = tops[k];
+          const c = tops[k + 1];
+          if (Math.hypot(a[0] - c[0], a[2] - c[2]) > 80) continue;
+          const mid: Vec3 = [
+            (a[0] + c[0]) / 2,
+            Math.max(a[1], c[1]) + 4,
+            (a[2] + c[2]) / 2,
+          ];
+          b.tube([a, mid, c], 0.9, 8, mat('#5a4a3a', P.RUST, 0.7, 0.5));
+          b.push(translation(mid[0], ground, mid[2]));
+          b.cylinder(0.4, mid[1] - ground, 6, iron);
+          b.pop();
+        }
+      } else
+        ringWall(
+          0,
+          -60,
+          R * 0.92,
+          9,
+          Math.PI * 1.05,
+          Math.PI * 1.95,
+          mat(adobe[2 % adobe.length])
+        );
+      break;
+    }
+    case 'colline': {
+      // Ville étagée sur une colline derrière le port, monument au sommet.
+      const hc: [number, number] = [-20, -330];
+      const H = 70;
+      const mask = (x: number, z: number) => {
+        // Nulle près du port, la colline monte derrière.
+        let m = smoothstep01(-(z + 90) / 60);
+        for (const lane of LANES)
+          m *= smoothstep01((Math.abs(z - lane) - 16) / 22);
+        for (const q of BERTHS)
+          if (Math.abs(x - q.x) < len / 2 + 14)
+            m *= smoothstep01((Math.abs(z - q.z) - 18) / 20);
+        return m;
+      };
+      const hill = (x: number, z: number) => {
+        const e =
+          1 - ((x - hc[0]) ** 2 / 330 ** 2 + (z - hc[1]) ** 2 / 240 ** 2);
+        return e <= 0 ? 0 : H * Math.pow(e, 0.85) * mask(x, z);
+      };
+      b.grid(
+        90,
+        60,
+        (u, v) => {
+          const x = hc[0] + (u - 0.5) * 680;
+          const z = hc[1] + (v - 0.5) * 500;
+          return [x, ground - 0.6 + hill(x, z), z];
+        },
+        mat(adobe[3 % adobe.length], P.ROCK, 0.95),
+        {}
+      );
+      for (const [x, z] of spots(12, () => 0.85, 5)) {
+        const y = hill(x, z);
+        if (y < 3 && (z < -80 || corridor(z, 6))) continue;
+        const w = 6 + r() * 6;
+        const d = 6 + r() * 6;
+        house(
+          x,
+          z,
+          w,
+          d,
+          3.5 + r() * 4,
+          (r() - 0.5) * 0.15,
+          Math.hypot(x, z) < 220,
+          corridor(z, 6),
+          ground - 1 + y
+        );
+      }
+      monument(st.monument, hc[0], hc[1], 0.8, ground + hill(hc[0], hc[1]) - 1);
+      break;
+    }
+    case 'remparts': {
+      // Capitale fortifiée : enceinte, maisons-tours serrées, citadelle.
+      for (const [x, z, dist] of spots(13, (d) => 0.95 - d / (R * 3), 4)) {
+        if (corridor(z, 5)) {
+          house(x, z, 7, 7, 5, 0, dist < 200, true);
+          continue;
+        }
+        towerHouse(
+          x,
+          z,
+          5 + r() * 3,
+          5 + r() * 3,
+          (12 + r() * 20) * Math.max(0.45, 1.2 - dist / R)
+        );
+      }
+      ringWall(
+        0,
+        -40,
+        R * 0.95,
+        14,
+        Math.PI * 1.02,
+        Math.PI * 1.98,
+        mat(adobe[2 % adobe.length])
+      );
+      ringWall(-20, -150, 70, 18, 0, Math.PI * 2, mat(adobe[0]));
+      break;
+    }
+    case 'pilotis': {
+      // Village de bois sur pilotis, passerelles et moulins.
+      const pts = spots(22, (d) => 0.7 - d / (R * 2.5), 7);
+      const raised: Vec3[] = [];
+      for (const [x, z] of pts) {
+        if (corridor(z, 7)) {
+          house(x, z, 7, 6, 4, (r() - 0.5) * 0.4, true, true);
+          continue;
+        }
+        const sH = 4 + r() * 5;
+        stiltHouse(x, z, 6 + r() * 5, 6 + r() * 4, sH);
+        raised.push([x, ground + sH - 0.1, z]);
+      }
+      for (let k = 0; k + 1 < raised.length; k++) {
+        const a = raised[k];
+        const c = raised[k + 1];
+        const L = Math.hypot(a[0] - c[0], a[2] - c[2]);
+        if (L > 40) continue;
+        b.push(
+          chain(
+            translation(
+              (a[0] + c[0]) / 2,
+              (a[1] + c[1]) / 2,
+              (a[2] + c[2]) / 2
+            ),
+            rotationY(-Math.atan2(c[2] - a[2], c[0] - a[0]))
+          )
+        );
+        b.box(L, 0.25, 1.8, plank);
+        b.pop();
+      }
+      for (let k = 0, n = 0; k < 40 && n < 6; k++) {
+        const x = (r() - 0.5) * 2 * R * 0.8;
+        const z = -60 - r() * R * 0.8;
+        if (blocked(x, z, 6)) continue;
+        windmill(x, z, 14 + r() * 6);
+        n++;
+      }
+      break;
+    }
+    case 'huttes': {
+      // Enclos de huttes rondes, palissades d'ossements.
+      const bone = mat('#e8dcc4', P.PLAIN, 0.8);
+      for (const [x, z] of spots(34, (d) => 0.85 - d / (R * 2.5), 14)) {
+        const n = 4 + Math.floor(r() * 4);
+        const rad = 9 + r() * 4;
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2 + r() * 0.3;
+          const hx = x + Math.cos(a) * rad * 0.65;
+          const hz = z + Math.sin(a) * rad * 0.65;
+          const big = corridor(hz, 3) ? 0.6 : 1;
+          hut(hx, hz, (2.4 + r() * 1.6) * big, (4 + r() * 3) * big);
+        }
+        if (!corridor(z, rad)) {
+          b.push(translation(x, ground, z));
+          b.lathe(
+            [
+              [rad + 2, 0],
+              [rad + 2, 1.6],
+              [rad + 1.4, 1.6],
+              [rad + 1.4, 0],
+            ],
+            20,
+            mat(adobe[2 % adobe.length])
+          );
+          b.pop();
+        }
+        // Arche d'entrée en défenses.
+        b.push(
+          chain(
+            translation(x, ground, z),
+            rotationY(r() * 6.28),
+            translation(0, 0, rad + 1.7)
+          )
+        );
+        for (const sx of [-1, 1])
+          b.tube(
+            [
+              [sx * 1.8, 0, 0],
+              [sx * 2.2, 3, 0],
+              [sx * 1.2, 5.5, 0],
+              [sx * 0.1, 6.2, 0],
+            ],
+            0.35,
+            6,
+            bone
+          );
+        b.pop();
+      }
+      break;
+    }
+    case 'monolithes': {
+      // Cité creusée dans d'énormes blocs de sel.
+      const salt = mat(adobe[0], P.ROCK, 0.7);
+      for (const [x, z, dist] of spots(46, (d) => 0.8 - d / (R * 2.2), 22)) {
+        if (corridor(z, 20)) {
+          house(x, z, 8, 8, 4, 0, true, true);
+          continue;
+        }
+        const sx = 12 + r() * 16;
+        mound(
+          x,
+          z,
+          sx,
+          (14 + r() * 26) * Math.max(0.5, 1.2 - dist / R),
+          sx * (0.7 + r() * 0.4),
+          salt
+        );
+      }
+      break;
+    }
+    case 'cratere': {
+      // Anneaux concentriques de tours rondes coiffées de cristal, rues rayonnantes.
+      const cx = -20;
+      const cz = -150;
+      const cm: Mat = {
+        p: P.GLASS,
+        color: linear(st.dome),
+        metal: 0,
+        rough: 0.15,
+        emit: o.night ? 1.4 : 0.25,
+      };
+      for (let ring = 1; ring <= 5; ring++) {
+        const rad = 40 + ring * 55;
+        const n = Math.round((rad * Math.PI * 2) / 15);
+        for (let k = 0; k < n; k++) {
+          if (k % 7 === 0) continue; // rue rayonnante
+          const a = (k / n) * Math.PI * 2;
+          const x = cx + Math.cos(a) * rad;
+          const z = cz + Math.sin(a) * rad;
+          if (blocked(x, z, 5)) continue;
+          const low = corridor(z, 5);
+          const h = low ? 4 : (6 + r() * 10) * (1.3 - ring * 0.12);
+          const rr = 3 + r() * 2;
+          b.push(translation(x, ground, z));
+          b.cylinder(rr, h, 12, mat(adobe[ring % adobe.length]));
+          b.push(translation(0, h, 0));
+          b.cylinder(rr + 0.4, 0.6, 12, mat(adobe[0]));
+          if (!low)
+            b.lathe(
+              [
+                [rr * 0.6, 0.6],
+                [0, 0.6 + rr * 1.6],
+              ],
+              6,
+              cm
+            );
+          b.pop();
+          for (let w = 0; w < 3; w++) {
+            const wa = r() * Math.PI * 2;
+            b.push(
+              chain(
+                translation(
+                  Math.cos(wa) * (rr + 0.05),
+                  h * (0.4 + r() * 0.4),
+                  Math.sin(wa) * (rr + 0.05)
+                ),
+                rotationY(-wa + Math.PI / 2)
+              )
+            );
+            b.box(0.8, 1.2, 0.1, win(o.night));
+            b.pop();
+          }
+          b.pop();
+        }
+      }
+      break;
+    }
+    case 'jardins': {
+      // Maisons à patio, canaux et palmeraies.
+      for (const [x, z, dist] of spots(26, (d) => 0.75 - d / (R * 2.5), 11)) {
+        if (corridor(z, 11)) {
+          palm(x, z);
+          continue;
+        }
+        courtyard(
+          x,
+          z,
+          16 + r() * 6,
+          4 + r() * 4 * Math.max(0.5, 1.2 - dist / R)
+        );
+      }
+      for (const cz of [-170, -250, 200]) {
+        b.push(translation(0, ground - 0.85, cz));
+        b.box(2 * R, 0.5, 7, water);
+        b.pop();
+        for (const sz of [-1, 1]) {
+          b.push(translation(0, ground - 0.5, cz + sz * 4));
+          b.box(2 * R, 0.9, 1, stone);
+          b.pop();
+        }
+        for (let x = -R; x < R; x += 22)
+          palm(x + r() * 8, cz + (r() < 0.5 ? -7 : 7));
+      }
+      break;
+    }
+  }
+  if (st.layout !== 'colline')
+    monument(st.monument, -20, -150, o.capital ? 1.6 : 1);
+  const towers = st.layout === 'industriel' ? 12 : o.capital ? 9 : 5;
+  for (let k = 0, placed = 0; k < 80 && placed < towers; k++) {
+    const a = r() * Math.PI * 2;
+    const dist = 80 + r() * 300;
+    const x = Math.cos(a) * dist;
+    const z = Math.sin(a) * dist;
+    if (blocked(x, z, 4) || (z > 0 && z < 160)) continue;
+    tower(x, z, 18 + r() * 16);
+    placed++;
+  }
   // --- Les habitants : dockers, passants, marchands ------------------------------------
   const crowd: CrewMember[] = [];
   let seed = 100;
