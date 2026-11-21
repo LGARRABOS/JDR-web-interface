@@ -244,7 +244,7 @@ export function cityMesh(o: CityOptions): {
   const adobe = st.walls;
   const mat = (
     hex: string,
-    p: number = P.PLAIN,
+    p: number = P.PLASTER,
     rough = 0.9,
     metal = 0
   ): Mat => ({
@@ -420,6 +420,8 @@ export function cityMesh(o: CityOptions): {
 
   // --- La ville ---------------------------------------------------------------------
   const ground = -1;
+  const wood = mat('#5a3e28', P.WOOD, 0.85);
+  const iron2 = mat('#3a3430', P.IRON, 0.6, 0.6);
   const house = (
     x: number,
     z: number,
@@ -432,8 +434,45 @@ export function cityMesh(o: CityOptions): {
     y0 = ground
   ) => {
     const c = adobe[Math.floor(r() * adobe.length)];
+    const wc = linear(c);
+    const tone = (k: number): Mat => ({
+      p: P.PLASTER,
+      color: [
+        Math.min(1, wc[0] * k),
+        Math.min(1, wc[1] * k),
+        Math.min(1, wc[2] * k),
+      ],
+      metal: 0,
+      rough: 0.9,
+    });
+    const trim = tone(1.25);
     b.push(chain(translation(x, y0, z), rotationY(ry)));
     b.box(w, h, d, mat(c));
+    // Soubassement plus sombre.
+    b.box(w + 0.16, 0.9, d + 0.16, tone(0.72));
+    /** Boîte posée sur une face : `along` le long du mur, `out` en avant. */
+    const onFace = (
+      nx: number,
+      nz: number,
+      along: number,
+      y: number,
+      out: number,
+      sw: number,
+      sh: number,
+      sd: number,
+      m: Mat
+    ) => {
+      b.push(
+        translation(
+          nx !== 0 ? nx * (w / 2 + out) : along,
+          y,
+          nz !== 0 ? nz * (d / 2 + out) : along
+        )
+      );
+      b.box(nx !== 0 ? sd : sw, sh, nx !== 0 ? sw : sd, m);
+      b.pop();
+    };
+    const shutter = mat(awning[Math.floor(r() * awning.length)], P.WOOD, 0.8);
     // Acrotère et terrasse.
     b.push(translation(0, h, 0));
     b.box(w + 0.4, 0.6, d + 0.4, mat(c, P.PLAIN, 0.95));
@@ -457,7 +496,15 @@ export function cityMesh(o: CityOptions): {
     }
     // Porte en arc sur la façade.
     b.push(translation((r() - 0.5) * w * 0.5, 0, d / 2 + 0.06));
-    b.box(1.4, 2.4, 0.12, dark);
+    b.box(1.4, 2.4, 0.12, near ? mat('#5a3e28', P.WOOD, 0.8) : dark);
+    if (near) {
+      b.push(translation(0, 0, 0.05));
+      b.box(1.9, 0.3, 0.16, trim);
+      b.pop();
+      b.push(translation(0, 2.9, 0.05));
+      b.box(2.1, 0.35, 0.18, trim);
+      b.pop();
+    }
     b.push(chain(translation(0, 2.4, 0), scaling(0.7, 0.5, 0.06)));
     b.sphere(1, 8, dark, true);
     b.pop();
@@ -476,12 +523,160 @@ export function cityMesh(o: CityOptions): {
         for (let k = 0; k < n; k++) {
           if (r() < 0.25) continue;
           const t = (k + 0.5) / n - 0.5;
-          const px = nx !== 0 ? (nx * w) / 2 + nx * 0.06 : t * span;
-          const pz = nz !== 0 ? (nz * d) / 2 + nz * 0.06 : t * span;
-          b.push(translation(px, y, pz));
-          b.box(nx !== 0 ? 0.1 : 0.9, 1.3, nx !== 0 ? 0.9 : 0.1, win(o.night));
+          const along = t * span;
+          const roll = r();
+          if (f >= 1 && roll < 0.1) {
+            // Moucharabieh : loggia de bois ajouré en encorbellement.
+            onFace(nx, nz, along, y - 0.4, 0.5, 1.7, 2.1, 1.0, wood);
+            for (let k = -2; k <= 2; k++)
+              onFace(
+                nx,
+                nz,
+                along + k * 0.3,
+                y - 0.1,
+                1.02,
+                0.08,
+                1.5,
+                0.06,
+                dark
+              );
+            onFace(nx, nz, along, y + 1.7, 0.55, 2, 0.15, 1.2, wood);
+            onFace(nx, nz, along, y - 0.55, 0.45, 1.5, 0.15, 0.9, wood);
+            continue;
+          }
+          // Fenêtre en retrait : vitre, linteau, appui et piédroits en saillie.
+          onFace(nx, nz, along, y, 0.02, 0.9, 1.3, 0.06, win(o.night));
+          onFace(nx, nz, along, y + 1.3, 0.08, 1.35, 0.22, 0.2, trim);
+          onFace(nx, nz, along, y - 0.16, 0.1, 1.25, 0.16, 0.26, trim);
+          for (const s2 of [-1, 1])
+            onFace(nx, nz, along + s2 * 0.54, y, 0.07, 0.18, 1.3, 0.14, trim);
+          if (roll < 0.4)
+            for (const s2 of [-1, 1])
+              onFace(
+                nx,
+                nz,
+                along + s2 * 1.0,
+                y,
+                0.1,
+                0.48,
+                1.3,
+                0.06,
+                shutter
+              );
+          else if (f >= 1 && roll < 0.5) {
+            // Balcon à garde-corps.
+            onFace(nx, nz, along, y - 0.3, 0.6, 2.2, 0.15, 1.2, trim);
+            const ox = nx !== 0 ? nx * (w / 2 + 1.15) : 0;
+            const oz = nz !== 0 ? nz * (d / 2 + 1.15) : 0;
+            const ax = nx !== 0 ? 0 : 1;
+            const az = nx !== 0 ? 1 : 0;
+            b.tube(
+              [
+                [ox + ax * (along - 1.05), y + 0.6, oz + az * (along - 1.05)],
+                [ox + ax * (along + 1.05), y + 0.6, oz + az * (along + 1.05)],
+              ],
+              0.05,
+              4,
+              iron2
+            );
+          }
+        }
+      }
+    }
+    if (near && !low && st.roof !== 'pignons') {
+      // Gargouilles qui déversent l'eau des terrasses.
+      for (const [nx, nz, span] of [
+        [0, 1, w],
+        [1, 0, d],
+      ] as const)
+        for (let k = 0; k < 2; k++)
+          onFace(
+            nx,
+            nz,
+            (k - 0.5) * span * 0.5,
+            h - 0.45,
+            0.4,
+            0.22,
+            0.2,
+            0.8,
+            wood
+          );
+      const extra = r();
+      b.push(translation(0, h + 0.3, 0));
+      if (extra < 0.3) {
+        // Citerne sur pieds.
+        b.push(translation(-w * 0.25, 0, d * 0.2));
+        b.cylinder(0.8, 1.5, 10, iron2);
+        b.pop();
+      } else if (extra < 0.5) {
+        // Linge étendu.
+        const lx = w * 0.35;
+        b.tube(
+          [
+            [-lx, 1.6, 0],
+            [lx, 1.5, 0],
+          ],
+          0.03,
+          3,
+          dark
+        );
+        for (const sx of [-1, 1]) {
+          b.push(translation(sx * lx, 0, 0));
+          b.cylinder(0.06, 1.7, 4, wood);
           b.pop();
         }
+        for (let k = 0; k < 4; k++) {
+          b.push(translation(-lx + (k + 0.7) * ((2 * lx) / 4.4), 0.95, 0));
+          b.box(
+            0.7 + r() * 0.4,
+            0.6,
+            0.03,
+            mat(awning[Math.floor(r() * awning.length)], P.SAIL, 0.9)
+          );
+          b.pop();
+        }
+      } else if (extra < 0.65) {
+        // Treille sur la terrasse.
+        for (const [sx, sz] of [
+          [-1, -1],
+          [1, -1],
+          [-1, 1],
+          [1, 1],
+        ]) {
+          b.push(translation(sx * w * 0.3, 0, sz * d * 0.3));
+          b.cylinder(0.08, 2.4, 4, wood);
+          b.pop();
+        }
+        for (let k = 0; k < 6; k++) {
+          b.push(translation(0, 2.4, -d * 0.3 + (k * d * 0.6) / 5));
+          b.box(w * 0.66, 0.1, 0.15, wood);
+          b.pop();
+        }
+      } else if (extra < 0.85) {
+        // Édicule d'escalier.
+        b.push(translation(w * 0.28, 0, -d * 0.28));
+        b.box(2.2, 2.4, 2.2, mat(c));
+        b.push(translation(0, 0, 1.12));
+        b.box(0.8, 1.9, 0.06, dark);
+        b.pop();
+        b.pop();
+      }
+      b.pop();
+      // Escalier extérieur le long d'un pignon.
+      if (r() < 0.22 && h < 9) {
+        const steps = Math.round(h / 0.35);
+        for (let k = 0; k < steps; k++)
+          onFace(
+            1,
+            0,
+            -d / 2 + 0.8 + (k / steps) * (d - 1.8),
+            k * 0.35,
+            0.55,
+            0.45,
+            0.35,
+            1.1,
+            mat(c)
+          );
       }
     }
     // Fanion sur le toit, qui claque au vent.
@@ -563,7 +758,7 @@ export function cityMesh(o: CityOptions): {
       }
       if (r() < 0.5) {
         b.push(translation(w * 0.3, h, -d * 0.3));
-        b.cylinder(0.9, 7 + r() * 6, 10, mat('#4a2e26'));
+        b.cylinder(0.9, 7 + r() * 6, 10, mat('#4a2e26', P.BRICK));
         b.pop();
       }
       b.pop();
@@ -778,7 +973,7 @@ export function cityMesh(o: CityOptions): {
       case 'forge': {
         // Haute halle de fonderie et engrenage géant dressé.
         b.push(translation(0, 0, 0));
-        b.box(50 * k, 18 * k, 26 * k, mat('#4a3630'));
+        b.box(50 * k, 18 * k, 26 * k, mat('#4a3630', P.BRICK));
         b.pop();
         for (let i = 0; i < 4; i++) {
           b.push(translation((-18 + i * 12) * k, 18 * k, -6 * k));
@@ -790,7 +985,7 @@ export function cityMesh(o: CityOptions): {
               [0, 27 * k],
             ],
             10,
-            mat('#3a2620')
+            mat('#3a2620', P.BRICK)
           );
           b.pop();
         }
@@ -958,7 +1153,7 @@ export function cityMesh(o: CityOptions): {
           [0, h * 1.5],
         ],
         12,
-        mat('#4a2e26')
+        mat('#4a2e26', P.BRICK)
       );
       b.pop();
     } else if (st.tower === 'phare') lighthouse(x, z, h * 0.8);
@@ -1100,7 +1295,6 @@ export function cityMesh(o: CityOptions): {
 
   // --- Le tissu urbain : un plan et des bâtiments propres à chaque ville ---------------
   const water = mat('#1f4a5a', P.PLAIN, 0.06, 0.2);
-  const wood = mat('#5a3e28', P.WOOD, 0.85);
   const R = o.capital ? 420 : 340;
   /** Emplacements libres sur une trame irrégulière (x, z, distance au port). */
   const spots = (step: number, keep: (dist: number) => number, rad: number) => {
@@ -1315,7 +1509,7 @@ export function cityMesh(o: CityOptions): {
     }
   };
   const hall = (x: number, z: number, w: number, d: number, h: number) => {
-    const brick = mat(adobe[Math.floor(r() * adobe.length)]);
+    const brick = mat(adobe[Math.floor(r() * adobe.length)], P.BRICK);
     b.push(translation(x, ground, z));
     b.box(w, h, d, brick);
     const n = Math.max(2, Math.round(w / 6));

@@ -229,6 +229,35 @@ void main(){
     albedo *= .92 + .1*rip2;
     rough = .95; metal = 0.;
     k = 1.;
+  } else if (pat == 14. || pat == 15.) {
+    // Façades : coordonnées prises dans le plan du mur (projection selon la normale).
+    vec2 q = abs(N.y) > .7 ? vWorld.xz : (abs(N.x) > abs(N.z) ? vWorld.zy : vWorld.xy);
+    float mw = length(fwidth(q));
+    float vert = 1. - smoothstep(.5, .8, abs(N.y));
+    float big = fbm(q*.16 + 3.);
+    // Briques (motif 15), ou briques crues sous l'enduit écaillé (motif 14).
+    vec2 bq = q*vec2(1.1, 3.2);
+    bq.x += step(1., mod(floor(bq.y), 2.))*.5;
+    vec2 bf = fract(bq);
+    float joint = (1. - smoothstep(.0, .07, bf.x)*smoothstep(1., .93, bf.x)*smoothstep(.0, .1, bf.y)*smoothstep(1., .9, bf.y)) * detail(mw, 3.2);
+    float var = hash(floor(bq));
+    if (pat == 15.) {
+      albedo *= (.78 + .38*var) * (1. - joint*.45) * (.85 + .3*big);
+      h = (1. - joint)*.012*detail(mw, 3.2);
+    } else {
+      float stucco = fbm(q*1.8);
+      float flake = smoothstep(.64, .7, fbm(q*.32 + 9.)) * vert;
+      albedo *= .84 + .26*big + (stucco - .5)*.14*detail(mw, 1.8);
+      vec3 brick = albedo*vec3(.82, .68, .56)*(.8 + .35*var)*(1. - joint*.35);
+      albedo = mix(albedo, brick, flake);
+      h = (stucco*.004 + flake*(1. - joint)*.008)*detail(mw, 1.8) - flake*.004;
+    }
+    // Pied de mur sali par le sable, coulures sous les rebords.
+    float foot = exp(-max(vWorld.y + 1., 0.)*.55) * vert;
+    float streak = smoothstep(.55, .85, fbm(vec2(q.x*1.6, q.y*.07) + 5.)) * vert;
+    albedo *= (1. - foot*.38) * (1. - streak*.16);
+    albedo = mix(albedo, uSandB*.8, foot*.25);
+    rough = .95;
   } else if (pat == 9.) {
     float band = fract(vWorld.y*.045 + fbm(vWorld.xz*.006)*.8);
     float erosion = fbm(vec2(vWorld.x*.03 + vWorld.z*.02, vWorld.y*.15));

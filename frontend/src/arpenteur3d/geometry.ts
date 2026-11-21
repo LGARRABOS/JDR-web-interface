@@ -31,6 +31,10 @@ export const P = {
   DECK: 11,
   GLASS: 12,
   RUST: 13,
+  /** Enduit de façade (chaux ou pisé) : écaillures, salissures, coulures. */
+  PLASTER: 14,
+  /** Briques en assises, joints de mortier. */
+  BRICK: 15,
 } as const;
 
 export interface Mat {
