@@ -214,6 +214,8 @@ export const CROSSINGS: [string, string][] = [
   ['F1', 'F3'],
   ['F2', 'F3'],
   ['F3', 'F4'],
+  // Passage entre le Palubori et le Forabori.
+  ['P4', 'F3'],
 ];
 
 /** Trajets ville ↔ désert. */
