@@ -2,7 +2,7 @@ import { useId, useMemo } from 'react';
 import { installedGuns } from '../../arpenteur/logic';
 import { shipGeometry } from '../../arpenteur/shipGeometry';
 import type { ArpenteurDoc, Build } from '../../arpenteur/types';
-import { ShipCutaway, type CutawayTarget } from './ShipCutaway';
+import { cutawayBounds, ShipCutaway, type CutawayTarget } from './ShipCutaway';
 import { SHIP_STYLE, ShipProfile } from './ShipProfile';
 
 // Scène animée : l'arpenteur glisse au-dessus des dunes. Le ciel et le sable
@@ -241,15 +241,12 @@ export function ShipScene({
   const hover = 70;
   const ptx = W / 2 - 500 * profileScale;
   const pty = GROUND - hover - g.bounds.maxY * profileScale;
-  const cutH = g.bounds.maxY - g.bounds.minY;
+  const cb = useMemo(() => cutawayBounds(build), [build]);
+  const cutH = cb.maxY - cb.minY;
   // La coupe tient dans une bande centrale : visible même quand la scène est rognée.
-  const cutScale = Math.min(
-    1.55,
-    1200 / (g.bounds.maxX - g.bounds.minX),
-    400 / cutH
-  );
-  const ctx = W / 2 + 60 - ((g.bounds.minX + g.bounds.maxX) / 2) * cutScale;
-  const cty = H / 2 - ((g.bounds.minY + g.bounds.maxY) / 2) * cutScale + 10;
+  const cutScale = Math.min(1.55, 1200 / (cb.maxX - cb.minX), 420 / cutH);
+  const ctx = W / 2 + 60 - ((cb.minX + cb.maxX) / 2) * cutScale;
+  const cty = H / 2 - ((cb.minY + cb.maxY) / 2) * cutScale + 6;
 
   // Poussière soulevée par les propulseurs (au sol, sous chaque tuyère).
   const dust = g.props.map((pr) => ptx + pr.cx * profileScale);
