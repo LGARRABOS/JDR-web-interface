@@ -840,6 +840,8 @@ export function cityMesh(o: CityOptions): {
   const ground = -1;
   const wood = mat('#5a3e28', P.WOOD, 0.85);
   const iron2 = mat('#3a3430', P.IRON, 0.6, 0.6);
+  // Emprises au sol déjà bâties (x, z, rayon) : rien ne se chevauche.
+  const occ: [number, number, number][] = [];
   const house = (
     x: number,
     z: number,
@@ -851,6 +853,7 @@ export function cityMesh(o: CityOptions): {
     low = false,
     y0 = ground
   ) => {
+    occ.push([x, z, Math.max(w, d) * 0.45]);
     const c = adobe[Math.floor(r() * adobe.length)];
     const wc = linear(c);
     const tone = (k: number): Mat => ({
@@ -1655,6 +1658,8 @@ export function cityMesh(o: CityOptions): {
   }
   const blocked = (x: number, z: number, rad: number) => {
     if (onRoad(x, z, rad)) return true;
+    if (occ.some(([ox, oz, or]) => Math.hypot(x - ox, z - oz) < or + rad * 0.9))
+      return true;
     // Le navire, le quai et l'avant-plan de la caméra par défaut restent libres.
     if (
       Math.abs(x) < len / 2 + rad + 16 &&
@@ -1927,6 +1932,7 @@ export function cityMesh(o: CityOptions): {
     }
   };
   const hut = (x: number, z: number, rad: number, h: number, y0 = ground) => {
+    occ.push([x, z, rad]);
     const c = adobe[Math.floor(r() * adobe.length)];
     b.push(chain(translation(x, y0, z), rotationY(r() * 6.28)));
     b.lathe(
@@ -1959,6 +1965,7 @@ export function cityMesh(o: CityOptions): {
     d: number,
     h: number
   ) => {
+    occ.push([x, z, Math.max(w, d) * 0.45]);
     const c = adobe[Math.floor(r() * adobe.length)];
     const trim = mat('#f0e8d8');
     b.push(chain(translation(x, ground, z), rotationY((r() - 0.5) * 0.1)));
@@ -2051,6 +2058,7 @@ export function cityMesh(o: CityOptions): {
     sz: number,
     m: Mat
   ) => {
+    occ.push([x, z, Math.max(sx, sz)]);
     const k0 = r() * 10;
     b.grid(
       20,
@@ -2085,6 +2093,7 @@ export function cityMesh(o: CityOptions): {
     }
   };
   const hall = (x: number, z: number, w: number, d: number, h: number) => {
+    occ.push([x, z, Math.max(w, d) * 0.45]);
     const brick = mat(adobe[Math.floor(r() * adobe.length)], P.BRICK);
     b.push(translation(x, ground, z));
     b.box(w, h, d, brick);
@@ -2111,6 +2120,7 @@ export function cityMesh(o: CityOptions): {
     b.pop();
   };
   const courtyard = (x: number, z: number, w: number, h: number) => {
+    occ.push([x, z, w * 0.5]);
     const c = mat(adobe[Math.floor(r() * adobe.length)]);
     const t = 4;
     b.push(
@@ -2149,6 +2159,8 @@ export function cityMesh(o: CityOptions): {
     palm(x + 1, z - 1);
   };
 
+  // Emprise du monument.
+  if (st.layout !== 'colline') occ.push([-20, -150, o.capital ? 55 : 38]);
   switch (st.layout) {
     case 'trame':
     case 'industriel': {
@@ -2455,6 +2467,7 @@ export function cityMesh(o: CityOptions): {
           const low = corridor(z, 5);
           const h = low ? 4 : (6 + r() * 10) * (1.3 - ring * 0.12);
           const rr = 3 + r() * 2;
+          occ.push([x, z, rr]);
           b.push(translation(x, ground, z));
           b.cylinder(rr, h, 12, mat(adobe[ring % adobe.length]));
           b.push(translation(0, h, 0));
@@ -2540,6 +2553,44 @@ export function cityMesh(o: CityOptions): {
         low
       );
     }
+  // Façades le long de toutes les chaussées : chaque route est bordée de
+  // bâtiments qui lui font face (porte côté route), dans le style de la ville.
+  for (const rd of [...roads]) {
+    const dx = rd.c[0] - rd.a[0];
+    const dz = rd.c[1] - rd.a[1];
+    const L = Math.hypot(dx, dz);
+    if (L < 8) continue;
+    const ux = dx / L;
+    const uz = dz / L;
+    const nx = -uz;
+    const nz = ux;
+    for (const sd of [-1, 1]) {
+      let t = 2;
+      while (t < L - 2) {
+        const w = 7 + r() * 5;
+        const d = 9 + r() * 3;
+        const tc = t + w / 2;
+        t += w + (r() < 0.12 ? 5 : 0.3);
+        if (tc > L - 2) break;
+        const off = rd.w / 2 + 1.4 + d / 2;
+        const x = rd.a[0] + ux * tc + nx * sd * off;
+        const z = rd.a[1] + uz * tc + nz * sd * off;
+        const dist = Math.hypot(x, z);
+        if (dist > R || dist < 40 || blocked(x, z, d / 2)) continue;
+        // Sur la colline de Zenit, les maisons sont déjà étagées sur la pente.
+        if (st.layout === 'colline' && z < -80) continue;
+        // Porte tournée vers la route.
+        const ry = Math.atan2(-sd * nx, -sd * nz);
+        if (st.layout === 'huttes') {
+          hut(x, z, 2.4 + r(), 3.6 + r() * 1.6);
+          continue;
+        }
+        const low = corridor(z, d / 2);
+        const h = 3.5 + r() * 8 * st.height * Math.max(0.3, 1.2 - dist / R);
+        house(x, z, w, d, low ? Math.min(h, 6) : h, ry, dist < 230, low);
+      }
+    }
+  }
   if (st.layout !== 'colline')
     monument(st.monument, -20, -150, o.capital ? 1.6 : 1);
   const towers = st.layout === 'industriel' ? 12 : o.capital ? 9 : 5;
