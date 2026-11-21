@@ -28,7 +28,15 @@ import {
 // Moteur WebGL2 minimal : passe d'ombre, ciel, objets éclairés (PBR simplifié),
 // halos additifs, puis bloom et mappage de tons.
 
-export interface GpuMesh {
+/**
+ * Maillage confié au moteur de rendu. Opaque pour la scène : chaque moteur
+ * (WebGL2 maison, Three.js) y range ce qu'il veut.
+ */
+export interface MeshHandle {
+  readonly __handle?: never;
+}
+
+export interface GpuMesh extends MeshHandle {
   vao: WebGLVertexArrayObject;
   vbo: WebGLBuffer;
   ibo: WebGLBuffer;
@@ -36,7 +44,7 @@ export interface GpuMesh {
 }
 
 export interface DrawItem {
-  mesh: GpuMesh;
+  mesh: MeshHandle;
   model: Mat4;
   shadow?: boolean;
   /** Posé sur les dunes : chaque sommet suit le relief du sable sous lui. */
@@ -77,7 +85,45 @@ interface Target {
 
 const SHADOW = 2048;
 
-export class Renderer {
+/** Paramètres d'une image (horloge, sol, effets, ombres, tuyères). */
+export interface RenderOptions {
+  time: number;
+  scroll: number;
+  /** 0 = dunes, 1 = sol aplani autour d'une ville. */
+  calm?: number;
+  /** Abscisse du centre de la zone aplanie (ville qui défile). */
+  calmX?: number;
+  /** Tempête de sable plein écran (0..1) et sa couleur (affichage). */
+  storm?: number;
+  /** Passage d'un portail d'Aether (effet plein écran), 0..1. */
+  portal?: number;
+  /** Amplitude des dunes (paysage du secteur). */
+  duneAmp?: number;
+  stormColor?: Vec3;
+  shadowCenter: Vec3;
+  shadowRadius: number;
+  pods?: { pos: Vec3; power: number }[];
+  dust?: MeshHandle | null;
+}
+
+/** Ce que la scène attend d'un moteur de rendu. */
+export interface RenderBackend {
+  readonly width: number;
+  readonly height: number;
+  upload(mesh: MeshData): MeshHandle;
+  release(mesh: MeshHandle): void;
+  setSize(w: number, h: number): void;
+  render(
+    items: DrawItem[],
+    glows: DrawItem[],
+    cam: Camera,
+    light: Lighting,
+    opts: RenderOptions
+  ): void;
+  dispose(): void;
+}
+
+export class Renderer implements RenderBackend {
   readonly gl: WebGL2RenderingContext;
   private main: WebGLProgram;
   private depth: WebGLProgram;
@@ -208,7 +254,8 @@ export class Renderer {
     return { vao, vbo, ibo, count: mesh.index.length };
   }
 
-  release(m: GpuMesh) {
+  release(handle: MeshHandle) {
+    const m = handle as GpuMesh;
     const gl = this.gl;
     gl.deleteVertexArray(m.vao);
     gl.deleteBuffer(m.vbo);
@@ -315,25 +362,7 @@ export class Renderer {
     glows: DrawItem[],
     cam: Camera,
     light: Lighting,
-    opts: {
-      time: number;
-      scroll: number;
-      /** 0 = dunes, 1 = sol aplani autour d'une ville. */
-      calm?: number;
-      /** Abscisse du centre de la zone aplanie (ville qui défile). */
-      calmX?: number;
-      /** Tempête de sable plein écran (0..1) et sa couleur (affichage). */
-      storm?: number;
-      /** Passage d'un portail d'Aether (effet plein écran), 0..1. */
-      portal?: number;
-      /** Amplitude des dunes (paysage du secteur). */
-      duneAmp?: number;
-      stormColor?: Vec3;
-      shadowCenter: Vec3;
-      shadowRadius: number;
-      pods?: { pos: Vec3; power: number }[];
-      dust?: GpuMesh | null;
-    }
+    opts: RenderOptions
   ) {
     const gl = this.gl;
     if (!this.msaa || !this.scene || !this.half || !this.quarter) return;
@@ -376,8 +405,11 @@ export class Renderer {
       for (const it of items) {
         if (!it.shadow) continue;
         gl.uniformMatrix4fv(this.u(this.depth, 'uModel'), false, it.model);
-        gl.bindVertexArray(it.mesh.vao);
-        gl.drawElements(gl.TRIANGLES, it.mesh.count, gl.UNSIGNED_INT, 0);
+        {
+          const gm = it.mesh as GpuMesh;
+          gl.bindVertexArray(gm.vao);
+          gl.drawElements(gl.TRIANGLES, gm.count, gl.UNSIGNED_INT, 0);
+        }
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
     }
@@ -438,8 +470,11 @@ export class Renderer {
     for (const it of items) {
       gl.uniformMatrix4fv(this.u(m, 'uModel'), false, it.model);
       gl.uniform1f(this.u(m, 'uDrape'), it.drape ? 1 : 0);
-      gl.bindVertexArray(it.mesh.vao);
-      gl.drawElements(gl.TRIANGLES, it.mesh.count, gl.UNSIGNED_INT, 0);
+      {
+        const gm = it.mesh as GpuMesh;
+        gl.bindVertexArray(gm.vao);
+        gl.drawElements(gl.TRIANGLES, gm.count, gl.UNSIGNED_INT, 0);
+      }
     }
 
     if (opts.dust) {
@@ -468,8 +503,9 @@ export class Renderer {
         0.045 + sc[1] * 0.03,
         0.045 + sc[2] * 0.03
       );
-      gl.bindVertexArray(opts.dust.vao);
-      gl.drawElements(gl.TRIANGLES, opts.dust.count, gl.UNSIGNED_INT, 0);
+      const dm = opts.dust as GpuMesh;
+      gl.bindVertexArray(dm.vao);
+      gl.drawElements(gl.TRIANGLES, dm.count, gl.UNSIGNED_INT, 0);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
     }
@@ -484,8 +520,11 @@ export class Renderer {
       gl.uniform1f(this.u(this.glow, 'uTime'), opts.time);
       for (const it of glows) {
         gl.uniformMatrix4fv(this.u(this.glow, 'uModel'), false, it.model);
-        gl.bindVertexArray(it.mesh.vao);
-        gl.drawElements(gl.TRIANGLES, it.mesh.count, gl.UNSIGNED_INT, 0);
+        {
+          const gm = it.mesh as GpuMesh;
+          gl.bindVertexArray(gm.vao);
+          gl.drawElements(gl.TRIANGLES, gm.count, gl.UNSIGNED_INT, 0);
+        }
       }
       gl.depthMask(true);
       gl.disable(gl.BLEND);

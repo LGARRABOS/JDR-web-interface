@@ -1,6 +1,6 @@
 // Shaders GLSL ES 3.0 du rendu 3D de l'arpenteur.
 
-const COMMON = /* glsl */ `
+export const COMMON = /* glsl */ `
 uniform float uDuneAmp;
 float hash(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
@@ -16,7 +16,7 @@ float swell(vec2 p){
 }
 `;
 
-const WIND = /* glsl */ `
+export const WIND = /* glsl */ `
 // Vent : aMat.w porte le poids d'animation des toiles.
 // 0..1 = voile (bords tenus à 0), 1..2 = pavillon (1 au mât, 2 au bout libre).
 vec3 wind(vec3 p, vec3 n, vec4 m, float t){
@@ -33,7 +33,7 @@ vec3 wind(vec3 p, vec3 n, vec4 m, float t){
 }
 `;
 
-const SKY_FN = /* glsl */ `
+export const SKY_FN = /* glsl */ `
 uniform vec3 uSunDir, uSunColor, uZenith, uHorizon, uGround, uSkyMid;
 uniform float uNight;
 vec3 skyColor(vec3 d){
@@ -43,6 +43,41 @@ vec3 skyColor(vec3 d){
   float s = max(dot(d, uSunDir), 0.);
   c += uSunColor * (pow(s, 6.)*.18 + pow(s, 60.)*.35) * (1. - uNight*.7);
   return c;
+}
+`;
+
+export const DEFORM_FN = /* glsl */ `
+// Déformation d'un sommet en monde : vent des toiles, dunes et leur relief,
+// houle de la brume, rochers posés sur le sable.
+void deformVertex(vec3 pos, vec3 nrm, vec4 m, mat4 model, out vec4 wp, out vec3 n){
+  n = nrm;
+  vec3 p = wind(pos, nrm, m, uTime);
+  wp = model * vec4(p, 1.);
+  if (m.x == 8.) {
+    vec2 q = wp.xz + vec2(uScroll, 0.);
+    float k = smoothstep(450., 1100., length(wp.xz));
+    // Autour d'une ville, le sol est aplani (place, faubourgs), les dunes reprennent au loin.
+    float flat_ = uCalm * (1. - smoothstep(520., 950., length(wp.xz - vec2(uCalmX, 0.))));
+    wp.y = mix(dune(q) + k*swell(q), -1., flat_);
+    float e = .8 + k*6.;
+    vec2 ex = vec2(e, 0.), ez = vec2(0., e);
+    n = normalize(vec3(
+      dune(q-ex)+k*swell(q-ex) - dune(q+ex)-k*swell(q+ex),
+      2.*e/max(1. - flat_, .02),
+      dune(q-ez)+k*swell(q-ez) - dune(q+ez)-k*swell(q+ez)));
+  } else {
+    n = mat3(model) * n;
+    // Mer de brume : houle lente de volutes.
+    if (m.x == 16.) {
+      vec2 q = (wp.xz + vec2(uScroll, 0.))*.012;
+      wp.y += (fbm(q + vec2(uTime*.05, uTime*.03)) - .5)*7. + sin(wp.x*.02 + uTime*.4)*sin(wp.z*.017 - uTime*.3)*1.6;
+    }
+    // Rochers posés sur le sable : ils épousent la dune sous eux (m.w = 1).
+    if ((m.x == 9. && m.w > .5) || uDrape > .5) {
+      vec2 q = wp.xz + vec2(uScroll, 0.);
+      wp.y += dune(q) + smoothstep(450., 1100., length(wp.xz))*swell(q);
+    }
+  }
 }
 `;
 
@@ -58,53 +93,16 @@ uniform float uTime, uScroll, uCalm, uCalmX, uDrape;
 out vec3 vWorld; out vec3 vNrm; out vec2 vUv; out vec3 vCol; flat out vec4 vMat; out vec4 vLight;
 ${COMMON}
 ${WIND}
+${DEFORM_FN}
 void main(){
-  vec3 n = aNrm;
-  vec3 p = wind(aPos, aNrm, aMat, uTime);
-  vec4 wp = uModel * vec4(p, 1.);
-  if (aMat.x == 8.) {
-    vec2 q = wp.xz + vec2(uScroll, 0.);
-    float k = smoothstep(450., 1100., length(wp.xz));
-    // Autour d'une ville, le sol est aplani (place, faubourgs), les dunes reprennent au loin.
-    float flat_ = uCalm * (1. - smoothstep(520., 950., length(wp.xz - vec2(uCalmX, 0.))));
-    wp.y = mix(dune(q) + k*swell(q), -1., flat_);
-    float e = .8 + k*6.;
-    vec2 ex = vec2(e, 0.), ez = vec2(0., e);
-    n = normalize(vec3(
-      dune(q-ex)+k*swell(q-ex) - dune(q+ex)-k*swell(q+ex),
-      2.*e/max(1. - flat_, .02),
-      dune(q-ez)+k*swell(q-ez) - dune(q+ez)-k*swell(q+ez)));
-  } else {
-    n = mat3(uModel) * n;
-    // Mer de brume : houle lente de volutes.
-    if (aMat.x == 16.) {
-      vec2 q = (wp.xz + vec2(uScroll, 0.))*.012;
-      wp.y += (fbm(q + vec2(uTime*.05, uTime*.03)) - .5)*7. + sin(wp.x*.02 + uTime*.4)*sin(wp.z*.017 - uTime*.3)*1.6;
-    }
-    // Rochers posés sur le sable : ils épousent la dune sous eux (aMat.w = 1).
-    if ((aMat.x == 9. && aMat.w > .5) || uDrape > .5) {
-      vec2 q = wp.xz + vec2(uScroll, 0.);
-      wp.y += dune(q) + smoothstep(450., 1100., length(wp.xz))*swell(q);
-    }
-  }
+  vec4 wp; vec3 n;
+  deformVertex(aPos, aNrm, aMat, uModel, wp, n);
   vWorld = wp.xyz; vNrm = n; vUv = aUv; vCol = aCol; vMat = aMat;
   vLight = uLightVP * wp;
   gl_Position = uViewProj * wp;
 }`;
 
-export const MAIN_FS = /* glsl */ `#version 300 es
-precision highp float;
-precision highp sampler2DShadow;
-in vec3 vWorld; in vec3 vNrm; in vec2 vUv; in vec3 vCol; flat in vec4 vMat; in vec4 vLight;
-uniform vec3 uCam, uFog, uTrim, uSandA, uSandB, uRockA, uRockB;
-uniform float uFogDensity, uTime, uScroll, uShadowOn;
-uniform sampler2DShadow uShadow;
-uniform vec4 uPods[8];
-uniform int uPodCount;
-uniform vec3 uPodColor;
-out vec4 outColor;
-${COMMON}
-${SKY_FN}
+export const SURFACE_FNS = /* glsl */ `
 vec3 bumpN(vec3 N, vec3 pos, float h, float k){
   vec3 dpdx = dFdx(pos), dpdy = dFdy(pos);
   float dhdx = dFdx(h), dhdy = dFdy(h);
@@ -122,24 +120,6 @@ float seamAA(float x, float w){
   return mix(l, 1. - w*1.2, smoothstep(.15, .45, fw));
 }
 float detail(float mpp, float freq){ return clamp(1.3 - mpp*freq*2.2, 0., 1.); }
-// Ombres douces : 16 échantillons en disque de Poisson, tournés par pixel.
-const vec2 POISSON[16] = vec2[](
-  vec2(-.94201624,-.39906216), vec2(.94558609,-.76890725), vec2(-.09418410,-.92938870), vec2(.34495938,.29387760),
-  vec2(-.91588581,.45771432), vec2(-.81544232,-.87912464), vec2(-.38277543,.27676845), vec2(.97484398,.75648379),
-  vec2(.44323325,-.97511554), vec2(.53742981,-.47373420), vec2(-.26496911,-.41893023), vec2(.79197514,.19090188),
-  vec2(-.24188840,.99706507), vec2(-.81409955,.91437590), vec2(.19984126,.78641367), vec2(.14383161,-.14100790));
-float shadowAt(vec4 lp, float ndl){
-  if (uShadowOn < .5) return 1.;
-  vec3 c = lp.xyz/lp.w*.5+.5;
-  if (c.x<0.||c.x>1.||c.y<0.||c.y>1.||c.z>1.) return 1.;
-  float b = mix(.0022, .0005, clamp(ndl, 0., 1.));
-  float ang = 6.2831853*fract(52.9829189*fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
-  mat2 rot = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
-  vec2 t = vec2(1.9/2048.);
-  float s = 0.;
-  for (int i=0;i<16;i++) s += texture(uShadow, vec3(c.xy + rot*POISSON[i]*t, c.z - b));
-  return s/16.;
-}
 // Tôles rivetées : renvoie (relief, joint, variation).
 vec3 plates(vec2 uv, float mpp){
   vec2 pd = vec2(1.5, .62);
@@ -156,9 +136,10 @@ vec3 plates(vec2 uv, float mpp){
   float var = hash(cell);
   return vec3(seam*.004 + riv*.005, seam, var + riv*2.);
 }
-void main(){
-  vec3 N = normalize(vNrm);
-  if (!gl_FrontFacing) N = -N;
+`;
+
+/** Motifs des surfaces : entrées N, vWorld, vUv, vCol, vMat ; sorties albedo, metal, rough, emit, N. */
+export const SURFACE_BODY = /* glsl */ `
   float pat = vMat.x;
   vec3 albedo = vCol;
   float metal = vMat.y, rough = vMat.z;
@@ -298,7 +279,57 @@ void main(){
     h = n*.01;
   }
   N = bumpN(N, vWorld, h, k);
-  vec3 V = normalize(uCam - vWorld);
+`;
+
+/** Brume atmosphérique : modifie col (entrées vWorld, uCam, L, uFog, uFogDensity). */
+export const FOG_BODY = /* glsl */ `
+  // Atmosphère : brume plus dense au ras du sable, éclairée côté soleil.
+  float dist = length(vWorld - uCam);
+  vec3 fd = (vWorld - uCam)/max(dist, 1e-3);
+  float hAvg = max(.5*(vWorld.y + uCam.y), 0.);
+  float dens = uFogDensity * (.75 + .9*exp(-hAvg*.08));
+  float fogF = 1. - exp(-dist*dens);
+  float sunAmt = pow(max(dot(fd, L), 0.), 6.);
+  vec3 haze = mix(uFog, skyColor(vec3(fd.x, max(fd.y, .02), fd.z)), .55) + uSunColor*sunAmt*.14*(1. - uNight*.8);
+  col = mix(col, haze, fogF);
+`;
+
+export const MAIN_FS = /* glsl */ `#version 300 es
+precision highp float;
+precision highp sampler2DShadow;
+in vec3 vWorld; in vec3 vNrm; in vec2 vUv; in vec3 vCol; flat in vec4 vMat; in vec4 vLight;
+uniform vec3 uCam, uFog, uTrim, uSandA, uSandB, uRockA, uRockB;
+uniform float uFogDensity, uTime, uScroll, uShadowOn;
+uniform sampler2DShadow uShadow;
+uniform vec4 uPods[8];
+uniform int uPodCount;
+uniform vec3 uPodColor;
+out vec4 outColor;
+${COMMON}
+${SKY_FN}
+${SURFACE_FNS}
+// Ombres douces : 16 échantillons en disque de Poisson, tournés par pixel.
+const vec2 POISSON[16] = vec2[](
+  vec2(-.94201624,-.39906216), vec2(.94558609,-.76890725), vec2(-.09418410,-.92938870), vec2(.34495938,.29387760),
+  vec2(-.91588581,.45771432), vec2(-.81544232,-.87912464), vec2(-.38277543,.27676845), vec2(.97484398,.75648379),
+  vec2(.44323325,-.97511554), vec2(.53742981,-.47373420), vec2(-.26496911,-.41893023), vec2(.79197514,.19090188),
+  vec2(-.24188840,.99706507), vec2(-.81409955,.91437590), vec2(.19984126,.78641367), vec2(.14383161,-.14100790));
+float shadowAt(vec4 lp, float ndl){
+  if (uShadowOn < .5) return 1.;
+  vec3 c = lp.xyz/lp.w*.5+.5;
+  if (c.x<0.||c.x>1.||c.y<0.||c.y>1.||c.z>1.) return 1.;
+  float b = mix(.0022, .0005, clamp(ndl, 0., 1.));
+  float ang = 6.2831853*fract(52.9829189*fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
+  mat2 rot = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
+  vec2 t = vec2(1.9/2048.);
+  float s = 0.;
+  for (int i=0;i<16;i++) s += texture(uShadow, vec3(c.xy + rot*POISSON[i]*t, c.z - b));
+  return s/16.;
+}
+void main(){
+  vec3 N = normalize(vNrm);
+  if (!gl_FrontFacing) N = -N;
+${SURFACE_BODY}  vec3 V = normalize(uCam - vWorld);
   vec3 L = uSunDir;
   float NdLr = dot(N, L);
   // La toile diffuse la lumière : éclairage « enveloppant » pour les voiles.
@@ -336,16 +367,7 @@ void main(){
   // Voiles : la lumière traverse la toile.
   // (la toile s'ombre elle-même dans la carte d'ombres : on n'en garde qu'une part)
   if (pat == 6.) col += albedo * uSunColor * (max(-NdLr, 0.)*.75 + pow(max(dot(-V, L), 0.), 4.)*.4) * mix(.65, 1., sh) * (1. - uNight*.6);
-  // Atmosphère : brume plus dense au ras du sable, éclairée côté soleil.
-  float dist = length(vWorld - uCam);
-  vec3 fd = (vWorld - uCam)/max(dist, 1e-3);
-  float hAvg = max(.5*(vWorld.y + uCam.y), 0.);
-  float dens = uFogDensity * (.75 + .9*exp(-hAvg*.08));
-  float fogF = 1. - exp(-dist*dens);
-  float sunAmt = pow(max(dot(fd, L), 0.), 6.);
-  vec3 haze = mix(uFog, skyColor(vec3(fd.x, max(fd.y, .02), fd.z)), .55) + uSunColor*sunAmt*.14*(1. - uNight*.8);
-  col = mix(col, haze, fogF);
-  outColor = vec4(col, 1.);
+${FOG_BODY}  outColor = vec4(col, 1.);
 }`;
 
 export const DEPTH_VS = /* glsl */ `#version 300 es
@@ -367,18 +389,8 @@ export const FULL_VS = /* glsl */ `#version 300 es
 out vec2 vUv;
 void main(){ vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2); vUv = p; gl_Position = vec4(p*2.-1., 0., 1.); }`;
 
-export const SKY_FS = /* glsl */ `#version 300 es
-precision highp float;
-in vec2 vUv;
-uniform mat4 uInvViewProj;
-uniform vec3 uCam, uMoonDir;
-uniform float uTime;
-out vec4 o;
-${COMMON}
-${SKY_FN}
-void main(){
-  vec4 p = uInvViewProj * vec4(vUv*2.-1., 1., 1.);
-  vec3 d = normalize(p.xyz/p.w - uCam);
+/** Ciel dans la direction d : soleil, brume d'horizon, étoiles, lune, nuages. */
+export const SKY_BODY = /* glsl */ `
   vec3 c = skyColor(d);
   float s = max(dot(d, uSunDir), 0.);
   c += uSunColor * smoothstep(.9994, .9997, s) * 6. * (1.-uNight);
@@ -406,7 +418,21 @@ void main(){
     cc += uSunColor * pow(s, 12.) * (1. - thick) * .6;
     c = mix(c, cc, a*.65);
   }
-  o = vec4(c, 1.);
+`;
+
+export const SKY_FS = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform mat4 uInvViewProj;
+uniform vec3 uCam, uMoonDir;
+uniform float uTime;
+out vec4 o;
+${COMMON}
+${SKY_FN}
+void main(){
+  vec4 p = uInvViewProj * vec4(vUv*2.-1., 1., 1.);
+  vec3 d = normalize(p.xyz/p.w - uCam);
+${SKY_BODY}  o = vec4(c, 1.);
 }`;
 
 /** Panaches et halos additifs : uv.y = 0 à la tuyère, 1 au bout. */
@@ -467,28 +493,14 @@ void main(){
   o = vec4(c, 1.);
 }`;
 
-export const COMPOSITE_FS = /* glsl */ `#version 300 es
-precision highp float;
-in vec2 vUv;
-uniform sampler2D uTex, uBloomA, uBloomB;
-uniform float uExposure, uBloom, uGrain, uTime;
-// Tempête de sable plein écran : densité 0..1, couleur, horloge, format.
-uniform float uStorm, uStormT, uAspect, uPortal;
-uniform vec3 uStormColor;
-out vec4 o;
+export const FX_FNS = /* glsl */ `
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float sfbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*vnoise(p);p=p*2.07+vec2(3.1,1.7);a*=.5;}return s;}
-vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14), 0., 1.); }
-void main(){
-  vec2 q = vUv-.5;
-  // Légère aberration chromatique vers les bords (objectif photo).
-  vec2 ca = q*dot(q, q)*.006;
-  vec3 c = vec3(texture(uTex, vUv - ca).r, texture(uTex, vUv).g, texture(uTex, vUv + ca).b);
-  c += (texture(uBloomA, vUv).rgb*.6 + texture(uBloomB, vUv).rgb*.8) * uBloom;
-  c = aces(c*uExposure);
-  c = pow(c, vec3(1./2.2));
-  // Étalonnage : un peu plus de contraste et de couleur, ombres froides, lumières chaudes.
+`;
+
+/** Étalonnage, vignette, tempête et portail : modifie c (affichage), entrées q = vUv - .5. */
+export const FX_BODY = /* glsl */ `
   float l = dot(c, vec3(.2126, .7152, .0722));
   c = mix(vec3(l), c, 1.08);
   c = mix(c, c*c*(3.-2.*c), .22);
@@ -525,7 +537,29 @@ void main(){
     c += pc*streak*uPortal*tun;
     c = mix(c, vec3(1.), pow(uPortal, 9.)*.8);
   }
-  c += (hash(vUv*vec2(1733., 977.) + uTime) - .5) * uGrain;
+`;
+
+export const COMPOSITE_FS = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uTex, uBloomA, uBloomB;
+uniform float uExposure, uBloom, uGrain, uTime;
+// Tempête de sable plein écran : densité 0..1, couleur, horloge, format.
+uniform float uStorm, uStormT, uAspect, uPortal;
+uniform vec3 uStormColor;
+out vec4 o;
+${FX_FNS}
+vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14), 0., 1.); }
+void main(){
+  vec2 q = vUv-.5;
+  // Légère aberration chromatique vers les bords (objectif photo).
+  vec2 ca = q*dot(q, q)*.006;
+  vec3 c = vec3(texture(uTex, vUv - ca).r, texture(uTex, vUv).g, texture(uTex, vUv + ca).b);
+  c += (texture(uBloomA, vUv).rgb*.6 + texture(uBloomB, vUv).rgb*.8) * uBloom;
+  c = aces(c*uExposure);
+  c = pow(c, vec3(1./2.2));
+  // Étalonnage : un peu plus de contraste et de couleur, ombres froides, lumières chaudes.
+${FX_BODY}  c += (hash(vUv*vec2(1733., 977.) + uTime) - .5) * uGrain;
   o = vec4(c, 1.);
 }`;
 

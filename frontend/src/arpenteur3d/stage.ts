@@ -22,7 +22,8 @@ import {
 import {
   Renderer,
   type DrawItem,
-  type GpuMesh,
+  type MeshHandle as GpuMesh,
+  type RenderBackend,
   type Lighting,
 } from './renderer';
 import { MeshBuilder, P } from './geometry';
@@ -162,7 +163,7 @@ function journeySpeed(p: number, v0: number, v1: number) {
 const CREW_SCALE = 1.4;
 
 export class Stage {
-  readonly r: Renderer;
+  readonly r: RenderBackend;
   private env: { terrain: GpuMesh };
   private biome: Biome = BIOMES.dunes;
   /** Lointains et bande de décor de chaque paysage (cache). */
@@ -196,8 +197,15 @@ export class Stage {
   private scrollPos = 0;
   private lastT = -1;
 
-  constructor(canvas: HTMLCanvasElement, opts: { preserve?: boolean } = {}) {
-    this.r = new Renderer(canvas, opts);
+  /**
+   * `backend` : moteur de rendu à utiliser (Three.js…) ; par défaut, le
+   * moteur WebGL2 maison.
+   */
+  constructor(
+    canvas: HTMLCanvasElement,
+    opts: { preserve?: boolean; backend?: RenderBackend } = {}
+  ) {
+    this.r = opts.backend ?? new Renderer(canvas, opts);
     this.env = {
       terrain: this.r.upload(terrainMesh()),
     };
