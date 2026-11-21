@@ -1463,55 +1463,144 @@ export function cityMesh(o: CityOptions): {
         lighthouse(0, 0, 48 * k);
         break;
       case 'colosse': {
-        // Statue colossale d'un chasseur, lance dressée.
+        // Colosse d'un chasseur du désert, lance dressée et bouclier, sur un
+        // socle à degrés ; pierre patinée.
         const S = 1.6 * k;
-        b.push(translation(0, 0, 0));
-        b.box(16 * S, 6 * S, 16 * S, stone);
-        b.push(translation(0, 6 * S, 0));
+        const st2: Mat = {
+          p: P.PLASTER,
+          color: linear('#cdbb98'),
+          metal: 0,
+          rough: 0.95,
+        };
+        for (let i = 0; i < 3; i++) {
+          b.push(translation(0, i * 2.2 * S, 0));
+          b.box(
+            (20 - i * 3) * S,
+            2.2 * S,
+            (20 - i * 3) * S,
+            i % 2 ? sm : stone
+          );
+          b.pop();
+        }
+        b.push(translation(0, 6.6 * S, 0));
+        // Pieds et jambes.
+        for (const sx of [-1, 1]) {
+          b.push(translation(sx * 2.2 * S, 0, sx * 0.8 * S));
+          b.box(2.4 * S, 1 * S, 4 * S, st2);
+          b.pop();
+          b.tube(
+            [
+              [sx * 2.2 * S, 0.8 * S, sx * 0.8 * S],
+              [sx * 2.3 * S, 6 * S, sx * 0.4 * S],
+              [sx * 2 * S, 11 * S, 0],
+            ],
+            1.25 * S,
+            10,
+            st2
+          );
+        }
+        // Tunique, ceinture, torse.
         b.lathe(
           [
-            [0, 0],
-            [4 * S, 0],
-            [4.5 * S, 8 * S],
-            [5.5 * S, 16 * S],
-            [6 * S, 20 * S],
-            [2 * S, 22 * S],
-            [0, 22 * S],
+            [0, 9 * S],
+            [4.2 * S, 9.4 * S],
+            [3.6 * S, 12 * S],
+            [3.2 * S, 13.5 * S],
+            [3.8 * S, 16.5 * S],
+            [4.6 * S, 18.5 * S],
+            [2.6 * S, 20 * S],
+            [0, 20.2 * S],
+          ],
+          16,
+          st2
+        );
+        b.push(translation(0, 13 * S, 0));
+        b.torus(3.4 * S, 0.35 * S, 16, 6, brass);
+        b.pop();
+        // Tête, coiffe à cornes.
+        b.push(translation(0, 20 * S, 0));
+        b.cylinder(1 * S, 1.2 * S, 10, st2);
+        b.push(translation(0, 2.6 * S, 0));
+        b.sphere(1.9 * S, 14, st2);
+        b.lathe(
+          [
+            [2.1 * S, 0.2 * S],
+            [1.6 * S, 1.6 * S],
+            [0, 2.6 * S],
           ],
           12,
           sm
         );
-        b.push(translation(0, 24.5 * S, 0));
-        b.sphere(2.8 * S, 14, sm);
+        for (const sz of [-1, 1])
+          b.tube(
+            [
+              [0, 1 * S, sz * 1.6 * S],
+              [0, 2.2 * S, sz * 3.4 * S],
+              [0, 4.4 * S, sz * 3.8 * S],
+            ],
+            0.35 * S,
+            6,
+            sm
+          );
+        b.pop();
+        b.pop();
+        // Bras droit levé tenant la lance, bras gauche portant le bouclier.
+        b.tube(
+          [
+            [0, 18.4 * S, 4.4 * S],
+            [1 * S, 21 * S, 6.2 * S],
+            [0.6 * S, 24.5 * S, 6.4 * S],
+          ],
+          1 * S,
+          8,
+          st2
+        );
+        b.tube(
+          [
+            [0.6 * S, 3 * S, 6.4 * S],
+            [0.6 * S, 36 * S, 6.4 * S],
+          ],
+          0.4 * S,
+          6,
+          brass
+        );
+        b.push(translation(0.6 * S, 36 * S, 6.4 * S));
+        b.lathe(
+          [
+            [0, 0],
+            [0.9 * S, 0.6 * S],
+            [0, 4 * S],
+          ],
+          4,
+          brass
+        );
         b.pop();
         b.tube(
           [
-            [5.5 * S, 18 * S, 0],
-            [8 * S, 12 * S, 2 * S],
-            [9 * S, 8 * S, 3 * S],
+            [0, 18.4 * S, -4.4 * S],
+            [2 * S, 15.5 * S, -5.4 * S],
+            [3 * S, 13 * S, -4.6 * S],
           ],
-          1.1 * S,
+          1 * S,
           8,
-          sm
+          st2
         );
-        b.tube(
-          [
-            [-5.5 * S, 18 * S, 0],
-            [-8 * S, 23 * S, 1 * S],
-            [-8.5 * S, 27 * S, 1 * S],
-          ],
-          1.1 * S,
-          8,
-          sm
+        b.push(
+          chain(
+            translation(4 * S, 13.5 * S, -4.6 * S),
+            rotationZ(Math.PI / 2),
+            rotationX(0.2)
+          )
         );
-        b.tube(
+        b.lathe(
           [
-            [-8.5 * S, -6 * S, 1 * S],
-            [-8.5 * S, 40 * S, 1 * S],
+            [0, 0.6 * S],
+            [3.6 * S, 0],
+            [4 * S, -0.4 * S],
+            [0, -0.5 * S],
           ],
-          0.5 * S,
-          6,
-          brass
+          18,
+          sm
         );
         b.pop();
         b.pop();
@@ -2357,15 +2446,17 @@ export function cityMesh(o: CityOptions): {
     case 'huttes': {
       // Enclos de huttes rondes, palissades d'ossements.
       const bone = mat('#e8dcc4', P.PLAIN, 0.8);
-      for (const [x, z] of spots(34, (d) => 0.85 - d / (R * 2.5), 14)) {
-        const n = 4 + Math.floor(r() * 4);
-        const rad = 9 + r() * 4;
+      for (const [x, z] of spots(27, (d) => 0.97 - d / (R * 3), 12)) {
+        const n = 5 + Math.floor(r() * 4);
+        const rad = 8 + r() * 4;
+        // Grande hutte du chef de clan au centre de l'enclos.
+        if (r() < 0.55 && !corridor(z, 5)) hut(x, z, 4.2 + r(), 7.5 + r() * 2);
         for (let k = 0; k < n; k++) {
           const a = (k / n) * Math.PI * 2 + r() * 0.3;
           const hx = x + Math.cos(a) * rad * 0.65;
           const hz = z + Math.sin(a) * rad * 0.65;
           const big = corridor(hz, 3) ? 0.6 : 1;
-          hut(hx, hz, (2.4 + r() * 1.6) * big, (4 + r() * 3) * big);
+          hut(hx, hz, (3 + r() * 1.6) * big, (5 + r() * 3.5) * big);
         }
         if (!corridor(z, rad)) {
           b.push(translation(x, ground, z));
@@ -2535,7 +2626,7 @@ export function cityMesh(o: CityOptions): {
     for (const l of streetLots(30, 7, 11, 10)) {
       if (l.z <= 0) continue;
       if (st.layout === 'huttes') {
-        hut(l.x - l.w * 0.2, l.z, 2.4 + r() * 1.2, 3.6 + r() * 1.8);
+        hut(l.x - l.w * 0.2, l.z, 3 + r() * 1.2, 4.8 + r() * 2);
         if (r() < 0.6)
           hut(l.x + l.w * 0.3, l.z + (r() - 0.5) * 3, 1.8 + r(), 3 + r() * 1.5);
         continue;
@@ -2582,7 +2673,7 @@ export function cityMesh(o: CityOptions): {
         // Porte tournée vers la route.
         const ry = Math.atan2(-sd * nx, -sd * nz);
         if (st.layout === 'huttes') {
-          hut(x, z, 2.4 + r(), 3.6 + r() * 1.6);
+          hut(x, z, 3 + r() * 1.2, 4.8 + r() * 2);
           continue;
         }
         const low = corridor(z, d / 2);
