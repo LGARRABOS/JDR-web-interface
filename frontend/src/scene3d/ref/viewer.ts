@@ -200,18 +200,18 @@ export class RefViewer {
       vertexShader:
         'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
       fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+// Test sur les bits (insensible aux optimisations qui suppriment isnan).
+bool bad(float x){ return (floatBitsToUint(x) & 0x7f800000u) == 0x7f800000u; }
 void main(){ vec4 c = texture2D(tDiffuse, vUv);
-  if (any(isnan(c)) || any(isinf(c))) c = vec4(0., 0., 0., 1.);
-  // Reflets extrêmes (métal poli tout près d'une lampe) : plafonnés en gardant
-  // la teinte, sinon le bloom en fait un halo blanc géant.
+  if (bad(c.r) || bad(c.g) || bad(c.b) || bad(c.a)) c = vec4(0., 0., 0., 1.);
+  // Reflets extrêmes plafonnés en gardant la teinte (sinon halo blanc géant).
   float mx = max(max(c.r, c.g), c.b);
   if (mx > 24.) c.rgb *= 24. / mx;
-  gl_FragColor = vec4(c.rgb, c.a); }`,
+  gl_FragColor = vec4(max(c.rgb, vec3(0.)), c.a); }`,
     });
     // Ne touche pas à la profondeur partagée (lue par l'occlusion ambiante).
     clean.material.depthTest = false;
     clean.material.depthWrite = false;
-    this.composer.addPass(clean);
     if (q.ao) {
       this.gtao = new GTAOPass(this.scene, this.camera, 1, 1);
       this.gtao.setGBuffer(depth);
@@ -224,6 +224,8 @@ void main(){ vec4 c = texture2D(tDiffuse, vUv);
       });
       this.composer.addPass(this.gtao);
     }
+    // Après l'occlusion ambiante (elle peut aussi produire des NaN), avant le bloom.
+    this.composer.addPass(clean);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.6, 0.92);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());

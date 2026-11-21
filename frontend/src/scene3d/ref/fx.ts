@@ -168,7 +168,7 @@ void main(){
   vec4 wp = modelMatrix * vec4(position, 1.);
   vec3 n = normalize(mat3(modelMatrix) * normal);
   vF = abs(dot(n, normalize(cameraPosition - wp.xyz)));
-  vY = -position.y / 6.; vUv = uv;
+  vY = clamp(-position.y / 6., 0., 1.); vUv = uv;
   gl_Position = projectionMatrix * viewMatrix * wp;
 }`,
     fragmentShader: /* glsl */ `
@@ -177,7 +177,8 @@ varying float vY; varying float vF; varying vec2 vUv;
 void main(){
   float flick = .8 + .2*sin(uTime*31. + vUv.x*40.) * sin(uTime*17. - vY*20.);
   float bands = .75 + .25*sin(vY*28. - uTime*24.);
-  float a = pow(1. - vY, 2.4) * pow(vF, 2.) * flick * bands * uPower;
+  // clamp : une base négative donne NaN sur certaines cartes graphiques.
+  float a = pow(clamp(1. - vY, 0., 1.), 2.4) * pow(clamp(vF, 0., 1.), 2.) * clamp(flick, 0., 1.) * bands * uPower;
   gl_FragColor = vec4(uColor * a * 1.6, 1.);
 }`,
     blending: THREE.AdditiveBlending,
