@@ -28,6 +28,12 @@ import {
 import { MeshBuilder, P } from './geometry';
 import { BERTHS, cityMesh, lerpLighting, veil } from './city';
 import {
+  doorLeaves,
+  hangarLighting,
+  hangarRoom,
+  type HangarDims,
+} from './hangar';
+import {
   BIOMES,
   biomeLighting,
   biomeOf,
@@ -115,6 +121,14 @@ interface CityRt {
   city: GpuMesh;
   moor: GpuMesh;
   crowd: CrewMember[];
+  /** Nef du hangar de l'équipage, quand le navire y est amarré. */
+  hangar: {
+    shell: GpuMesh;
+    glass: GpuMesh;
+    door: GpuMesh;
+    moor: GpuMesh;
+    dims: HangarDims;
+  } | null;
   ships: {
     body: GpuMesh;
     glows: GpuMesh;
@@ -171,6 +185,8 @@ export class Stage {
   private lastShip: { build: Build; opts: StageOptions } | null = null;
   private place: Place = {};
   private cities = new Map<string, CityRt>();
+  /** Ouverture des portes du hangar (entrée -x, sortie +x), 0..1. */
+  private doors: [number, number] = [0, 0];
   /** Habillages des habitants (trois tenues). */
   private folk: { torso: GpuMesh; leg: GpuMesh; arm: GpuMesh }[] = [];
   private journey: Journey | null = null;
@@ -360,7 +376,7 @@ export class Stage {
         halfBeam: this.ship.parts.halfBeam,
         length: this.ship.parts.length,
         hover: HOVER_DOCK,
-        keel: HOVER_DOCK + this.ship.parts.bottom,
+        shipTop: HOVER_DOCK + this.ship.parts.top,
         hangar: c.hangar,
       });
       // Autres navires du port, chacun avec sa silhouette et ses couleurs.
@@ -374,10 +390,20 @@ export class Stage {
           cycle: q.cycle,
         };
       });
+      const hg = d.hangar;
       m = {
         city: this.r.upload(d.city),
         moor: this.r.upload(d.moor),
         crowd: d.crowd,
+        hangar: hg
+          ? {
+              shell: this.r.upload(hg.shell),
+              glass: this.r.upload(hg.glass),
+              door: this.r.upload(hg.door),
+              moor: this.r.upload(hg.moor),
+              dims: hg.dims,
+            }
+          : null,
         ships,
       };
       this.cities.set(key, m);
@@ -398,6 +424,12 @@ export class Stage {
     for (const m of this.cities.values()) {
       this.r.release(m.city);
       this.r.release(m.moor);
+      if (m.hangar) {
+        this.r.release(m.hangar.shell);
+        this.r.release(m.hangar.glass);
+        this.r.release(m.hangar.door);
+        this.r.release(m.hangar.moor);
+      }
       for (const sh of m.ships) {
         this.r.release(sh.body);
         this.r.release(sh.glows);
@@ -418,6 +450,23 @@ export class Stage {
     const base = translation(cx, 0, 0);
     items.push({ mesh: c.city, model: base, shadow: Math.abs(cx) < 200 });
     if (moored) items.push({ mesh: c.moor, model: base });
+    const hg = c.hangar;
+    if (hg) {
+      items.push({ mesh: hg.shell, model: base, shadow: Math.abs(cx) < 300 });
+      // Verrières : ne font pas d'ombre, le soleil entre par le toit.
+      items.push({ mesh: hg.glass, model: base, shadow: false });
+      for (const [end, open] of [
+        [-1, this.doors[0]],
+        [1, this.doors[1]],
+      ] as const)
+        for (const leaf of doorLeaves(hg.dims, end, open))
+          items.push({
+            mesh: hg.door,
+            model: chain(base, translation(leaf.x, 0, leaf.z)),
+            shadow: true,
+          });
+      if (moored) items.push({ mesh: hg.moor, model: base });
+    }
     if (Math.abs(cx) > 900) return;
     for (const sh of c.ships) {
       // Arrivée, escale, départ, puis absence ; les navires filent vers +x.
@@ -526,8 +575,10 @@ export class Stage {
     // Pendant le voyage, la caméra passe derrière le navire pour regarder
     // devant lui : on voit le paysage arriver et la ville grandir à l'horizon.
     let chase = 0;
+    let jp = 0;
     if (j) {
       const p = Math.min(1, Math.max(0, (Date.now() - j.start) / j.duration));
+      jp = p;
       const f = p * SAMPLES;
       const i0 = Math.min(SAMPLES - 1, Math.floor(f));
       const dist = j.table[i0] + (j.table[i0 + 1] - j.table[i0]) * (f - i0);
@@ -565,6 +616,53 @@ export class Stage {
         cityDraw = { rt: c, x: 0, moored: true };
         calm = 1;
       }
+    }
+    // Hangar de l'équipage : portes qui s'ouvrent devant le navire et se
+    // referment derrière lui ; à l'intérieur, la caméra reste dans la nef et
+    // la lumière devient celle des verrières (ou des lampes).
+    let inHangar = 0;
+    // Passage d'une porte : la caméra se place dans l'axe, derrière le navire,
+    // pour franchir l'ouverture avec lui.
+    let axis = 0;
+    let enter = 0;
+    let hangarBox: { cx: number; dims: HangarDims } | null = null;
+    this.doors = [0, 0];
+    const hgc = cityDraw?.rt.hangar;
+    if (cityDraw && hgc) {
+      const hd = hgc.dims;
+      const L = parts.length;
+      const sx = -cityDraw.x; // position du navire dans le repère de la ville
+      // Recul de la caméra dans l'axe (elle suit le navire à cette distance).
+      const halfH0 = (parts.top - parts.bottom) / 2 + 1;
+      const camBack =
+        (halfH0 / Math.tan((view.fov ?? 0.36) / 2)) *
+        (view.margin ?? 1.05) *
+        1.08 *
+        0.6;
+      const out = Math.max(L / 2 + 10, camBack + 15);
+      const arriving = !!j && Date.now() - j.start >= j.duration * 0.5;
+      if (j && arriving) {
+        this.doors[0] =
+          smooth(-hd.hx - 300, -hd.hx - 150, sx) *
+          (1 - smooth(-hd.hx + 50, -hd.hx + 60, sx));
+        const rel = smooth(0.9, 0.995, jp);
+        axis = smooth(-hd.hx - 260, -hd.hx - 130, sx) * (1 - rel);
+        // La caméra se rapproche en passant la porte : elle entre juste
+        // derrière la poupe, avant que les portes ne se referment.
+        enter = smooth(-hd.hx - 60, -hd.hx + 42, sx) * (1 - rel);
+      } else if (j) {
+        this.doors[1] =
+          smooth(0.5, 16, sx) * (1 - smooth(hd.hx + out, hd.hx + out + 40, sx));
+        axis =
+          smooth(1, 20, sx) *
+          (1 - smooth(hd.hx + out + 10, hd.hx + out + 130, sx));
+      }
+      inHangar =
+        smooth(-hd.hx - 30, -hd.hx + 20, sx) *
+        (1 - smooth(hd.hx - 20, hd.hx + 30, sx));
+      hangarBox = { cx: cityDraw.x, dims: hd };
+      if (inHangar > 0)
+        light = lerpLighting(light, hangarLighting(light), inHangar);
     }
     const shipX = 0;
     const hover = HOVER + (HOVER_DOCK - HOVER) * dock;
@@ -621,15 +719,17 @@ export class Stage {
 
     const aspect = this.r.width / this.r.height;
     const fov = view.fov ?? 0.36;
-    const yaw = (view.yaw ?? 0.55) - 1.3 * chase;
+    const yawFree = (view.yaw ?? 0.55) - 1.3 * chase;
+    const yaw = yawFree + (-1.49 - yawFree) * axis;
     const dirH: Vec3 = [Math.sin(yaw), 0, Math.cos(yaw)];
     const cy = hover + (parts.top + parts.bottom) / 2 + 1;
     const halfH = (parts.top - parts.bottom) / 2 + 1;
     const halfW = parts.radius * (0.55 + 0.45 * Math.abs(Math.cos(yaw)));
     const fovX = 2 * Math.atan(Math.tan(fov / 2) * aspect);
-    const m = (view.margin ?? 1.05) * (1 + 0.08 * chase);
-    const dist =
+    const m = (view.margin ?? 1.05) * (1 + 0.08 * chase) * (1 - 0.4 * axis);
+    const dist0 =
       Math.max(halfW / Math.tan(fovX / 2), halfH / Math.tan(fov / 2)) * m;
+    const dist = dist0 + (parts.length / 2 + 16 - dist0) * enter;
     const right: Vec3 = normalize([dirH[2], 0, -dirH[0]]);
     const shift = (view.shift ?? 0) * dist * Math.tan(fovX / 2);
     const target: Vec3 = [
@@ -640,16 +740,62 @@ export class Stage {
     const eyeY =
       view.eyeHeight ??
       target[1] + dist * Math.tan((view.elevation ?? 0.1) + 0.04 * chase);
-    const eye: Vec3 = [
+    let eye: Vec3 = [
       target[0] + dirH[0] * dist,
       eyeY,
       target[2] + dirH[2] * dist,
     ];
+    let clampT = 1;
+    if (hangarBox && inHangar > 0) {
+      // La caméra recule jusqu'aux murs et sous la voûte, pas au-delà.
+      const bx = hangarBox;
+      const room = (u: number) =>
+        hangarRoom(
+          bx.dims,
+          target[0] + (eye[0] - target[0]) * u - bx.cx,
+          target[1] + (eye[1] - target[1]) * u,
+          target[2] + (eye[2] - target[2]) * u
+        );
+      // Premier obstacle le long de la visée (mur, voûte, pignon hors des
+      // portes), affiné par dichotomie.
+      let t = 1;
+      const N = 48;
+      for (let k = 1; k <= N; k++) {
+        if (room(k / N)) continue;
+        let lo = (k - 1) / N;
+        let hi = k / N;
+        for (let i = 0; i < 10; i++) {
+          const mid = (lo + hi) / 2;
+          if (room(mid)) lo = mid;
+          else hi = mid;
+        }
+        t = lo * 0.98;
+        break;
+      }
+      t = Math.max(0, t);
+      clampT = t;
+      const inside: Vec3 = [
+        target[0] + (eye[0] - target[0]) * t,
+        target[1] + (eye[1] - target[1]) * t,
+        target[2] + (eye[2] - target[2]) * t,
+      ];
+      eye = [
+        eye[0] + (inside[0] - eye[0]) * inHangar,
+        eye[1] + (inside[1] - eye[1]) * inHangar,
+        eye[2] + (inside[2] - eye[2]) * inHangar,
+      ];
+    }
     const pods = parts.nozzles.map((n) => ({
       pos: transformPoint(shipM, n.pos),
       power: (this.mood === 'night' ? 4.5 : 3.5) * n.size * (1 - dock * 0.6),
     }));
-    this.r.render(items, glows, { eye, target, fov }, light, {
+    // Dans la nef, champ plus large : on voit le hangar autour du navire.
+    // Arrêtée par un mur, la caméra élargit son champ au lieu de reculer.
+    const fovR = Math.min(
+      1.15,
+      fov * (1 + 0.42 * inHangar) * (1 + 0.9 * (1 - clampT) * inHangar)
+    );
+    this.r.render(items, glows, { eye, target, fov: fovR }, light, {
       time,
       scroll: this.scrollPos,
       calm,
@@ -658,7 +804,11 @@ export class Stage {
       stormColor,
       duneAmp: biome.dune,
       shadowCenter: [shipX * 0.5, hover, 0],
-      shadowRadius: parts.radius + 14 + Math.abs(shipX) * 0.5,
+      shadowRadius:
+        parts.radius +
+        14 +
+        Math.abs(shipX) * 0.5 +
+        (hgc ? (hgc.dims.hx - parts.radius) * inHangar : 0),
       pods,
       dust: view.ground === false || dock > 0.5 ? null : this.ship.dust,
     });
