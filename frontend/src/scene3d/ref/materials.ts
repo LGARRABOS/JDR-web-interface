@@ -94,10 +94,15 @@ function plates(u: number, v: number, nx: number, ny: number, rivets: number) {
   return { seam, d, id: (row * 31 + Math.floor(xs) * 17) % 97 };
 }
 
+/** Laisse respirer la page (barre de progression) entre deux étapes lourdes. */
+const breathe = () => new Promise<void>((r) => setTimeout(r, 0));
+
 export async function createRefMaterials(
   base: string,
-  size: number
+  size: number,
+  progress: (f: number, label: string) => void = () => {}
 ): Promise<RefMaterials> {
+  progress(0.02, 'Chargement des textures');
   const names = [
     'wood_planks',
     'dark_wood',
@@ -115,6 +120,8 @@ export async function createRefMaterials(
   const S = Math.min(size, 512);
 
   // Bois du bordé (planches de 30 cm) et du pont (20 cm, plus clair, calfaté).
+  progress(0.12, 'Bordé du navire');
+  await breathe();
   const hullWood = material(
     fromPhoto(staggered(ph.wood_planks, PLANK_ROWS, 3), '#735a45', [5.4, 2.7], {
       roughMul: 1.05,
@@ -124,6 +131,8 @@ export async function createRefMaterials(
     { side: THREE.DoubleSide }
   );
   // Virure peinte (bleu-vert sombre) au niveau des sabords, peinture écaillée.
+  progress(0.16, 'Matériaux');
+  await breathe();
   const hullBand = material(
     fromPhoto(
       staggered(ph.wood_planks, PLANK_ROWS, 5),
@@ -143,6 +152,8 @@ export async function createRefMaterials(
     ),
     { side: THREE.DoubleSide }
   );
+  progress(0.2, 'Matériaux');
+  await breathe();
   const deck = material(
     fromPhoto(
       staggered(ph.wood_planks, PLANK_ROWS, 11),
@@ -154,12 +165,18 @@ export async function createRefMaterials(
       }
     )
   );
+  progress(0.24, 'Matériaux');
+  await breathe();
   const darkWood = material(
     fromPhoto(ph.dark_wood, '#4a2c1c', [2, 2], { roughMul: 0.75 })
   );
+  progress(0.28, 'Matériaux');
+  await breathe();
   const spar = material(
     fromPhoto(ph.dark_wood, '#6e4a2e', [6, 1.2], { roughMul: 0.9 })
   );
+  progress(0.32, 'Matériaux');
+  await breathe();
   const paint = material(
     fromPhoto(ph.dark_wood, '#1d1915', [2, 2], { roughMul: 0.8, contrast: 0.4 })
   );
@@ -167,6 +184,8 @@ export async function createRefMaterials(
   // Doublage de cuivre riveté, vert-de-gris en coulées.
   const [cuR, cuG, cuB] = hexLin('#a87c5a');
   const [vgR, vgG, vgB] = hexLin('#3f8a72');
+  progress(0.36, 'Doublage de cuivre');
+  await breathe();
   const copperSheath = material(
     bake(S, [3.6, 1.5], (u, v) => {
       const p = plates(u, v, 2, 2, 16);
@@ -191,6 +210,8 @@ export async function createRefMaterials(
   );
 
   // Tôles de fer rivetées (salle des machines, cheminée) sur la photo rouillée.
+  progress(0.4, 'Tôles rivetées');
+  await breathe();
   const ironPlates = material(
     fromPhoto(
       ph.rusty_metal_03,
@@ -211,6 +232,8 @@ export async function createRefMaterials(
       }
     )
   );
+  progress(0.44, 'Matériaux');
+  await breathe();
   const castIron = material(
     fromPhoto(ph.rust_coarse_01, '#2a2624', [1.2, 1.2], {
       metal: 0.6,
@@ -221,6 +244,8 @@ export async function createRefMaterials(
 
   // Laiton brossé, terni par endroits.
   const [brR, brG, brB] = hexLin('#c99a45');
+  progress(0.48, 'Laiton');
+  await breathe();
   const brass = material(
     bake(S, [1, 1], (u, v) => {
       const brush = pfbm(u, v, 2, 256, 3, 21);
@@ -238,6 +263,8 @@ export async function createRefMaterials(
   );
 
   // Cuivre martelé couvert de vert-de-gris (dôme).
+  progress(0.52, 'Vert-de-gris');
+  await breathe();
   const verdigris = material(
     bake(S, [1.5, 1.5], (u, v) => {
       // Alvéoles du martelage (cellules périodiques).
@@ -270,6 +297,8 @@ export async function createRefMaterials(
 
   // Toile des voiles : armure, laizes cousues tous les 75 cm, taches.
   const [caR, caG, caB] = hexLin('#e8dcc2');
+  progress(0.56, 'Toile des voiles');
+  await breathe();
   const canvas = material(
     bake(S, [1.5, 1.5], (u, v) => {
       const weave =
@@ -319,6 +348,8 @@ export async function createRefMaterials(
   });
 
   // Sable : grain de la photo et petites rides du vent.
+  progress(0.6, 'Sable');
+  await breathe();
   const sand = material(
     fromPhoto(
       ph.sand_03,
@@ -333,6 +364,8 @@ export async function createRefMaterials(
       }
     )
   );
+  progress(0.64, 'Falaises');
+  await breathe();
   const cliff = material(
     fromPhoto(ph.cliff_side, '#e0cbb2', [16, 16], {
       normal: 1.5,
@@ -340,6 +373,8 @@ export async function createRefMaterials(
     }),
     { vertexColors: true }
   );
+  progress(0.68, 'Roche');
+  await breathe();
   const rock = material(
     fromPhoto(ph.rock_face_03, '#a87350', [5, 5], { normal: 1.2 })
   );

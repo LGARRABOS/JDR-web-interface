@@ -149,6 +149,7 @@ export class RefViewer {
       quality?: Quality;
       preserve?: boolean;
       interactive?: boolean;
+      onProgress?: (f: number, label: string) => void;
     }
   ) {
     const r = (this.renderer = new THREE.WebGLRenderer({
@@ -233,13 +234,29 @@ void main(){ vec4 c = texture2D(tDiffuse, vUv);
       c.maxPolarAngle = 1.53;
     }
 
-    this.ready = createRefMaterials(opts.textures, q.texSize).then((m) => {
+    const progress = opts.onProgress ?? (() => {});
+    const breathe = () => new Promise<void>((res) => setTimeout(res, 0));
+    this.ready = (async () => {
+      const m = await createRefMaterials(opts.textures, q.texSize, progress);
       if (this.disposed) return;
       this.mats = m;
+      progress(0.74, 'Sculpture du canyon');
+      await breathe();
       this.scene.add(buildDesert(m));
+      progress(0.84, 'Assemblage du navire');
+      await breathe();
       this.buildShip(m);
       this.setMood(this.mood);
-    });
+      // Compilation des shaders en tâche de fond (évite le gel de la 1re image).
+      progress(0.93, 'Allumage des chaudières');
+      await breathe();
+      try {
+        await r.compileAsync(this.scene, this.camera);
+      } catch {
+        // compilation au premier rendu
+      }
+      progress(1, 'Prêt');
+    })();
   }
 
   private buildShip(m: RefMaterials) {
@@ -298,7 +315,7 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
       jet.position.copy(p);
       ship.group.add(jet);
       this.jets.push(jet);
-      const l = new THREE.PointLight(AETHER, 0, 30, 2);
+      const l = new THREE.PointLight(AETHER, 0, 16, 2);
       l.position.copy(p).add(new THREE.Vector3(0, -2.5, 0));
       ship.group.add(l);
       this.podLights.push(l);
@@ -350,12 +367,13 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
       this.mats.aether.emissiveIntensity = night ? 3.2 : 2.0;
     }
     this.lamps.forEach((l) => (l.intensity = night ? 40 : 0));
-    this.podLights.forEach((l) => (l.intensity = night ? 90 : 25));
+    // Lueur des jets sur le sable : discrète au crépuscule, plus marquée la nuit.
+    this.podLights.forEach((l) => (l.intensity = night ? 14 : 2));
     this.jets.forEach(
       (j) =>
         ((j.material as THREE.ShaderMaterial).uniforms.uPower.value = night
-          ? 1.3
-          : 0.75)
+          ? 0.85
+          : 0.45)
     );
     // Particules : teinte de la lumière.
     const lit = night

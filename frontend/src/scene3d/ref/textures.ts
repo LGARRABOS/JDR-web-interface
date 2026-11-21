@@ -5,8 +5,13 @@ import * as THREE from 'three';
 // normale, rugosité), soit par des textures calculées ici (laiton brossé,
 // cuivre martelé, tôles rivetées, toile des voiles…). Tout est carrelable.
 
-const srgb = (l: number) =>
+const srgbF = (l: number) =>
   l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055;
+// Tables précalculées : l'encodage sRGB et le décodage des photos sont
+// appelés des millions de fois pendant la préparation des textures.
+const SRGB_LUT = new Float32Array(4097).map((_, i) => srgbF(i / 4096));
+const srgb = (l: number) => SRGB_LUT[(Math.max(0, Math.min(1, l)) * 4096) | 0];
+const DET_LUT = new Float32Array(256).map((_, i) => Math.pow(i / 255, 2.2) * 2);
 const lin = (c: number) =>
   c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 
@@ -211,8 +216,7 @@ export async function loadPhoto(
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
       const s = ((size - 1 - y) * size + x) * 4;
-      for (let c = 0; c < 3; c++)
-        det[i * 3 + c] = Math.pow(pa[s + c] / 255, 2.2) * 2;
+      for (let c = 0; c < 3; c++) det[i * 3 + c] = DET_LUT[pa[s + c]];
       nx[i] = (pb[s] / 255) * 2 - 1;
       ny[i] = (pb[s + 1] / 255) * 2 - 1;
       rough[i] = pb[s + 2] / 255;
