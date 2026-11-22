@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { RefMaterials } from './materials';
+import { SailRig, type SailSpec } from './sails';
 import {
   along,
   bez,
@@ -1300,98 +1301,6 @@ interface SailBuf {
   idx: number[];
 }
 
-/** Voile carrée gonflée ; renvoie son contour (pour les ralingues). */
-function squareSail(
-  b: SailBuf,
-  x: number,
-  yTop: number,
-  yBot: number,
-  halfTop: number,
-  halfBot: number,
-  belly: number
-): THREE.Vector3[] {
-  const nu = 28,
-    nv = 20;
-  const base = b.pos.length / 3;
-  const H = yTop - yBot;
-  const P = (u: number, v: number) => {
-    // Bords latéraux légèrement creux (chute), bordure en arc.
-    const half =
-      (halfTop + (halfBot - halfTop) * v) * (1 - 0.04 * Math.sin(Math.PI * v));
-    const sag = (1 - u * u) * 0.55 * v * v;
-    const y = yTop - H * v + sag;
-    const w = Math.pow(1 - u * u, 0.75) * Math.sin(Math.PI * (0.1 + v * 0.82));
-    const bulge = belly * w + belly * 0.25 * (1 - u * u) * v;
-    return { p: V(x + 0.75 + bulge, y, u * half), w };
-  };
-  for (let j = 0; j <= nv; j++)
-    for (let i = 0; i <= nu; i++) {
-      const u = (i / nu) * 2 - 1;
-      const v = j / nv;
-      const { p, w } = P(u, v);
-      b.pos.push(p.x, p.y, p.z);
-      b.uvs.push(p.z, p.y);
-      b.wts.push(w);
-    }
-  const w = nu + 1;
-  for (let j = 0; j < nv; j++)
-    for (let i = 0; i < nu; i++) {
-      const a = base + j * w + i;
-      b.idx.push(a, a + 1, a + w, a + 1, a + w + 1, a + w);
-    }
-  const edge: THREE.Vector3[] = [];
-  for (let i = 0; i <= nu; i++) edge.push(P((i / nu) * 2 - 1, 0).p);
-  for (let j = 1; j <= nv; j++) edge.push(P(1, j / nv).p);
-  for (let i = nu - 1; i >= 0; i--) edge.push(P((i / nu) * 2 - 1, 1).p);
-  for (let j = nv - 1; j >= 0; j--) edge.push(P(-1, j / nv).p);
-  return edge;
-}
-
-/** Foc : triangle à chute et bordure creuses, gonflé sur le côté. */
-function jib(
-  b: SailBuf,
-  tack: THREE.Vector3,
-  head: THREE.Vector3,
-  clew: THREE.Vector3,
-  belly: number
-): THREE.Vector3[] {
-  const nu = 16,
-    nv = 16;
-  const base = b.pos.length / 3;
-  const P = (u: number, v: number) => {
-    // u : guindant (0) → chute (1) ; v : bas (0) → têtière (1).
-    const front = tack.clone().lerp(head, v);
-    const back = clew.clone().lerp(head, v);
-    const p = front.lerp(back, u);
-    const w =
-      Math.sin(Math.PI * Math.min(1, u * 0.85 + 0.08)) *
-      Math.sin(Math.PI * Math.min(1, v * 0.9 + 0.08)) *
-      (1 - v * 0.6);
-    p.z += belly * w;
-    // Chute creuse.
-    p.x -= 0.4 * Math.sin(Math.PI * v) * u;
-    return { p, w };
-  };
-  for (let j = 0; j <= nv; j++)
-    for (let i = 0; i <= nu; i++) {
-      const { p, w } = P(i / nu, j / nv);
-      b.pos.push(p.x, p.y, p.z);
-      b.uvs.push(p.x, p.y);
-      b.wts.push(w);
-    }
-  const w = nu + 1;
-  for (let j = 0; j < nv; j++)
-    for (let i = 0; i < nu; i++) {
-      const a = base + j * w + i;
-      b.idx.push(a, a + 1, a + w, a + 1, a + w + 1, a + w);
-    }
-  const edge: THREE.Vector3[] = [];
-  for (let j = 0; j <= nv; j++) edge.push(P(0, j / nv).p);
-  for (let j = nv; j >= 0; j--) edge.push(P(1, j / nv).p);
-  for (let i = 1; i <= nu; i++) edge.push(P(1 - i / nu, 0).p);
-  return edge;
-}
-
 function sailMesh(b: SailBuf, mat: THREE.Material) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
@@ -1737,6 +1646,7 @@ export interface RefShip {
   nozzles: THREE.Vector3[];
   sails: THREE.Mesh;
   flags: THREE.Mesh;
+  rig: SailRig;
 }
 
 export function buildShip(m: RefMaterials): RefShip {
@@ -1843,56 +1753,83 @@ export function buildShip(m: RefMaterials): RefShip {
     )
   );
 
-  // Voiles et ralingues.
-  const sb: SailBuf = { pos: [], uvs: [], wts: [], idx: [] };
-  const edges: THREE.Vector3[][] = [];
+  // Voilure animée (voiles carrées, focs, ralingues, manœuvres courantes).
+  const specs: SailSpec[] = [];
   masts.forEach((ms, mi) => {
     const ys = ms.yards;
+    const sMast = ms.x / L + 0.5;
     const courseBot = mi === 0 ? ms.y0 + 7.6 : ms.y0 + 4.4;
-    edges.push(
-      squareSail(
-        sb,
-        ms.x,
-        ys[0].y - 0.25,
-        courseBot,
-        ys[0].half * 0.96,
-        ys[0].half * 1.05,
-        2.0
-      )
-    );
-    edges.push(
-      squareSail(
-        sb,
-        ms.x,
-        ys[1].y - 0.22,
-        ys[0].y + 0.3,
-        ys[1].half * 0.95,
-        ys[0].half * 0.98,
-        1.6
-      )
-    );
-    edges.push(
-      squareSail(
-        sb,
-        ms.x,
-        ys[2].y - 0.18,
-        ys[1].y + 0.3,
-        ys[2].half * 0.95,
-        ys[1].half * 0.97,
-        1.2
-      )
-    );
+    const yx = ms.x + 0.55;
+    const rail = (side: number) => {
+      const p = hullPt(sMast - 0.06, 1.25, side);
+      return p.add(V(0, 0.2, -side * 0.2));
+    };
+    const yardArm = (y: { y: number; half: number }) => (side: number) =>
+      V(yx + 0.1, y.y, side * y.half * 0.95);
+    specs.push({
+      kind: 'square',
+      x: yx,
+      yardY: ys[0].y,
+      yTop: ys[0].y - 0.25,
+      yBot: courseBot,
+      halfTop: ys[0].half * 0.98,
+      halfBot: ys[0].half * 1.1,
+      belly: 2.1,
+      sheetTo: rail,
+      tier: 0,
+      mast: mi,
+    });
+    specs.push({
+      kind: 'square',
+      x: yx,
+      yardY: ys[1].y,
+      yTop: ys[1].y - 0.22,
+      yBot: ys[0].y + 0.3,
+      halfTop: ys[1].half * 0.97,
+      halfBot: ys[0].half * 0.98,
+      belly: 1.7,
+      sheetTo: yardArm(ys[0]),
+      tier: 1,
+      mast: mi,
+    });
+    specs.push({
+      kind: 'square',
+      x: yx,
+      yardY: ys[2].y,
+      yTop: ys[2].y - 0.18,
+      yBot: ys[1].y + 0.3,
+      halfTop: ys[2].half * 0.97,
+      halfBot: ys[1].half * 0.97,
+      belly: 1.25,
+      sheetTo: yardArm(ys[1]),
+      tier: 2,
+      mast: mi,
+    });
   });
   const fm = masts[2];
   for (let j = 0; j < 2; j++) {
-    const tack = bp0.clone().lerp(bp1, 0.5 + j * 0.45);
-    const head = V(fm.x + 0.4, fm.y0 + fm.H * (0.6 + j * 0.2), 0);
-    const clew = V(fm.x + 3.4 + j * 1.6, fm.y0 + 2.4 + j * 2.2, 0);
-    edges.push(jib(sb, tack, head, clew, 1.0));
+    // Foc et clinfoc : plus petits, étagés, chacun sur son étai.
+    const tack = bp0.clone().lerp(bp1, 0.42 + j * 0.5);
+    const head = V(fm.x + 0.4, fm.y0 + fm.H * (0.5 + j * 0.2), 0);
+    const clew = V(fm.x + 6.2 + j * 3.2, fm.y0 + 3.2 + j * 3.4, 0);
+    const sc = (fm.x + 6.2 + j * 3.2) / L + 0.5;
+    specs.push({
+      kind: 'jib',
+      tack,
+      head,
+      clew,
+      belly: 2.3 - j * 0.3,
+      sheetTo: (side) =>
+        hullPt(Math.min(0.97, sc - 0.02), 1.25, side).add(
+          V(0, 0.15, -side * 0.2)
+        ),
+      halyardTo: V(fm.x + 0.35, fm.top - 0.6, 0),
+      tier: j,
+    });
     k.rope(tack, head, 0.04);
   }
-  const sails = sailMesh(sb, m.canvas);
-  edges.forEach((e) => k.add(m.rope, tube(e, 0.045, e.length * 2, 6)));
+  const rig = new SailRig(specs, m.canvas, m.rope);
+  const sails = rig.sails;
 
   // Gréement dormant : haubans et enfléchures, galhaubans, étais, bras.
   masts.forEach((ms, mi) => {
@@ -2003,6 +1940,16 @@ export function buildShip(m: RefMaterials): RefShip {
   const prop = sternProp(k, m);
 
   const group = k.build(m.rope);
-  group.add(sails, flags, prop);
-  return { group, props: [prop], lights, smoke, steam, nozzles, sails, flags };
+  group.add(sails, rig.ropes, rig.running, rig.gaskets, flags, prop);
+  return {
+    group,
+    props: [prop],
+    lights,
+    smoke,
+    steam,
+    nozzles,
+    sails,
+    flags,
+    rig,
+  };
 }

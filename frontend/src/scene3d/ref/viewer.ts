@@ -272,22 +272,47 @@ void main(){ vec4 c = texture2D(tDiffuse, vUv);
       sh.vertexShader = sh.vertexShader
         .replace(
           '#include <common>',
-          '#include <common>\nattribute float sw;\nuniform float uTime;'
+          '#include <common>\nattribute vec2 sl;\nattribute vec2 sd;\nvarying vec2 vSl;\nvarying vec2 vSd;'
         )
         .replace(
           '#include <begin_vertex>',
-          `#include <begin_vertex>
-transformed.x += sw * (sin(uTime*1.3 + position.y*.3 + position.z*.15)*.16 + sin(uTime*2.9 + position.z*.5)*.05);`
+          '#include <begin_vertex>\nvSl = sl; vSd = sd;'
         );
       sh.fragmentShader = sh.fragmentShader
         .replace(
           '#include <common>',
-          '#include <common>\nuniform vec3 uSunView, uSunCol;'
+          '#include <common>\nuniform vec3 uSunView, uSunCol;\nvarying vec2 vSl;\nvarying vec2 vSd;'
         )
         .replace(
           '#include <emissivemap_fragment>',
           `#include <emissivemap_fragment>
-totalEmissiveRadiance += diffuseColor.rgb * uSunCol * (max(-dot(normal, uSunView), 0.) * .45 + .04);`
+{
+  // Confection : ourlets (gaines), renforts cousus aux angles, bandes de ris
+  // et garcettes, teinte propre à chaque laize, poussière vers la bordure.
+  vec2 s01 = vSl; vec2 dim = max(vSd, vec2(.5));
+  float dx = min(s01.x, 1. - s01.x) * dim.x;
+  float dy = min(s01.y, 1. - s01.y) * dim.y;
+  float hem = 1. - smoothstep(.1, .15, min(dx, dy));
+  float corner = 1. - smoothstep(1.0, 1.12, dx + dy);
+  float cornerSeam = corner * (1. - smoothstep(.015, .03, abs(fract((dx + dy) * 3.) - .5) - .45));
+  float isSquare = step(dim.y, dim.x * 1.05);
+  float yh = s01.y * dim.y;
+  float rk = floor(yh / .95 + .5);
+  float reef = isSquare * step(.5, rk) * step(rk, 2.5) * (1. - smoothstep(.04, .07, abs(yh - rk * .95)));
+  float zz = (s01.x - .5) * dim.x;
+  float pts = reef * (1. - smoothstep(.025, .045, length(vec2((fract(zz / .55) - .5) * .55, yh - rk * .95 + .12))));
+  float lz = floor(zz / .75);
+  float tint = fract(sin(lz * 127.1 + dim.y * 3.1) * 43758.5453);
+  diffuseColor.rgb *= .95 + .08 * tint;
+  diffuseColor.rgb *= 1. - .1 * hem - .1 * corner - .08 * reef - .1 * cornerSeam;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.22, .17, .12), pts * .8);
+  float dust = smoothstep(.45, 1., s01.y) * .13 * isSquare + .04 * sin(s01.x * 31. + s01.y * 7.) * smoothstep(.6, 1., s01.y);
+  diffuseColor.rgb *= vec3(1. - dust * .7, 1. - dust, 1. - dust * 1.4);
+  // Translucidité : la lumière traverse la toile, moins là où elle est doublée.
+  float thick = 1. - .65 * max(max(hem, corner), reef);
+  float back = max(-dot(normal, uSunView), 0.);
+  totalEmissiveRadiance += diffuseColor.rgb * uSunCol * (pow(back, 1.5) * .5 * thick + .045);
+}`
         );
     };
     const ship = (this.ship = buildShip(m));
@@ -334,7 +359,8 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
       this.controls.update();
     }
     // Pré-remplit fumée et poussière (la scène s'ouvre « en route »).
-    for (let i = 0; i < 300; i++) this.step(1 / 30);
+    for (let i = 0; i < 300; i++) this.step(1 / 30, false);
+    ship.rig.update(this.t, 1 / 30);
   }
 
   setMood(mood: RefMood) {
@@ -408,6 +434,22 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
     }
   }
   private sunDir = new THREE.Vector3(0, 1, 0);
+  private way = 1;
+
+  /** En route (voiles établies) ou à l'arrêt (voiles carguées), avec transition. */
+  setUnderway(on: boolean, instant = false) {
+    const ship = this.ship;
+    if (!ship) return;
+    ship.rig.setUnderway(on);
+    if (instant) {
+      ship.rig.snap();
+      this.way = on ? 1 : 0;
+      ship.rig.update(this.t, 1 / 30);
+    }
+  }
+  get underway() {
+    return this.ship?.rig.underway ?? true;
+  }
 
   setSize(w: number, h: number) {
     this.renderer.setSize(w, h, false);
@@ -422,7 +464,7 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
   }
 
   /** Avance la simulation de dt secondes (navire, hélice, particules). */
-  step(dt: number) {
+  step(dt: number, rig = true) {
     this.t += dt;
     const t = this.t;
     const ship = this.ship;
@@ -430,7 +472,13 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
     this.shipRoot.position.y = this.shipY + Math.sin(t * 0.55) * 0.3;
     this.shipRoot.rotation.x = Math.sin(t * 0.43) * 0.012;
     this.shipRoot.rotation.z = Math.sin(t * 0.31) * 0.007;
-    ship.props.forEach((p) => (p.rotation.x += dt * 9));
+    ship.props.forEach(
+      (p) => (p.rotation.x += dt * 9 * (0.15 + 0.85 * this.way))
+    );
+    // En route ou à l'arrêt : le vent apparent tombe progressivement.
+    this.way +=
+      ((ship.rig.underway ? 1 : 0) - this.way) * Math.min(1, dt * 0.4);
+    if (rig) ship.rig.update(this.t, dt);
     this.sailU.uTime.value = t;
     this.jets.forEach(
       (j) => ((j.material as THREE.ShaderMaterial).uniforms.uTime.value = t)
@@ -438,7 +486,11 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
     this.shipRoot.updateMatrixWorld(true);
     const mw = this.shipRoot.matrixWorld;
     const rnd = () => Math.random() - 0.5;
-    const wind = new THREE.Vector3(-7.5, 1.0, 1.8);
+    const wind = new THREE.Vector3(
+      -1.2 - 6.3 * this.way,
+      1.0,
+      0.6 + 1.2 * this.way
+    );
     const emit = (rate: number, f: () => void) => {
       const n = Math.floor(rate * dt + Math.random());
       for (let i = 0; i < n; i++) f();

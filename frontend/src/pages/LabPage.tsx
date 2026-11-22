@@ -8,6 +8,7 @@ export function LabPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<RefViewer | null>(null);
   const [mood, setMood] = useState<RefMood>('dusk');
+  const [underway, setUnderway] = useState(true);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [tier, setTier] = useState('');
   const [prog, setProg] = useState({ f: 0, label: 'Ouverture des soutes' });
@@ -58,6 +59,10 @@ export function LabPage() {
     if (state === 'ready') viewerRef.current?.setMood(mood);
   }, [mood, state]);
 
+  useEffect(() => {
+    if (state === 'ready') viewerRef.current?.setUnderway(underway);
+  }, [underway, state]);
+
   const btn = (m: RefMood, label: string) => (
     <button
       type="button"
@@ -90,6 +95,25 @@ export function LabPage() {
         <div className="flex gap-2">
           {btn('dusk', 'Crépuscule')}
           {btn('night', 'Nuit')}
+        </div>
+        <div className="flex gap-2">
+          {[
+            [true, 'En route'],
+            [false, 'À l’arrêt'],
+          ].map(([on, label]) => (
+            <button
+              key={String(on)}
+              type="button"
+              onClick={() => setUnderway(on as boolean)}
+              className={`px-3 py-1.5 rounded border text-sm ${
+                underway === on
+                  ? 'bg-amber-700/80 border-amber-400 text-amber-50'
+                  : 'bg-black/40 border-amber-900/60 text-amber-100 hover:bg-black/60'
+              }`}
+            >
+              {label as string}
+            </button>
+          ))}
         </div>
         <div className="text-xs text-amber-200/70">
           {state === 'loading' && 'Préparation des matériaux…'}
