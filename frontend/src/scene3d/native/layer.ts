@@ -24,7 +24,7 @@ import {
 } from '../ref/ship';
 import { cyl, Kit, lathe, M, tess, torus } from '../ref/kit';
 import { Crowd } from './crew';
-import { groundMesh, sandHeight, type GroundParams } from './ground';
+import { sandHeight, type GroundParams } from './ground';
 import { BiomeScenery } from './scenery';
 
 // Couche réaliste du jeu : le navire de chaque partie (allure, matériaux,
@@ -186,7 +186,6 @@ export class NativeLayer implements NativeHost {
   private pending: { build: Build; opts: NativeShipOptions } | null = null;
   private npcs = new Map<string, ShipRt>();
   private crowd: Crowd;
-  private ground: ReturnType<typeof groundMesh> | null = null;
   private scenery: BiomeScenery | null = null;
   private smoke = new Puffs(900, new THREE.Color('#8a8580'), 0.12);
   private steam = new Puffs(260, new THREE.Color('#f2efe9'), 0.25);
@@ -218,8 +217,6 @@ export class NativeLayer implements NativeHost {
     refLibrary(textures, quality.texSize)
       .then((lib) => {
         this.lib = lib;
-        this.ground = groundMesh(lib.sand, (m) => this.patch(m));
-        this.root.add(this.ground.mesh);
         this.scenery = new BiomeScenery(lib, (m) => this.patch(m), quality);
         this.root.add(this.scenery.root);
         if (this.pending) this.setShip(this.pending.build, this.pending.opts);
@@ -555,23 +552,6 @@ vArpW = (modelMatrix * arpW).xyz;`
       calm: f.calm,
       calmX: f.calmX,
     };
-    const gr = this.ground;
-    if (gr) {
-      gr.mesh.visible = f.ground && !f.inVoid;
-      gr.uniforms.uScroll.value = f.scroll;
-      gr.uniforms.uGAmp.value = f.duneAmp;
-      gr.uniforms.uGCalm.value = f.calm;
-      gr.uniforms.uGCalmX.value = f.calmX;
-      // Teinte du sable du désert et du paysage.
-      const sa = L.sandA,
-        sb = L.sandB;
-      const ref = lin('#cfa886');
-      gr.material.color.setRGB(
-        Math.min(2, ((sa[0] + sb[0]) / 2 / ref.r) * 1.15),
-        Math.min(2, ((sa[1] + sb[1]) / 2 / ref.g) * 1.15),
-        Math.min(2, ((sa[2] + sb[2]) / 2 / ref.b) * 1.15)
-      );
-    }
     this.scenery?.frame(f, this.gp);
 
     // Navire de la partie.
@@ -751,6 +731,5 @@ vArpW = (modelMatrix * arpW).xyz;`
     for (const rt of this.npcs.values()) this.dropShip(rt);
     this.npcs.clear();
     this.scenery?.dispose();
-    this.ground?.mesh.geometry.dispose();
   }
 }

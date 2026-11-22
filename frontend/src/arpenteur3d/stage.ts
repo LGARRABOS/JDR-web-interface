@@ -850,11 +850,13 @@ export class Stage {
       });
     }
     if (view.ground !== false && !inVoid) {
-      const bm = nat || interior ? null : this.biomeMeshes(biome);
+      // Le sable et les lointains restent ceux du moteur maison (dunes,
+      // rides et grain) ; en rendu réaliste, les curiosités sont natives.
+      const bm = interior ? null : this.biomeMeshes(biome);
       if (bm) {
         items.push({ mesh: this.env.terrain, model: identity() });
         items.push({ mesh: bm.far, model: identity() });
-        items.push(...scenery);
+        if (!nat) items.push(...scenery);
       }
       if (cityDraw)
         this.drawCity(
@@ -866,7 +868,7 @@ export class Stage {
           cityDraw.moored,
           interior
         );
-      if (bm && (!calm || Math.abs(calmX) > 900)) {
+      if (bm && !nat && (!calm || Math.abs(calmX) > 900)) {
         // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
         const off = -(this.scrollPos % ROCK_LOOP);
         // Curiosités du paysage, posées sur les dunes, qui défilent en boucle.
