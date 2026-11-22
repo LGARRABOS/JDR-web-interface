@@ -505,14 +505,16 @@ vArpW = (modelMatrix * arpW).xyz;`
     // À quai (ou petite qualité), la toile est simulée à demi-cadence.
     rig.slow = docked > 0.5 || this.lowQ;
     rt.sailDt += f.dt;
-    if (rt.npc) {
+    // Voiles serrées et immobiles : plus rien à recalculer (navire du joueur
+    // compris) ; les navires du port en manœuvre, une image sur trois.
+    {
       rt.sailTick++;
       const still = rig.settled && !rig.underway;
       if (still && rt.sailFresh) {
         rt.sailDt = 0;
         return this.jets(rt, f, power);
       }
-      if (!still && rt.sailTick % 3) return this.jets(rt, f, power);
+      if (rt.npc && !still && rt.sailTick % 3) return this.jets(rt, f, power);
       rt.sailFresh = still;
     }
     rig.update(f.time, rt.sailDt);

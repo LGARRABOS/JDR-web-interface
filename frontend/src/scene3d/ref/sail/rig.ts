@@ -191,7 +191,8 @@ export class SailRig {
       const wv = this.wv;
       return (i, x, y, z, vx, vy, vz, out) => {
         this.wind.sample(x, y, z, this.gust, s.seed, wv);
-        const e = s.exposure;
+        // Toile serrée : presque à l'abri du vent.
+        const e = s.exposure * (0.08 + 0.92 * s.d * s.d);
         const rx = wv[0] * e - vx * 0.04,
           ry = wv[1] * e - vy * 0.04,
           rz = wv[2] * e - vz * 0.04;
@@ -260,7 +261,7 @@ export class SailRig {
   /** Manœuvre terminée et toile au repos. */
   get settled() {
     return (
-      this.quiet > 3 &&
+      this.quiet > 5 &&
       this.list.every((s) => s.d === this.target && s.wait <= 0)
     );
   }
@@ -308,6 +309,10 @@ export class SailRig {
     this.gust = this.wind.gust();
     this.list.forEach((s, k) => {
       s.rig(this.time);
+      // Serrée, la toile est bridée : elle s'immobilise vite.
+      s.cloth.damping = 0.985 - 0.3 * (1 - s.d) * (1 - s.d);
+      // Serrée depuis un moment : la toile est figée (plus aucun frémissement).
+      if (s.d === 0 && this.quiet > 5) return;
       s.cloth.step(h, this.forces[k]);
     });
   }

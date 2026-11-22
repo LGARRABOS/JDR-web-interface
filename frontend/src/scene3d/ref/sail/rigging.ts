@@ -262,8 +262,7 @@ export class SquareSail extends Sail {
           Math.cos(Math.PI * (gp - Math.floor(gp) - 0.5)),
           8
         );
-        cloth.hold[k] =
-          lock * (0.04 + 0.5 * near) * (0.35 + 0.65 * (1 - j / nv));
+        cloth.hold[k] = lock * (0.18 + 0.5 * near) * (0.5 + 0.5 * (1 - j / nv));
         cloth.target.set([p.x, p.y, p.z], k * 3);
       }
   }
@@ -373,9 +372,9 @@ export class JibSail extends Sail {
   /** Foc serré : boudin de toile ferlé le long du bas de l'étai. */
   stowed(u: number, v: number, out: THREE.Vector3) {
     const s = this.s;
-    const S = s.tack.clone().lerp(s.head, 0.03 + 0.3 * (v * 0.6 + u * 0.4));
+    const S = s.tack.clone().lerp(s.head, 0.01 + 0.085 * (v * 0.6 + u * 0.4));
     const a = u * 9 + v * 4;
-    const r = 0.22 + 0.06 * Math.sin(u * 13 + v * 7);
+    const r = 0.28 + 0.07 * Math.sin(u * 13 + v * 7);
     return out.set(S.x, S.y - 0.12 + Math.sin(a) * r, S.z + Math.cos(a) * r);
   }
 
@@ -407,7 +406,7 @@ export class JibSail extends Sail {
       for (let i = 1; i <= nu; i++) {
         const k = j * (nu + 1) + i;
         if (cloth.inv[k] === 0) continue;
-        cloth.hold[k] = lock * 0.22;
+        cloth.hold[k] = lock * 0.45;
         if (lock > 0) {
           this.stowed(i / nu, j / nv, p);
           cloth.target.set([p.x, p.y, p.z], k * 3);

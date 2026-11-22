@@ -238,9 +238,17 @@ export class Cloth {
       const h = hold[k];
       if (h <= 0 || inv[k] === 0) continue;
       const o = k * 3;
-      pos[o] += (target[o] - pos[o]) * h;
-      pos[o + 1] += (target[o + 1] - pos[o + 1]) * h;
-      pos[o + 2] += (target[o + 2] - pos[o + 2]) * h;
+      // Le maintien déplace aussi la position précédente : il ne donne
+      // aucun élan (sinon la toile tenue oscillerait sans fin).
+      const dx = (target[o] - pos[o]) * h,
+        dy = (target[o + 1] - pos[o + 1]) * h,
+        dz = (target[o + 2] - pos[o + 2]) * h;
+      pos[o] += dx;
+      pos[o + 1] += dy;
+      pos[o + 2] += dz;
+      prev[o] += dx;
+      prev[o + 1] += dy;
+      prev[o + 2] += dz;
     }
     // Garde-fou : un point aberrant est ramené à sa cible.
     for (let k = 0; k < n; k++) {
