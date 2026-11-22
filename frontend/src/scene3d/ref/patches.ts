@@ -72,6 +72,11 @@ export function patchSail(mat: THREE.Material, uniforms: SailUniforms) {
   float lz = floor(zz / .75);
   float tint = fract(sin(lz * 127.1 + dim.y * 3.1) * 43758.5453);
   diffuseColor.rgb *= .95 + .08 * tint;
+  // Coutures des laizes : double épaisseur, double piqûre.
+  float sd0 = abs(fract(zz / .75 + .5) - .5) * .75;
+  float seam = 1. - smoothstep(.012, .03, sd0);
+  float stitch = (1. - smoothstep(.003, .007, abs(sd0 - .022))) * step(.45, fract(yh * 14.));
+  diffuseColor.rgb *= 1. - .06 * seam - .12 * stitch;
   diffuseColor.rgb *= 1. - .1 * hem - .1 * corner - .08 * reef - .1 * cornerSeam;
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.22, .17, .12), pts * .8);
   float dust = smoothstep(.45, 1., s01.y) * .13 * isSquare + .04 * sin(s01.x * 31. + s01.y * 7.) * smoothstep(.6, 1., s01.y);
@@ -81,7 +86,7 @@ export function patchSail(mat: THREE.Material, uniforms: SailUniforms) {
   bool concave = vHol >= 0. ? !gl_FrontFacing : gl_FrontFacing;
   diffuseColor.rgb *= concave ? 1. - .34 * hv : .86 + .16 * hv;
   // Translucidité : forte sur la toile simple, faible là où elle est doublée.
-  gThin = (1. - .85 * max(max(hem, corner), reef)) * (1. - .8 * cornerSeam);
+  gThin = (1. - .85 * max(max(hem, corner), reef)) * (1. - .8 * cornerSeam) * (1. - .45 * seam);
   totalEmissiveRadiance += diffuseColor.rgb * uSunCol * .03 * gThin;
 }`
       );

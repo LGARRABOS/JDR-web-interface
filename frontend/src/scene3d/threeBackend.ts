@@ -493,7 +493,9 @@ export class ThreeBackend implements RenderBackend {
       });
       this.composer.addPass(this.gtao);
     }
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.55, 1.05);
+    // Seuil haut : seules les vraies sources (lampes, Aether) rayonnent, pas les
+    // murs blancs au soleil (sinon l'image paraît floue et voilée).
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.4, 2.2);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.fx = new ShaderPass(fxShader());
@@ -723,7 +725,7 @@ export class ThreeBackend implements RenderBackend {
 
     // Post-traitement.
     this.renderer.toneMappingExposure = light.exposure;
-    this.bloom.strength = light.bloom * 0.55;
+    this.bloom.strength = light.bloom * 0.4;
     const fu = this.fx.uniforms;
     fu.uStorm.value = opts.storm ?? 0;
     fu.uPortal.value = opts.portal ?? 0;

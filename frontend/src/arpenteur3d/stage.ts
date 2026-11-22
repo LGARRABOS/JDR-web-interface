@@ -136,8 +136,9 @@ interface CityRt {
   ships: {
     key: string;
     build: Build;
-    body: GpuMesh;
-    glows: GpuMesh;
+    /** Maillages du moteur maison (absents si le rendu réaliste dessine le navire). */
+    body: GpuMesh | null;
+    glows: GpuMesh | null;
     x: number;
     z: number;
     cycle?: { period: number; phase: number };
@@ -437,12 +438,13 @@ export class Stage {
       // Autres navires du port, chacun avec sa silhouette et ses couleurs.
       const ships = BERTHS.map((q, k) => {
         const build = npcBuild(c.id, k);
-        const parts = buildShip(build, { crew: 0, night });
+        const nat = !!this.r.native?.ready;
+        const parts = nat ? null : buildShip(build, { crew: 0, night });
         return {
           key: `${c.id}:${k}`,
           build,
-          body: this.r.upload(parts.body),
-          glows: this.r.upload(parts.glows),
+          body: parts ? this.r.upload(parts.body) : null,
+          glows: parts ? this.r.upload(parts.glows) : null,
           x: q.x,
           z: q.z,
           cycle: q.cycle,
@@ -489,8 +491,8 @@ export class Stage {
         this.r.release(m.hangar.moor);
       }
       for (const sh of m.ships) {
-        this.r.release(sh.body);
-        this.r.release(sh.glows);
+        if (sh.body) this.r.release(sh.body);
+        if (sh.glows) this.r.release(sh.glows);
       }
     }
     this.cities.clear();
@@ -561,8 +563,8 @@ export class Stage {
           });
           continue;
         }
-        items.push({ mesh: sh.body, model: mdl });
-        glows.push({ mesh: sh.glows, model: mdl });
+        if (sh.body) items.push({ mesh: sh.body, model: mdl });
+        if (sh.glows) glows.push({ mesh: sh.glows, model: mdl });
       }
     c.crowd.forEach((p, k) => {
       if (interior && !inside(p.pos)) return;

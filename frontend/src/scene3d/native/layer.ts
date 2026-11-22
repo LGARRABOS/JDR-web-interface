@@ -170,6 +170,7 @@ interface ShipRt {
   deck: number;
   smokeT: number;
   shown: boolean;
+  key: string;
   npc: boolean;
   sailDt: number;
   sailTick: number;
@@ -190,6 +191,7 @@ export class NativeLayer implements NativeHost {
   private smoke = new Puffs(900, new THREE.Color('#8a8580'), 0.12);
   private steam = new Puffs(260, new THREE.Color('#f2efe9'), 0.25);
   private dust = new Puffs(600, new THREE.Color('#d2a273'), 0.2);
+  private lowQ = false;
   private sunView = new THREE.Vector3();
   private sunDir = new THREE.Vector3(0, 1, 0);
   private sunCol = new THREE.Color();
@@ -207,6 +209,7 @@ export class NativeLayer implements NativeHost {
     private onReady: () => void
   ) {
     this.fogU = shared;
+    this.lowQ = quality.tier === 'low';
     this.root.add(this.smoke.points, this.steam.points, this.dust.points);
     this.crowd = new Crowd(400, (m) => this.patch(m));
     this.root.add(this.crowd.root);
@@ -356,6 +359,7 @@ vArpW = (modelMatrix * arpW).xyz;`
       deck: ship.deck,
       smokeT: 0,
       shown: false,
+      key: '',
       npc: !crewCount,
       sailDt: 0,
       sailTick: 0,
@@ -399,8 +403,25 @@ vArpW = (modelMatrix * arpW).xyz;`
       return;
     }
     this.pending = null;
+    // Même navire (passage jour / nuit, quai recalculé) : on le garde, seules
+    // les références de l'équipage changent.
+    const key = JSON.stringify([
+      build,
+      opts.guns ?? 0,
+      opts.damage ?? 0,
+      !!opts.scaffolding,
+      opts.parts.crew.length,
+    ]);
+    const old = this.player;
+    if (old && old.key === key) {
+      const prev = [...old.crewMap.values()];
+      old.crewMap = new Map(opts.parts.crew.map((c, i) => [c, prev[i] ?? c]));
+      old.crewStyle = opts.parts.crewStyle;
+      return;
+    }
     this.dropShip(this.player);
     const rt = this.build(build, opts, true);
+    rt.key = key;
     // Le pont neuf n'a pas les mêmes encombrements : chaque matelot reçoit
     // une place libre proche de la sienne (ou la barre, pour le timonier).
     const taken: THREE.Vector3[] = [];
@@ -484,6 +505,8 @@ vArpW = (modelMatrix * arpW).xyz;`
     // La toile est recalculée sur le processeur : les navires du port à quai,
     // voiles serrées, ne la recalculent plus ; en manœuvre, une image sur trois.
     const rig = rt.ship.rig;
+    // À quai (ou petite qualité), la toile est simulée à demi-cadence.
+    rig.slow = docked > 0.5 || this.lowQ;
     rt.sailDt += f.dt;
     if (rt.npc) {
       rt.sailTick++;

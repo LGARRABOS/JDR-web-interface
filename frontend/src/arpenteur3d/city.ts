@@ -1477,7 +1477,7 @@ export function cityMesh(o: CityOptions): {
       color: linear(st.dome),
       metal: 0,
       rough: 0.15,
-      emit: o.night ? 1.6 : 0.3,
+      emit: o.night ? 0.6 : 0.1,
     };
     b.push(translation(x, ground, z));
     b.cylinder(3.4, 3, 8, mat(adobe[0]));
