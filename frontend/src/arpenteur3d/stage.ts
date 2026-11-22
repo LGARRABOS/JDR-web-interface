@@ -115,8 +115,9 @@ interface Journey {
   total: number;
   base: number;
   /** Paysages croisés avant et après la tempête (changement de zone). */
-  propsA: GpuMesh;
-  propsB: GpuMesh;
+  /** Curiosités du moteur maison (absentes en rendu réaliste). */
+  propsA: GpuMesh | null;
+  propsB: GpuMesh | null;
   fromBiome: Biome;
   toBiome: Biome;
 }
@@ -171,7 +172,7 @@ export class Stage {
   private env: { terrain: GpuMesh };
   private biome: Biome = BIOMES.dunes;
   /** Lointains et bande de décor de chaque paysage (cache). */
-  private biomes = new Map<string, { far: GpuMesh; band: GpuMesh }>();
+  private biomes = new Map<string, { far: GpuMesh; band: GpuMesh | null }>();
   private ship: {
     parts: ShipParts;
     body: GpuMesh;
@@ -191,6 +192,7 @@ export class Stage {
     swapped: boolean;
   } | null = null;
   private lastShip: { build: Build; opts: StageOptions } | null = null;
+  private shipKey = '';
   private place: Place = {};
   private cities = new Map<string, CityRt>();
   /** Ouverture des portes du hangar (entrée -x, sortie +x), 0..1. */
@@ -258,6 +260,10 @@ export class Stage {
       table[i] = table[i - 1] + CRUISE * journeySpeed(p, v0, v1) * dt;
     }
     const total = table[SAMPLES];
+    const nat = !!this.r.native?.ready;
+    // Ville d'arrivée préparée à l'avance, au calme (pas d'à-coup en route).
+    const tc = to.place.city;
+    if (tc) idle(() => this.journey?.key === key && this.cityOf(tc));
     this.journey = {
       key,
       from,
@@ -271,24 +277,32 @@ export class Stage {
       table,
       total,
       base: this.scrollPos,
-      propsA: this.r.upload(
-        featuresMesh(
-          biomeOf(from.biome ?? '', from.desert),
-          'a' + scKey(from),
-          60,
-          total,
-          { night: mood === 'night' }
-        )
-      ),
-      propsB: this.r.upload(
-        featuresMesh(
-          biomeOf(to.biome ?? '', to.desert),
-          'b' + scKey(to),
-          60,
-          total,
-          { night: mood === 'night' }
-        )
-      ),
+      propsA: nat
+        ? null
+        : this.r.upload(
+            featuresMesh(
+              biomeOf(from.biome ?? '', from.desert),
+              'a' + scKey(from),
+              60,
+              total,
+              {
+                night: mood === 'night',
+              }
+            )
+          ),
+      propsB: nat
+        ? null
+        : this.r.upload(
+            featuresMesh(
+              biomeOf(to.biome ?? '', to.desert),
+              'b' + scKey(to),
+              60,
+              total,
+              {
+                night: mood === 'night',
+              }
+            )
+          ),
     };
   }
 
@@ -322,8 +336,8 @@ export class Stage {
 
   private endJourney() {
     if (!this.journey) return;
-    this.r.release(this.journey.propsA);
-    this.r.release(this.journey.propsB);
+    if (this.journey.propsA) this.r.release(this.journey.propsA);
+    if (this.journey.propsB) this.r.release(this.journey.propsB);
     this.journey = null;
   }
 
@@ -354,12 +368,14 @@ export class Stage {
       const night = this.mood === 'night';
       m = {
         far: this.r.upload(farMesh(b, night)),
-        band: this.r.upload(
-          featuresMesh(b, 'band', -ROCK_LOOP / 2 + 30, ROCK_LOOP / 2 - 30, {
-            night,
-            density: 2.2,
-          })
-        ),
+        band: this.r.native?.ready
+          ? null
+          : this.r.upload(
+              featuresMesh(b, 'band', -ROCK_LOOP / 2 + 30, ROCK_LOOP / 2 - 30, {
+                night,
+                density: 2.2,
+              })
+            ),
       };
       this.biomes.set(b.id, m);
     }
@@ -412,7 +428,7 @@ export class Stage {
     this.clearVoid();
     for (const m of this.biomes.values()) {
       this.r.release(m.far);
-      this.r.release(m.band);
+      if (m.band) this.r.release(m.band);
     }
     this.biomes.clear();
   }
@@ -577,6 +593,11 @@ export class Stage {
   }
 
   setShip(build: Build, opts: StageOptions = {}) {
+    // Même navire, même heure (données rechargées au retour sur la page) :
+    // rien à reconstruire.
+    const key = JSON.stringify([build, opts, this.mood]);
+    if (this.ship && key === this.shipKey) return;
+    this.shipKey = key;
     this.lastShip = { build, opts };
     this.disposeShip();
     const parts = buildShip(build, { ...opts, night: this.mood === 'night' });
@@ -694,9 +715,10 @@ export class Stage {
       }
       const viaPortal = !!(j.from.place.void || j.to.place.void);
       inVoid = !!(after ? j.to.place.void : j.from.place.void);
-      if (!inVoid)
+      const props = after ? j.propsB : j.propsA;
+      if (!inVoid && props)
         scenery.push({
-          mesh: after ? j.propsB : j.propsA,
+          mesh: props,
           model: translation(-dist, 0, 0),
           drape: true,
         });
@@ -868,17 +890,18 @@ export class Stage {
           cityDraw.moored,
           interior
         );
-      if (bm && !nat && (!calm || Math.abs(calmX) > 900)) {
+      const band = bm?.band;
+      if (band && !nat && (!calm || Math.abs(calmX) > 900)) {
         // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
         const off = -(this.scrollPos % ROCK_LOOP);
         // Curiosités du paysage, posées sur les dunes, qui défilent en boucle.
         items.push({
-          mesh: bm.band,
+          mesh: band,
           model: translation(off, 0, 0),
           drape: true,
         });
         items.push({
-          mesh: bm.band,
+          mesh: band,
           model: translation(off + ROCK_LOOP, 0, 0),
           drape: true,
         });
@@ -1004,6 +1027,7 @@ export class Stage {
       calm,
       calmX,
       biome: biome.id,
+      nextBiome: j ? j.toBiome.id : undefined,
       duneAmp: biome.dune,
       inVoid,
       ground: view.ground !== false && !interior,
@@ -1117,6 +1141,15 @@ function sceneLight(s: Scene, mood: Mood): Lighting {
   return s.place.void
     ? voidLighting(mood)
     : biomeLighting(lighting(s.desert, mood), biomeOf(s.biome ?? '', s.desert));
+}
+
+/** Tâche différée à un moment calme du navigateur. */
+function idle(fn: () => void) {
+  const w = globalThis as unknown as {
+    requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void;
+  };
+  if (w.requestIdleCallback) w.requestIdleCallback(fn, { timeout: 4000 });
+  else setTimeout(fn, 200);
 }
 
 const scKey = (s: Scene) =>

@@ -28,6 +28,8 @@ export interface NativeFrame {
   calm: number;
   calmX: number;
   biome: string;
+  /** Paysage d'arrivée d'un voyage (préparé en arrière-plan). */
+  nextBiome?: string;
   duneAmp: number;
   inVoid: boolean;
   ground: boolean;

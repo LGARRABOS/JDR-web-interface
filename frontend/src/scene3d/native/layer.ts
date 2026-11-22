@@ -555,6 +555,7 @@ vArpW = (modelMatrix * arpW).xyz;`
       calmX: f.calmX,
     };
     this.scenery?.frame(f, this.gp);
+    this.scenery?.preload(f.nextBiome);
 
     // Navire de la partie.
     const shipM = new THREE.Matrix4().fromArray(f.shipM);
@@ -580,10 +581,14 @@ vArpW = (modelMatrix * arpW).xyz;`
 
     // Navires du port.
     const seen = new Set<string>();
+    // Un seul navire du port modelé par image (pas d'à-coup à l'arrivée).
+    let built = false;
     for (const n of f.npc) {
       seen.add(n.key);
       let rt = this.npcs.get(n.key);
       if (!rt) {
+        if (built) continue;
+        built = true;
         rt = this.build(n.build, { crew: 0 }, false);
         this.npcs.set(n.key, rt);
         this.root.add(rt.root);

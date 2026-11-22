@@ -56,6 +56,14 @@ interface BiomeSet {
   root: THREE.Group;
   items: Feature[];
   far: THREE.Mesh;
+  /** Curiosités encore à modeler (construites peu à peu, sans à-coup). */
+  queue: {
+    make: () => THREE.Object3D;
+    x: number;
+    z: number;
+    r: number;
+    sink: number;
+  }[];
 }
 
 const FAR: Record<string, RangeStyle> = {
@@ -560,12 +568,31 @@ export class BiomeScenery {
   // --- Paysage complet --------------------------------------------------------
 
   private makeSet(biome: string): BiomeSet {
+    return this.makeSetInner(biome);
+  }
+
+  /** Modèle des curiosités en attente, dans la limite du temps donné (ms). */
+  private work(set: BiomeSet, budget: number) {
+    const t0 = performance.now();
     relief.res = 0.62;
     try {
-      return this.makeSetInner(biome);
+      while (set.queue.length && performance.now() - t0 < budget) {
+        const q = set.queue.shift()!;
+        const obj = q.make();
+        obj.matrixAutoUpdate = true;
+        obj.visible = false;
+        set.root.add(obj);
+        set.items.push({ obj, x: q.x, z: q.z, r: q.r, sink: q.sink });
+      }
     } finally {
       relief.res = 1;
     }
+  }
+
+  /** Prépare en arrière-plan le paysage de la zone d'arrivée. */
+  preload(biome: string | undefined) {
+    if (!biome || biome === this.cur) return;
+    this.work(this.prepare(biome), 2);
   }
 
   private makeSetInner(biome: string): BiomeSet {
@@ -637,6 +664,7 @@ export class BiomeScenery {
         add(1, true, 24, () => this.wreck(r));
         add(2, true, 40, spur);
     }
+    const queue: BiomeSet['queue'] = [];
     const bag: Make[] = [];
     list.forEach((l) => {
       for (let i = 0; i < l.w; i++) bag.push(l);
@@ -655,15 +683,14 @@ export class BiomeScenery {
           ? 190 + r() * 120
           : 40 + r() * 140
         : -(40 + it.r + Math.pow(r(), 1.4) * 240);
-      const obj = it.make();
-      obj.matrixAutoUpdate = true;
-      root.add(obj);
-      items.push({ obj, x, z, r: it.r, sink: it.tall ? 1.5 : 0.4 });
+      queue.push({ make: it.make, x, z, r: it.r, sink: it.tall ? 1.5 : 0.4 });
     }
+    // Les plus proches du navire d'abord.
+    queue.sort((a, b) => Math.abs(a.x) - Math.abs(b.x));
     const far = ranges(FAR[biome] ?? 'mesas', 2300);
     far.renderOrder = -5;
     root.add(far);
-    return { root, items, far };
+    return { root, items, far, queue };
   }
 
   /** Prépare le paysage à l'avance (évite un à-coup au changement de zone). */
@@ -679,6 +706,7 @@ export class BiomeScenery {
 
   frame(f: NativeFrame, g: GroundParams) {
     const set = this.prepare(f.biome);
+    this.work(set, set.items.length < 6 ? 12 : 4);
     if (this.cur !== f.biome) {
       for (const [k, s] of this.sets) s.root.visible = k === f.biome;
       this.cur = f.biome;
