@@ -55,7 +55,7 @@ void deformVertex(vec3 pos, vec3 nrm, vec4 m, mat4 model, out vec4 wp, out vec3 
   wp = model * vec4(p, 1.);
   if (m.x == 8.) {
     vec2 q = wp.xz + vec2(uScroll, 0.);
-    float k = smoothstep(450., 1100., length(wp.xz));
+    float k = smoothstep(260., 850., length(wp.xz));
     // Autour d'une ville, le sol est aplani (place, faubourgs), les dunes reprennent au loin.
     float flat_ = uCalm * (1. - smoothstep(520., 950., length(wp.xz - vec2(uCalmX, 0.))));
     wp.y = mix(dune(q) + k*swell(q), -1., flat_);
@@ -75,7 +75,7 @@ void deformVertex(vec3 pos, vec3 nrm, vec4 m, mat4 model, out vec4 wp, out vec3 
     // Rochers posés sur le sable : ils épousent la dune sous eux (m.w = 1).
     if ((m.x == 9. && m.w > .5) || uDrape > .5) {
       vec2 q = wp.xz + vec2(uScroll, 0.);
-      wp.y += dune(q) + smoothstep(450., 1100., length(wp.xz))*swell(q);
+      wp.y += dune(q) + smoothstep(260., 850., length(wp.xz))*swell(q);
     }
   }
 }

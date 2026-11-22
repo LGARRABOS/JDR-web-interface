@@ -41,50 +41,50 @@ export interface Biome {
 
 export const BIOMES: Record<BiomeId, Biome> = {
   dunes: { id: 'dunes', dune: 1.5, far: 'mesas' },
-  sel: { id: 'sel', dune: 0.18, far: 'domes', sand: '#efe8da', sandMix: 0.7 },
+  sel: { id: 'sel', dune: 0.6, far: 'domes', sand: '#efe8da', sandMix: 0.7 },
   canyons: {
     id: 'canyons',
-    dune: 0.6,
+    dune: 1.0,
     far: 'falaises',
     sand: '#b0603a',
     sandMix: 0.35,
   },
   cheminees: {
     id: 'cheminees',
-    dune: 0.7,
+    dune: 1.0,
     far: 'aiguilles',
     sand: '#c87a4a',
     sandMix: 0.3,
   },
   ossements: {
     id: 'ossements',
-    dune: 1.1,
+    dune: 1.2,
     far: 'mesas',
     sand: '#d8c8a8',
     sandMix: 0.35,
   },
   cristaux: {
     id: 'cristaux',
-    dune: 0.8,
+    dune: 1.0,
     far: 'cristaux',
     sand: '#8a7aa8',
     sandMix: 0.3,
   },
   engrenages: {
     id: 'engrenages',
-    dune: 1,
+    dune: 1.1,
     far: 'mesas',
     sand: '#8a6a4a',
     sandMix: 0.35,
   },
   oasis: {
     id: 'oasis',
-    dune: 0.9,
+    dune: 1.0,
     far: 'domes',
     sand: '#d8b888',
     sandMix: 0.25,
   },
-  ruines: { id: 'ruines', dune: 0.9, far: 'mesas' },
+  ruines: { id: 'ruines', dune: 1.1, far: 'mesas' },
 };
 
 const BY_SECTOR: Record<string, BiomeId> = {

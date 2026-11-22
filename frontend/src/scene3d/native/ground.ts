@@ -68,7 +68,7 @@ function swell(x: number, y: number) {
 /** Hauteur du sable au point (x, z) de la scène (même formule que le shader). */
 export function sandHeight(x: number, z: number, g: GroundParams) {
   const qx = x + g.scroll;
-  const k = sm(450, 1100, Math.hypot(x, z));
+  const k = sm(260, 850, Math.hypot(x, z));
   const flat = g.calm * (1 - sm(520, 950, Math.hypot(x - g.calmX, z)));
   const h = dune(qx, z, g.amp) + k * swell(qx, z);
   return h + (-1 - h) * flat;
