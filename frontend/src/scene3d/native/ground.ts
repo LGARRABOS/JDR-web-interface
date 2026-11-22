@@ -60,7 +60,7 @@ export function sandHeight(x: number, z: number, g: GroundParams) {
   const warp =
     (fbm(wx * 0.0021, z * 0.0021, 3) - 0.5) * 240 +
     (fbm(wx * 0.007 + 5, z * 0.007, 2) - 0.5) * 50;
-  const amp = 5 + 12 * fbm(wx * 0.0014 + 9, z * 0.0014 + 3, 2);
+  const amp = 8 + 17 * fbm(wx * 0.0014 + 9, z * 0.0014 + 3, 2);
   const along =
     0.55 + 0.45 * Math.sin(z / 230 + fbm(wx * 0.003, z * 0.003 + 7, 2) * 4);
   const big = dune((wx + z * 0.35 + warp) / 150, 0.78) * amp * along;
@@ -78,11 +78,23 @@ export function sandHeight(x: number, z: number, g: GroundParams) {
     ) * 60;
   const roll = (fbm(wx * 0.0009 + 3, z * 0.0009 + 1, 3) - 0.5) * 40;
   // Couloir plus calme sous la route du navire, sol aplani autour des villes.
-  const lane = 0.15 + 0.85 * sm(35, 190, Math.abs(z));
+  // Ondulations du désert (celles du moteur maison) et grande houle au loin.
+  const und =
+    2.6 * Math.sin(wx * 0.021 + Math.sin(z * 0.013) * 1.8) +
+    1.7 * Math.sin(z * 0.034 + wx * 0.012) +
+    1.1 * Math.sin((wx + z) * 0.051) +
+    (fbm(wx * 0.018, z * 0.018, 2) - 0.5) * 5;
+  const far = sm(450, 1100, Math.hypot(x, z));
+  const swell =
+    9 * Math.sin(wx * 0.0042 + Math.sin(z * 0.0031) * 2.2) +
+    6 * Math.sin(z * 0.0063 - wx * 0.0024);
+  // Seul le sable juste sous la coque est adouci (le navire ne le traverse pas).
+  const lane = 1 - 0.65 * (1 - sm(22, 95, Math.hypot(x * 0.55, z)));
   // Même aplanissement que le moteur maison (les villes y sont posées).
   const city = g.calm * (1 - sm(520, 950, Math.hypot(x - g.calmX, z)));
   const raw =
-    (big + small + bowl) * lane * g.amp +
+    (big + small * 1.3 + bowl + und) * lane * g.amp +
+    swell * far +
     roll * (0.25 + 0.75 * sm(60, 500, Math.abs(z))) -
     2;
   return raw + (-1 - raw) * city;
@@ -113,15 +125,18 @@ float sandH(vec2 q){
   float x = q.x, z = q.y;
   float wx = x + uScroll;
   float warp = (gfbm(vec2(wx, z) * .0021, 3) - .5) * 240. + (gfbm(vec2(wx * .007 + 5., z * .007), 2) - .5) * 50.;
-  float amp = 5. + 12. * gfbm(vec2(wx * .0014 + 9., z * .0014 + 3.), 2);
+  float amp = 8. + 17. * gfbm(vec2(wx * .0014 + 9., z * .0014 + 3.), 2);
   float along = .55 + .45 * sin(z / 230. + gfbm(vec2(wx * .003, z * .003 + 7.), 2) * 4.);
   float big = gdune((wx + z * .35 + warp) / 150., .78) * amp * along;
   float small = gdune((wx * .9 + z * .3 + (gfbm(vec2(wx * .012 + 2., z * .012), 2) - .5) * 30.) / 36., .72) * (.6 + 1.4 * gfbm(vec2(wx * .01, z * .01 + 4.), 2));
   float bowl = -pow(max(0., gfbm(vec2(wx * .0045 + 1., z * .0045 + 8.), 3) - .56), 1.4) * 60.;
   float roll = (gfbm(vec2(wx * .0009 + 3., z * .0009 + 1.), 3) - .5) * 40.;
-  float lane = .15 + .85 * smoothstep(35., 190., abs(z));
+  float und = 2.6 * sin(wx * .021 + sin(z * .013) * 1.8) + 1.7 * sin(z * .034 + wx * .012) + 1.1 * sin((wx + z) * .051) + (gfbm(vec2(wx * .018, z * .018), 2) - .5) * 5.;
+  float far = smoothstep(450., 1100., length(vec2(x, z)));
+  float swell = 9. * sin(wx * .0042 + sin(z * .0031) * 2.2) + 6. * sin(z * .0063 - wx * .0024);
+  float lane = 1. - .65 * (1. - smoothstep(22., 95., length(vec2(x * .55, z))));
   float city = uGCalm * (1. - smoothstep(520., 950., length(vec2(x - uGCalmX, z))));
-  float raw = (big + small + bowl) * lane * uGAmp + roll * (.25 + .75 * smoothstep(60., 500., abs(z))) - 2.;
+  float raw = (big + small * 1.3 + bowl + und) * lane * uGAmp + swell * far + roll * (.25 + .75 * smoothstep(60., 500., abs(z))) - 2.;
   return mix(raw, -1., city);
 }
 `;
