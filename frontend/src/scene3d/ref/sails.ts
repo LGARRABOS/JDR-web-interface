@@ -67,6 +67,9 @@ export class SailRig {
   readonly gaskets: THREE.InstancedMesh;
   private rts: SailRt[] = [];
   private pos: Float32Array;
+  private hol: Float32Array;
+  /** creux du dernier point calculé (0 bord … 1 fond du creux) */
+  private cw = 0;
   private rpos: Float32Array;
   private target = 1;
   private fill = 1;
@@ -146,10 +149,15 @@ export class SailRig {
       });
     });
     this.pos = new Float32Array(nvert * 3);
+    this.hol = new Float32Array(nvert);
     const g = new THREE.BufferGeometry();
     g.setAttribute(
       'position',
       new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage)
+    );
+    g.setAttribute(
+      'hol',
+      new THREE.BufferAttribute(this.hol, 1).setUsage(THREE.DynamicDrawUsage)
     );
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     g.setAttribute('sl', new THREE.Float32BufferAttribute(sl, 2));
@@ -229,25 +237,46 @@ export class SailRig {
       0.03 * Math.sin(t * 2.1 + r.phase * 2);
     const edge = Math.pow(Math.abs(uu), 6) + Math.pow(v, 10);
     const flutter =
-      live * 0.08 * edge * Math.sin(t * 7.5 - v * 9 - uu * 3 + r.phase);
+      live * 0.13 * edge * Math.sin(t * 7.5 - v * 9 - uu * 3 + r.phase);
     const ripple =
-      live * 0.03 * w * Math.sin(t * 3.1 + uu * 4 + v * 5 + r.phase);
+      live * 0.04 * w * Math.sin(t * 3.1 + uu * 4 + v * 5 + r.phase);
+    // Plis de tension rayonnant des points d'écoute et des bouts de vergue,
+    // petits plis verticaux sous la vergue (entre les points d'envergure).
+    const zm = uu * half,
+      ym = v * H;
+    let folds = 0;
+    for (const cz of [-1, 1])
+      for (const top of [0, 1]) {
+        const dz = zm - cz * (top ? s.halfTop : half),
+          dy = ym - (top ? 0 : H);
+        const rr = Math.hypot(dz, dy);
+        const ang = Math.atan2(dy, dz * cz);
+        const reach = top ? 0.18 * H + 0.6 : 0.32 * H + 1;
+        folds +=
+          (top ? 0.06 : 0.12) *
+          Math.sin(ang * 11 + cz * 1.3 + top) *
+          Math.exp(-rr / reach) *
+          sm(0.1, 0.9, rr);
+      }
+    folds += 0.05 * Math.sin(zm * 2.6 + r.phase) * Math.exp(-ym / 1.1);
     const bulge =
       s.belly * live * (w + 0.25 * (1 - uu * uu) * v) * breathe +
       flutter +
-      ripple;
+      ripple +
+      folds * live;
+    this.cw = w * live;
     const x1 = s.x + 0.2 + bulge;
     const y1 = s.yTop - H * v + sag;
     const z1 = uu * half;
     // Toile ramassée : rouleau sur l'avant de la vergue, festons entre les rabans.
     const z0 = uu * s.halfTop * 0.97;
     const th = v * 5.6 + uu * 1.2;
-    const rr = 0.28 + 0.08 * Math.sin(uu * 9 + v * 13) + 0.05 * v;
+    const rr = 0.36 + 0.1 * Math.sin(uu * 9 + v * 13) + 0.06 * v;
     const gp = (z0 + 50) / 1.7;
     const fest =
       Math.pow(Math.sin(Math.PI * (gp - Math.floor(gp))), 2) *
-        (0.25 + 0.45 * v) +
-      Math.pow(Math.abs(uu), 3) * 0.3;
+        (0.35 + 0.6 * v) +
+      Math.pow(Math.abs(uu), 3) * 0.35;
     const bx =
       s.x +
       0.2 +
@@ -265,9 +294,10 @@ export class SailRig {
     const lo = d * 1.15 - 0.12,
       hi = d * 1.15 + 0.04;
     const g = sm(lo, hi, v);
-    const folds = (1 - d) * d * 4 * 0.25 * Math.sin(v * 38 + uu * 2) * (1 - g);
+    const pleats = (1 - d) * d * 4 * 0.3 * Math.sin(v * 38 + uu * 2) * (1 - g);
+    this.cw *= 1 - g;
     out.set(
-      x1 + folds + (bx - x1) * g,
+      x1 + pleats + (bx - x1) * g,
       y1 + (by - lift - y1) * g,
       z1 + (z0 - z1) * g
     );
@@ -293,7 +323,23 @@ export class SailRig {
     const breathe = 1 + 0.06 * Math.sin(t * 0.9 + r.phase);
     p.z += s.belly * live * camber * (1 - Math.pow(v, 1.4)) * breathe;
     p.x -= 0.45 * Math.sin(Math.PI * v) * u * u;
-    p.z += live * 0.09 * Math.pow(u, 6) * Math.sin(t * 8 - v * 10 + r.phase);
+    p.z += live * 0.14 * Math.pow(u, 6) * Math.sin(t * 8 - v * 10 + r.phase);
+    // Plis rayonnant du point d'écoute, de la têtière et du point d'amure.
+    const ra = (du: number, dv: number, k: number, reach: number) => {
+      const rr = Math.hypot(du, dv);
+      return (
+        Math.sin(Math.atan2(dv, du) * k) *
+        Math.exp(-rr / reach) *
+        sm(0.03, 0.2, rr)
+      );
+    };
+    p.z +=
+      live *
+      (0.14 * ra(1 - u, v, 10, 0.35) +
+        0.1 * ra(u, 1 - v, 9, 0.3) +
+        0.06 * ra(u, v, 8, 0.25));
+    p.z += live * 0.07 * Math.sin(v * 26 + r.phase) * Math.pow(u, 3) * (1 - v);
+    this.cw = camber * (1 - Math.pow(v, 1.4)) * live;
     // Amené : toile en paquet le long du bas de l'étai, qui pend sous le poids.
     const st = 0.04 + 0.36 * v;
     const S = s.tack.clone().lerp(s.head, st);
@@ -306,6 +352,8 @@ export class SailRig {
         0.05 * Math.sin(t * 1.2 + u * 5 + r.phase)
     );
     const k = sm(0, 1, (1 - d) * 1.5 - v * 0.5);
+    // Signe négatif : sur un foc, le côté creux est la face avant.
+    this.cw *= -(1 - k);
     out.copy(p).lerp(q, k);
   }
 
@@ -375,10 +423,11 @@ export class SailRig {
           this.pos[o] = p.x;
           this.pos[o + 1] = p.y;
           this.pos[o + 2] = p.z;
+          this.hol[r.base + j * w + i] = this.cw;
         }
       // Ralingues : petit tube à 5 pans le long du pourtour.
       const R = 5;
-      const rad = s.kind === 'square' ? 0.045 : 0.04;
+      const rad = s.kind === 'square' ? 0.065 : 0.055;
       for (let b = 0; b < r.border.length; b++) {
         const vi = r.base + r.border[b];
         const c = V(
@@ -437,9 +486,9 @@ export class SailRig {
         for (let q = 0; q < ng; q++) {
           const z = -s.halfTop * 0.9 + ((q + 0.5) / ng) * s.halfTop * 1.8;
           this.tmp.compose(
-            V(s.x + 0.52, s.yardY + 0.05 + 0.02 * Math.sin(t * 1.7 + q), z),
+            V(s.x + 0.56, s.yardY + 0.05 + 0.02 * Math.sin(t * 1.7 + q), z),
             new THREE.Quaternion(),
-            V(0.42 * fs + 1e-4, 0.36 * fs + 1e-4, 0.25 * fs + 1e-4)
+            V(0.52 * fs + 1e-4, 0.44 * fs + 1e-4, 0.3 * fs + 1e-4)
           );
           this.gaskets.setMatrixAt(gi++, this.tmp);
         }
@@ -467,6 +516,7 @@ export class SailRig {
     });
     const g = this.sails.geometry;
     g.attributes.position.needsUpdate = true;
+    g.attributes.hol.needsUpdate = true;
     g.computeVertexNormals();
     g.computeBoundingSphere();
     const rg = this.ropes.geometry;

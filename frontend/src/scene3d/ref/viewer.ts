@@ -272,16 +272,29 @@ void main(){ vec4 c = texture2D(tDiffuse, vUv);
       sh.vertexShader = sh.vertexShader
         .replace(
           '#include <common>',
-          '#include <common>\nattribute vec2 sl;\nattribute vec2 sd;\nvarying vec2 vSl;\nvarying vec2 vSd;'
+          '#include <common>\nattribute vec2 sl;\nattribute vec2 sd;\nattribute float hol;\nvarying vec2 vSl;\nvarying vec2 vSd;\nvarying float vHol;'
         )
         .replace(
           '#include <begin_vertex>',
-          '#include <begin_vertex>\nvSl = sl; vSd = sd;'
+          '#include <begin_vertex>\nvSl = sl; vSd = sd; vHol = hol;'
         );
+      // Lumière transmise à travers la toile : calculée avec chaque lampe et
+      // son ombre portée (une voile à l'ombre ne s'illumine pas par derrière).
+      const transmit =
+        'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );\n' +
+        'reflectedLight.directDiffuse += material.diffuseColor * directLight.color * pow(max(-dot(geometryNormal, directLight.direction), 0.), 1.2) * .8 * gThin;';
       sh.fragmentShader = sh.fragmentShader
         .replace(
           '#include <common>',
-          '#include <common>\nuniform vec3 uSunView, uSunCol;\nvarying vec2 vSl;\nvarying vec2 vSd;'
+          '#include <common>\nuniform vec3 uSunView, uSunCol;\nvarying vec2 vSl;\nvarying vec2 vSd;\nvarying float vHol;\nfloat gThin = 1.;'
+        )
+        .replace(
+          '#include <lights_fragment_begin>',
+          THREE.ShaderChunk.lights_fragment_begin
+            .split(
+              'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );'
+            )
+            .join(transmit)
         )
         .replace(
           '#include <emissivemap_fragment>',
@@ -292,7 +305,7 @@ void main(){ vec4 c = texture2D(tDiffuse, vUv);
   vec2 s01 = vSl; vec2 dim = max(vSd, vec2(.5));
   float dx = min(s01.x, 1. - s01.x) * dim.x;
   float dy = min(s01.y, 1. - s01.y) * dim.y;
-  float hem = 1. - smoothstep(.1, .15, min(dx, dy));
+  float hem = 1. - smoothstep(.13, .2, min(dx, dy));
   float corner = 1. - smoothstep(1.0, 1.12, dx + dy);
   float cornerSeam = corner * (1. - smoothstep(.015, .03, abs(fract((dx + dy) * 3.) - .5) - .45));
   float isSquare = step(dim.y, dim.x * 1.05);
@@ -308,13 +321,18 @@ void main(){ vec4 c = texture2D(tDiffuse, vUv);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.22, .17, .12), pts * .8);
   float dust = smoothstep(.45, 1., s01.y) * .13 * isSquare + .04 * sin(s01.x * 31. + s01.y * 7.) * smoothstep(.6, 1., s01.y);
   diffuseColor.rgb *= vec3(1. - dust * .7, 1. - dust, 1. - dust * 1.4);
-  // Translucidité : la lumière traverse la toile, moins là où elle est doublée.
-  float thick = 1. - .65 * max(max(hem, corner), reef);
-  float back = max(-dot(normal, uSunView), 0.);
-  totalEmissiveRadiance += diffuseColor.rgb * uSunCol * (pow(back, 1.5) * .5 * thick + .045);
+  // Modelé : le fond du creux s'assombrit, les bords tendus se détachent.
+  float hv = clamp(abs(vHol), 0., 1.);
+  bool concave = vHol >= 0. ? !gl_FrontFacing : gl_FrontFacing;
+  diffuseColor.rgb *= concave ? 1. - .34 * hv : .86 + .16 * hv;
+  // Translucidité : forte sur la toile simple, faible là où elle est doublée.
+  gThin = (1. - .85 * max(max(hem, corner), reef)) * (1. - .8 * cornerSeam);
+  totalEmissiveRadiance += diffuseColor.rgb * uSunCol * .03 * gThin;
 }`
         );
     };
+    // Moins de lumière d'ambiance sur la toile : le modelé du soleil domine.
+    m.canvas.envMapIntensity = 0.55;
     const ship = (this.ship = buildShip(m));
     const flagMat = ship.flags.material as THREE.MeshStandardMaterial;
     flagMat.onBeforeCompile = (sh) => {
