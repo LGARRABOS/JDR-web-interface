@@ -1,3 +1,6 @@
+/** Le navire réaliste est plus large que le modèle classique (maître-bau × 1,4). */
+export const NATIVE_BEAM = 1.4;
+
 import type { Build } from '../arpenteur/types';
 import type { Mat4 } from './math';
 import type { Lighting } from './renderer';

@@ -36,6 +36,7 @@ import {
   type HangarDims,
 } from './hangar';
 import { CameraRig, shotAt, type Shot } from './cinema';
+import { NATIVE_BEAM } from './native';
 import {
   BIOMES,
   biomeLighting,
@@ -447,7 +448,9 @@ export class Stage {
         id: c.id,
         capital: c.capital,
         night,
-        halfBeam: this.ship.parts.halfBeam,
+        // Quai et hangar à la largeur du navire réellement dessiné.
+        halfBeam:
+          this.ship.parts.halfBeam * (this.r.native?.ready ? NATIVE_BEAM : 1),
         length: this.ship.parts.length,
         hover: HOVER_DOCK,
         shipTop: HOVER_DOCK + this.ship.parts.top,
@@ -829,6 +832,8 @@ export class Stage {
     const glows: DrawItem[] = [];
     // Rendu réaliste prêt : navire, équipage, sol et paysages sont natifs.
     const nat = this.r.native?.ready ? this.r.native : null;
+    // Rendu réaliste prêt : quais et hangar refaits à la largeur du navire neuf.
+    if (nat && !this.nat) this.clearCities();
     this.nat = nat;
     this.npc = [];
     this.crowd = [];

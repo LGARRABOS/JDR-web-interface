@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { NATIVE_BEAM } from '../../arpenteur3d/native';
 import type { RefMaterials } from './materials';
 import { SailRig, type SailSpec } from './sails';
 import {
@@ -85,7 +86,8 @@ export const PROTECTOR: HullSpec = {
 
 function setForm(sp: HullSpec) {
   L = sp.L;
-  B = sp.B;
+  // Coque plus ventrue que le modèle classique (rapport longueur/largeur ~4).
+  B = sp.B * NATIVE_BEAM;
   D = sp.D;
   F.transom = sp.transom;
   F.sternRise = sp.sternRise;
@@ -2069,6 +2071,325 @@ export const DEFAULT_LOOK: ShipLook = {
 };
 
 /** Figure de proue sculptée (ou éperon), dans l'axe de l'étrave. */
+/**
+ * Détails d'armement : ancres aux bossoirs, canots sur leurs portemanteaux,
+ * manches à air, râteliers de cabillots au pied des mâts, habitacle et
+ * cloche près de la barre, coffres et glènes de cordage, rivets du doublage.
+ */
+function details(
+  k: Kit,
+  m: RefMaterials,
+  mastX: number[],
+  helmAt: THREE.Vector3 | null,
+  roofAt: (s: number) => number | undefined,
+  blocks: [number, number, number, number][],
+  lum: boolean
+) {
+  const sOf = (x: number) => x / L + 0.5;
+  // Ancres pendues aux bossoirs, de part et d'autre de l'avant.
+  for (const side of [1, -1]) {
+    const s = 0.88;
+    const rail = hullPt(s, 1.18, side);
+    const out = hullN(s, 1, side).setY(0).normalize();
+    const cat = rail.clone().addScaledVector(out, 1.3);
+    k.add(
+      m.darkWood,
+      box(0.4, 2.2, 0.4, 0.06),
+      along(rail.clone().addScaledVector(out, 0.5), out)
+    );
+    k.add(
+      m.darkWood,
+      cyl(0.2, 0.22, 1.6, 12),
+      along(rail.clone().addScaledVector(out, 0.55), out)
+    );
+    const top = cat.clone().add(V(0, -0.4, 0));
+    const shank = 2.6;
+    const bot = top
+      .clone()
+      .add(V(0.25, -shank, 0))
+      .addScaledVector(out, 0.35);
+    k.add(m.castIron, tube([top, bot], 0.11, 6, 8));
+    k.add(
+      m.castIron,
+      tube(
+        [
+          top
+            .clone()
+            .addScaledVector(out, -0.9)
+            .add(V(0, -0.3, 0)),
+          top
+            .clone()
+            .addScaledVector(out, 0.9)
+            .add(V(0, -0.3, 0)),
+        ],
+        0.08,
+        4,
+        6
+      )
+    );
+    for (const dir of [1, -1]) {
+      const arm = [
+        bot,
+        bot.clone().add(V(0.9 * dir, 0.35, 0)),
+        bot.clone().add(V(1.15 * dir, 1.0, 0)),
+      ];
+      k.add(m.castIron, tube(bez(arm[0], arm[1], arm[2], 8), 0.1, 8, 6));
+      k.add(
+        m.castIron,
+        box(0.5, 0.06, 0.45, 0.02),
+        M(arm[2].x, arm[2].y, arm[2].z, 0, 0, dir * 0.9)
+      );
+    }
+    k.add(
+      m.castIron,
+      torus(0.22, 0.05, 12, 6),
+      M(top.x, top.y + 0.2, top.z, 0, Math.PI / 2, 0)
+    );
+    // Chaîne qui rentre par l'écubier.
+    const hawse = hullPt(0.93, 0.92, side);
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 10; i++) {
+      const t = i / 10;
+      const p = hawse.clone().lerp(top, t);
+      p.y -= Math.sin(Math.PI * t) * 0.8;
+      pts.push(p);
+    }
+    for (let i = 0; i < pts.length - 1; i++)
+      k.add(
+        m.castIron,
+        torus(0.12, 0.035, 8, 4),
+        along(
+          pts[i].clone().lerp(pts[i + 1], 0.5),
+          pts[i + 1].clone().sub(pts[i])
+        ).multiply(M(0, 0, 0, Math.PI / 2, i * 1.57, 0))
+      );
+  }
+  // Canots sur portemanteaux, à mi-longueur, au-dessus du bordé.
+  for (const side of [1, -1]) {
+    const s = 0.47;
+    const x = X(s);
+    if (roofAt(s) !== undefined) continue;
+    const z = side * (halfB(s) + 0.9);
+    const y = deckY(s) + 2.6;
+    // Coque de bois clair à liston peint, bâche lacée par-dessus.
+    k.add(
+      m.hullWood,
+      sphere(1, 20, Math.PI / 2),
+      M(x, y, z, Math.PI, 0, 0, V(3.3, 1.0, 1.0))
+    );
+    k.add(
+      m.hullBand,
+      torus(1, 0.07, 32, 4),
+      M(x, y - 0.18, z, Math.PI / 2, 0, 0, V(3.28, 0.97, 1))
+    );
+    k.add(
+      m.darkWood,
+      torus(1, 0.06, 32, 4),
+      M(x, y, z, Math.PI / 2, 0, 0, V(3.32, 1.0, 1))
+    );
+    k.add(
+      m.darkWood,
+      tube([V(x - 3.3, y, z), V(x, y - 1.02, z), V(x + 3.3, y, z)], 0.06, 12, 4)
+    );
+    k.add(
+      m.canvas,
+      sphere(1, 16, Math.PI / 2),
+      M(x, y + 0.02, z, 0, 0, 0, V(3.25, 0.42, 0.97))
+    );
+    for (const dx of [-2, -0.7, 0.7, 2])
+      k.add(
+        m.rope,
+        torus(1, 0.025, 16, 3, Math.PI),
+        M(x + dx, y + 0.02, z, 0, Math.PI / 2, 0, V(0.98, 0.44, 1))
+      );
+    for (const dx of [-2.6, 2.6]) {
+      const foot = V(x + dx, deckY(s) + 0.6, side * (halfB(s) - 0.4));
+      const tip = V(x + dx, y + 1.6, z);
+      k.add(
+        m.castIron,
+        tube(
+          bez(foot, V(x + dx, y + 1.9, side * (halfB(s) - 0.2)), tip, 10),
+          0.08,
+          10,
+          6
+        )
+      );
+      k.add(m.rope, cyl(0.025, 0.025, 1.5, 4), M(tip.x, tip.y - 0.75, tip.z));
+    }
+  }
+  // Manches à air : pavillon évasé tourné vers l'avant.
+  for (const [s, zf] of [
+    [0.42, 0.55],
+    [0.42, -0.55],
+    [0.66, 0.6],
+  ] as const) {
+    if (roofAt(s) !== undefined) continue;
+    const x = X(s),
+      y = deckY(s),
+      z = zf * halfB(s);
+    if (
+      blocks.some(
+        ([a, b, zc, hw]) =>
+          x > a - 0.6 && x < b + 0.6 && Math.abs(z - zc) < hw + 0.6
+      )
+    )
+      continue;
+    k.add(m.brass, cyl(0.24, 0.24, 1.8, 16), M(x, y + 0.9, z));
+    k.add(
+      m.brass,
+      tube(
+        bez(V(x, y + 1.7, z), V(x, y + 2.3, z), V(x + 0.55, y + 2.35, z), 10),
+        0.24,
+        10,
+        12
+      )
+    );
+    k.add(
+      m.brass,
+      lathe(
+        [
+          [0.24, 0],
+          [0.32, 0.15],
+          [0.5, 0.42],
+          [0.56, 0.5],
+        ],
+        18
+      ),
+      along(V(x + 0.5, y + 2.35, z), V(1, 0, 0))
+    );
+    k.add(
+      m.paint,
+      cyl(0.5, 0.5, 0.02, 18),
+      along(V(x + 1.0, y + 2.35, z), V(1, 0, 0))
+    );
+    blocks.push([x - 0.5, x + 1, z, 0.5]);
+  }
+  // Râteliers de cabillots au pied des mâts.
+  for (const mx of mastX) {
+    const s = sOf(mx);
+    if (roofAt(s) !== undefined) continue;
+    const y = deckY(s);
+    for (const side of [1, -1]) {
+      const z = side * 1.25;
+      k.add(m.darkWood, box(2.4, 0.14, 0.26, 0.03), M(mx, y + 0.95, z));
+      for (const dx of [-1.05, 1.05])
+        k.add(m.darkWood, cyl(0.07, 0.07, 0.95, 8), M(mx + dx, y + 0.47, z));
+      for (let i = 0; i < 6; i++) {
+        const px = mx - 0.9 + i * 0.36;
+        k.add(
+          m.darkWood,
+          lathe(
+            [
+              [0.03, 0],
+              [0.05, 0.1],
+              [0.03, 0.3],
+              [0.04, 0.35],
+              [0.001, 0.4],
+            ],
+            8
+          ),
+          M(px, y + 0.82, z)
+        );
+        k.add(
+          m.rope,
+          torus(0.12, 0.03, 10, 4),
+          M(px, y + 0.7, z + side * 0.04, 0, Math.PI / 2, 0, V(1, 1.8, 1))
+        );
+      }
+    }
+  }
+  // Habitacle (compas) et cloche devant la barre.
+  if (helmAt) {
+    const x = helmAt.x + 2.1,
+      y = helmAt.y;
+    k.add(
+      m.darkWood,
+      lathe(
+        [
+          [0.3, 0],
+          [0.26, 0.1],
+          [0.2, 0.9],
+          [0.26, 1.0],
+          [0.001, 1.0],
+        ],
+        16
+      ),
+      M(x, y, 0)
+    );
+    k.add(m.brass, sphere(0.3, 16, Math.PI / 2), M(x, y + 1.0, 0));
+    if (lum) k.add(m.glass, sphere(0.12, 10), M(x, y + 1.15, 0.25));
+    const bx = x + 0.4,
+      bz = 1.6;
+    for (const dz of [-0.35, 0.35])
+      k.add(m.darkWood, box(0.12, 1.6, 0.12, 0.02), M(bx, y + 0.8, bz + dz));
+    k.add(m.darkWood, box(0.14, 0.14, 0.9, 0.02), M(bx, y + 1.6, bz));
+    k.add(
+      m.brass,
+      lathe(
+        [
+          [0.001, 0],
+          [0.24, 0],
+          [0.22, 0.08],
+          [0.16, 0.3],
+          [0.12, 0.42],
+          [0.001, 0.44],
+        ],
+        18
+      ),
+      M(bx, y + 1.08, bz)
+    );
+    blocks.push([x - 0.4, bx + 0.4, 0.8, 1.4]);
+  }
+  // Coffres et glènes de cordage le long des pavois.
+  const spots: [number, number][] = [
+    [0.36, 0.72],
+    [0.55, -0.74],
+    [0.63, 0.74],
+    [0.7, -0.7],
+    [0.78, 0.66],
+  ];
+  spots.forEach(([s, zf], i) => {
+    if (roofAt(s) !== undefined) return;
+    const x = X(s),
+      y = deckY(s),
+      z = zf * halfB(s);
+    if (
+      blocks.some(
+        ([a, b, zc, hw]) =>
+          x > a - 0.4 && x < b + 0.4 && Math.abs(z - zc) < hw + 0.4
+      )
+    )
+      return;
+    if (i % 2) {
+      k.add(m.darkWood, box(1.2, 0.6, 0.7, 0.05), M(x, y + 0.3, z));
+      k.add(m.brass, box(1.24, 0.06, 0.74, 0.02), M(x, y + 0.45, z));
+      k.add(
+        m.darkWood,
+        cyl(0.35, 0.35, 1.2, 16, true),
+        M(x, y + 0.6, z, 0, 0, Math.PI / 2, V(1, 1, 0.5))
+      );
+    } else
+      for (let q = 0; q < 4; q++)
+        k.add(
+          m.rope,
+          torus(0.42 - q * 0.02, 0.06, 20, 5),
+          M(x, y + 0.06 + q * 0.1, z, Math.PI / 2)
+        );
+    blocks.push([x - 0.7, x + 0.7, z, 0.5]);
+  });
+  // Rivets du doublage de cuivre : deux rangées le long de la flottaison.
+  for (const t of [0.34, 0.46])
+    for (const side of [1, -1])
+      for (let s = 0.1; s < 0.86; s += 0.012) {
+        const p = hullPt(s, t, side).addScaledVector(hullN(s, t, side), 0.02);
+        k.add(
+          m.brass,
+          new THREE.IcosahedronGeometry(0.035, 0),
+          M(p.x, p.y, p.z)
+        );
+      }
+}
+
 function figurehead(k: Kit, m: RefMaterials, kind: string) {
   const base = hullPt(1, 0.86, 1)
     .setZ(0)
@@ -2559,6 +2880,15 @@ export function buildShip(
     along(stem.clone().addScaledVector(bdir, 0.3), bdir)
   );
   figurehead(k, m, look.sculpture);
+  details(
+    k,
+    m,
+    masts.map((q) => q.x),
+    helmAt,
+    roofAt,
+    blocks,
+    lum
+  );
 
   // Voilure animée.
   const specs: SailSpec[] = [];
