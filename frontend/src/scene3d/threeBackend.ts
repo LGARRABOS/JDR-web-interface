@@ -390,6 +390,30 @@ export class ThreeBackend implements RenderBackend {
   private gtao: GTAOPass | null = null;
   private fx: ShaderPass;
   private layer: NativeLayer | null = null;
+  private load = 0;
+  private frameN = 0;
+  private baseShadow = 1024;
+
+  /**
+   * Allègement progressif, du moins visible au plus visible :
+   * 1 : sans occlusion ambiante ; 2 : ombres recalculées une image sur deux,
+   * sans halo ; 3 : carte d'ombres deux fois plus petite.
+   */
+  setLoad(level: number) {
+    const l = Math.max(0, Math.min(3, Math.round(level)));
+    if (l === this.load) return;
+    this.load = l;
+    if (this.gtao) this.gtao.enabled = l < 1;
+    this.bloom.enabled = l < 2;
+    this.renderer.shadowMap.autoUpdate = l < 2;
+    this.renderer.shadowMap.needsUpdate = true;
+    const size = l >= 3 ? this.baseShadow / 2 : this.baseShadow;
+    if (this.sun.shadow.mapSize.x !== size) {
+      this.sun.shadow.mapSize.set(size, size);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+  }
   get native(): NativeLayer | undefined {
     return this.layer ?? undefined;
   }
@@ -444,6 +468,7 @@ export class ThreeBackend implements RenderBackend {
     // Soleil (ou lune) et ses ombres.
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(q.shadowSize, q.shadowSize);
+    this.baseShadow = q.shadowSize;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.04;
     this.sun.shadow.radius = 3;
@@ -734,6 +759,9 @@ export class ThreeBackend implements RenderBackend {
     fu.uAspect.value = this.width / this.height;
     const scol = opts.stormColor ?? [0.8, 0.62, 0.42];
     (fu.uStormColor.value as THREE.Vector3).set(scol[0], scol[1], scol[2]);
+    // Ombres une image sur deux quand la machine est chargée.
+    if (!this.renderer.shadowMap.autoUpdate)
+      this.renderer.shadowMap.needsUpdate = (this.frameN++ & 1) === 0;
     this.composer.render();
   }
 

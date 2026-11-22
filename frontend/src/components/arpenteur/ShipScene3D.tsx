@@ -168,6 +168,7 @@ export function ShipScene3D(props: ShipSceneProps) {
       // Résolution adaptative : on baisse la définition si la machine peine,
       // puis on la remonte quand elle tient la cadence.
       let scale = 1;
+      let load = 0;
       let last = 0;
       let avg = 16.7;
       let calm = 0;
@@ -182,16 +183,23 @@ export function ShipScene3D(props: ShipSceneProps) {
         last = now;
         if (dt > 250) return; // onglet repris, mesure sans valeur
         avg = avg * 0.92 + dt * 0.08;
-        if (avg > 26 && scale > 0.7) {
-          scale = Math.max(0.7, scale - 0.1);
+        // On allège d'abord les effets (occlusion, halo, ombres), et la
+        // définition seulement en dernier recours : l'image reste nette.
+        if (avg > 22 && (load < 3 || scale > 0.7)) {
+          if (load < 3) stage.setLoad(++load);
+          else {
+            scale = Math.max(0.7, scale - 0.1);
+            resize();
+          }
           avg = 16.7;
           calm = 0;
-          resize();
-        } else if (avg < 18) {
-          if (++calm > 180 && scale < 1) {
-            scale = Math.min(1, scale + 0.1);
+        } else if (avg < 17) {
+          if (++calm > 240) {
             calm = 0;
-            resize();
+            if (scale < 1) {
+              scale = Math.min(1, scale + 0.1);
+              resize();
+            } else if (load > 0) stage.setLoad(--load);
           }
         } else calm = 0;
       };

@@ -112,6 +112,8 @@ export interface RenderBackend {
   readonly height: number;
   /** Rendu réaliste : navire, équipage, sol et paysages dessinés par le moteur. */
   readonly native?: import('./native').NativeHost;
+  /** Allègement des effets (0 : complet … 3 : minimal) quand la machine peine. */
+  setLoad?(level: number): void;
   upload(mesh: MeshData): MeshHandle;
   release(mesh: MeshHandle): void;
   setSize(w: number, h: number): void;

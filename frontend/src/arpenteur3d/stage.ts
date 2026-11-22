@@ -35,6 +35,7 @@ import {
   hangarRoom,
   type HangarDims,
 } from './hangar';
+import { CameraRig, shotAt, type Shot } from './cinema';
 import {
   BIOMES,
   biomeLighting,
@@ -198,6 +199,7 @@ export class Stage {
   private folk: { torso: GpuMesh; leg: GpuMesh; arm: GpuMesh }[] = [];
   private journey: Journey | null = null;
   private nat: import('./native').NativeHost | null = null;
+  private camRig = new CameraRig();
   private npc: import('./native').NativeFrame['npc'] = [];
   private crowd: import('./native').NativeFrame['crowd'] = [];
   private scrollPos = 0;
@@ -622,6 +624,11 @@ export class Stage {
     this.r.setSize(w, h);
   }
 
+  /** Allège les effets coûteux avant de baisser la définition. */
+  setLoad(level: number) {
+    this.r.setLoad?.(level);
+  }
+
   render(time: number, view: ViewOptions = {}) {
     if (!this.ship) return;
     const { parts } = this.ship;
@@ -656,6 +663,7 @@ export class Stage {
     // Pendant le voyage, la caméra passe derrière le navire pour regarder
     // devant lui : on voit le paysage arriver et la ville grandir à l'horizon.
     let chase = 0;
+    let cine: { shot: Shot; weight: number } | null = null;
     let jp = 0;
     let inVoid = false;
     let portal = 0;
@@ -723,6 +731,7 @@ export class Stage {
       stormColor = stormTint(after ? j.toLight : j.fromLight);
       finished = p >= 1;
       chase = smooth(0.04, 0.2, p) * (1 - smooth(0.86, 0.99, p));
+      cine = shotAt(p, j.start / 997);
     } else {
       inVoid = !!this.place.void;
       // Dans la brume, le navire dérive lentement.
@@ -888,19 +897,37 @@ export class Stage {
 
     const aspect = this.r.width / this.r.height;
     const fov = view.fov ?? 0.36;
-    const yawFree = (view.yaw ?? 0.55) - 1.3 * chase;
+    // Plans du voyage (ou vue du joueur), rejoints par une caméra amortie.
+    const userYaw = view.yaw ?? 0.55;
+    const userEl = view.elevation ?? 0.1;
+    const w = cine ? cine.weight : 0;
+    const sh = cine?.shot;
+    const want = [
+      sh ? userYaw + (sh.yaw + (userYaw - 0.55) - userYaw) * w : userYaw,
+      sh
+        ? userEl + (Math.max(0.03, sh.el + (userEl - 0.1)) - userEl) * w
+        : userEl,
+      sh ? 1 + (sh.mul - 1) * w : 1,
+      sh
+        ? (view.shift ?? 0) + (sh.shift - (view.shift ?? 0)) * w
+        : (view.shift ?? 0),
+    ];
+    // Hors voyage la vue suit le joueur sans retard (il l'amortit déjà).
+    const cam = this.camRig.follow(want, dt, j ? 1.3 : 0.12, dt === 0);
+    void chase;
+    const yawFree = cam[0];
     const yaw = yawFree + (-1.49 - yawFree) * axis;
     const dirH: Vec3 = [Math.sin(yaw), 0, Math.cos(yaw)];
     const cy = hover + (parts.top + parts.bottom) / 2 + 1;
     const halfH = (parts.top - parts.bottom) / 2 + 1;
     const halfW = parts.radius * (0.55 + 0.45 * Math.abs(Math.cos(yaw)));
     const fovX = 2 * Math.atan(Math.tan(fov / 2) * aspect);
-    const m = (view.margin ?? 1.05) * (1 + 0.08 * chase) * (1 - 0.4 * axis);
+    const m = (view.margin ?? 1.05) * cam[2] * (1 - 0.4 * axis);
     const dist0 =
       Math.max(halfW / Math.tan(fovX / 2), halfH / Math.tan(fov / 2)) * m;
     const dist = dist0 + (parts.length / 2 + 16 - dist0) * enter;
     const right: Vec3 = normalize([dirH[2], 0, -dirH[0]]);
-    const shift = (view.shift ?? 0) * dist * Math.tan(fovX / 2);
+    const shift = cam[3] * (1 - axis) * dist * Math.tan(fovX / 2);
     const target: Vec3 = [
       right[0] * -shift,
       cy + (view.lift ?? 0) * halfH,
@@ -908,7 +935,8 @@ export class Stage {
     ];
     const eyeY =
       view.eyeHeight ??
-      target[1] + dist * Math.tan((view.elevation ?? 0.1) + 0.04 * chase);
+      target[1] +
+        dist * Math.tan(cam[1] * (1 - axis) + (view.elevation ?? 0.1) * axis);
     let eye: Vec3 = [
       target[0] + dirH[0] * dist,
       eyeY,
