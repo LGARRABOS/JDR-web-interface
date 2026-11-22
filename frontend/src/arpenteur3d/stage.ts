@@ -503,10 +503,13 @@ export class Stage {
     time: number,
     items: DrawItem[],
     glows: DrawItem[],
-    moored: boolean
+    moored: boolean,
+    /** Dans la nef, portes closes : rien de l'extérieur n'est visible. */
+    interior = false
   ) {
     const base = translation(cx, 0, 0);
-    items.push({ mesh: c.city, model: base, shadow: Math.abs(cx) < 200 });
+    if (!interior)
+      items.push({ mesh: c.city, model: base, shadow: Math.abs(cx) < 200 });
     if (moored) items.push({ mesh: c.moor, model: base });
     const hg = c.hangar;
     if (hg) {
@@ -526,39 +529,43 @@ export class Stage {
       if (moored) items.push({ mesh: hg.moor, model: base });
     }
     if (Math.abs(cx) > 900) return;
-    for (const sh of c.ships) {
-      // Arrivée, escale, départ, puis absence ; les navires filent vers +x.
-      let x = sh.x;
-      let dock = 1;
-      if (sh.cycle) {
-        const t = (time + sh.cycle.phase) % sh.cycle.period;
-        if (t < 22) {
-          const u = 1 - ease(t / 22);
-          x = sh.x - 900 * u * u;
-          dock = smooth(14, 22, t);
-        } else if (t < 52) dock = 1;
-        else if (t < 74) {
-          const u = (t - 52) / 22;
-          x = sh.x + 900 * u * u;
-          dock = 1 - smooth(52, 58, t);
-        } else continue;
+    const inside = (p: readonly number[]) =>
+      !!hg && Math.abs(p[0]) < hg.dims.hx && Math.abs(p[2]) < hg.dims.hz;
+    if (!interior)
+      for (const sh of c.ships) {
+        // Arrivée, escale, départ, puis absence ; les navires filent vers +x.
+        let x = sh.x;
+        let dock = 1;
+        if (sh.cycle) {
+          const t = (time + sh.cycle.phase) % sh.cycle.period;
+          if (t < 22) {
+            const u = 1 - ease(t / 22);
+            x = sh.x - 900 * u * u;
+            dock = smooth(14, 22, t);
+          } else if (t < 52) dock = 1;
+          else if (t < 74) {
+            const u = (t - 52) / 22;
+            x = sh.x + 900 * u * u;
+            dock = 1 - smooth(52, 58, t);
+          } else continue;
+        }
+        const y = HOVER_DOCK + (HOVER - HOVER_DOCK) * (1 - dock);
+        const bob = Math.sin(time * 1.1 + sh.x) * 0.3 * (1 - dock * 0.8);
+        const mdl = chain(base, translation(x, y + bob, sh.z));
+        if (this.nat) {
+          this.npc.push({
+            key: sh.key,
+            build: sh.build,
+            model: mdl,
+            glow: 1 - dock,
+          });
+          continue;
+        }
+        items.push({ mesh: sh.body, model: mdl });
+        glows.push({ mesh: sh.glows, model: mdl });
       }
-      const y = HOVER_DOCK + (HOVER - HOVER_DOCK) * (1 - dock);
-      const bob = Math.sin(time * 1.1 + sh.x) * 0.3 * (1 - dock * 0.8);
-      const mdl = chain(base, translation(x, y + bob, sh.z));
-      if (this.nat) {
-        this.npc.push({
-          key: sh.key,
-          build: sh.build,
-          model: mdl,
-          glow: 1 - dock,
-        });
-        continue;
-      }
-      items.push({ mesh: sh.body, model: mdl });
-      glows.push({ mesh: sh.glows, model: mdl });
-    }
     c.crowd.forEach((p, k) => {
+      if (interior && !inside(p.pos)) return;
       if (this.nat)
         this.crowd.push({ member: p, style: FOLK[k % FOLK.length], base });
       else poseCrew(items, this.folk[k % this.folk.length], base, p, time);
@@ -733,6 +740,7 @@ export class Stage {
     let axis = portalAxis;
     let enter = 0;
     let hangarBox: { cx: number; dims: HangarDims } | null = null;
+    let interior = false;
     this.doors = [0, 0];
     const hgc = cityDraw?.rt.hangar;
     if (cityDraw && hgc) {
@@ -770,6 +778,8 @@ export class Stage {
       hangarBox = { cx: cityDraw.x, dims: hd };
       if (inHangar > 0)
         light = lerpLighting(light, hangarLighting(light), inHangar);
+      interior =
+        inHangar > 0.999 && this.doors[0] < 0.001 && this.doors[1] < 0.001;
     }
     const shipX = 0;
     const hover = HOVER + (HOVER_DOCK - HOVER) * dock;
@@ -829,7 +839,7 @@ export class Stage {
       });
     }
     if (view.ground !== false && !inVoid) {
-      const bm = nat ? null : this.biomeMeshes(biome);
+      const bm = nat || interior ? null : this.biomeMeshes(biome);
       if (bm) {
         items.push({ mesh: this.env.terrain, model: identity() });
         items.push({ mesh: bm.far, model: identity() });
@@ -842,7 +852,8 @@ export class Stage {
           time,
           items,
           glows,
-          cityDraw.moored
+          cityDraw.moored,
+          interior
         );
       if (bm && (!calm || Math.abs(calmX) > 900)) {
         // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
@@ -963,7 +974,7 @@ export class Stage {
       biome: biome.id,
       duneAmp: biome.dune,
       inVoid,
-      ground: view.ground !== false,
+      ground: view.ground !== false && !interior,
       features: !calm || Math.abs(calmX) > 900,
       night: light.night > 0.5,
       light,

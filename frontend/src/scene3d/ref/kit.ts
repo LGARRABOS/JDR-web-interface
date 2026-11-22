@@ -75,6 +75,15 @@ export class Kit {
   }
 }
 
+/**
+ * Finesse des primitives : le nombre de facettes suit la taille de la pièce
+ * (un rivet n'a pas besoin de mille triangles). `detail` < 1 allège encore
+ * (navires du port, vus de loin).
+ */
+export const tess = { detail: 1 };
+const fac = (want: number, size: number, min: number, perM = 40) =>
+  Math.max(min, Math.round(Math.min(want, min + size * perM) * tess.detail));
+
 /** UV planaires (en mètres) selon l'axe dominant de la normale. */
 function boxUV(g: THREE.BufferGeometry) {
   const p = g.attributes.position as THREE.BufferAttribute;
@@ -102,7 +111,13 @@ export function box(
   r?: number
 ): THREE.BufferGeometry {
   const rr = r ?? Math.min(0.08, Math.min(w, h, d) * 0.22);
-  const g = new RoundedBoxGeometry(w, h, d, 3, Math.max(0.002, rr));
+  const segs =
+    Math.min(w, h, d) > 0.6 && tess.detail >= 1
+      ? 3
+      : Math.min(w, h, d) > 0.15
+        ? 2
+        : 1;
+  const g = new RoundedBoxGeometry(w, h, d, segs, Math.max(0.002, rr));
   boxUV(g);
   return g;
 }
@@ -113,9 +128,10 @@ export function lathe(
   seg = 48,
   phiLen = Math.PI * 2
 ): THREE.BufferGeometry {
+  const rmax0 = Math.max(...profile.map((p) => p[0]));
   const g = new THREE.LatheGeometry(
     profile.map(([r, y]) => new THREE.Vector2(Math.max(r, 1e-4), y)),
-    seg,
+    seg <= 8 ? seg : fac(seg, rmax0, 8, 60),
     0,
     phiLen
   );
@@ -140,7 +156,13 @@ export function tube(
   radial = 12
 ): THREE.BufferGeometry {
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
-  const g = new THREE.TubeGeometry(curve, seg, r, radial, false);
+  const g = new THREE.TubeGeometry(
+    curve,
+    Math.max(2, Math.round(seg * tess.detail)),
+    r,
+    fac(radial, r, 5, 60),
+    false
+  );
   const len = curve.getLength();
   const uv = g.attributes.uv as THREE.BufferAttribute;
   for (let i = 0; i < uv.count; i++)
@@ -177,7 +199,14 @@ export function cyl(
   seg = 32,
   open = false
 ): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(r1, r0, h, seg, 1, open);
+  const g = new THREE.CylinderGeometry(
+    r1,
+    r0,
+    h,
+    seg <= 8 ? seg : fac(seg, Math.max(r0, r1), 8, 60),
+    1,
+    open
+  );
   const uv = g.attributes.uv as THREE.BufferAttribute;
   const c = Math.PI * (r0 + r1);
   for (let i = 0; i < uv.count; i++)
@@ -196,8 +225,8 @@ export function torus(
   const g = new THREE.TorusGeometry(
     R,
     r,
-    Math.max(10, tubeSeg),
-    Math.max(48, seg * 2),
+    fac(Math.max(10, tubeSeg), r, 5, 60),
+    fac(Math.max(48, seg * 2), R * (arc / Math.PI), 10, 30),
     arc
   );
   const uv = g.attributes.uv as THREE.BufferAttribute;
@@ -207,7 +236,7 @@ export function torus(
 }
 
 export function sphere(r: number, seg = 16, phiLen = Math.PI) {
-  const sg = Math.max(16, seg);
+  const sg = fac(Math.max(16, seg), r, 6, 40);
   const g = new THREE.SphereGeometry(r, sg * 2, sg, 0, Math.PI * 2, 0, phiLen);
   const uv = g.attributes.uv as THREE.BufferAttribute;
   for (let i = 0; i < uv.count; i++)

@@ -236,6 +236,14 @@ export class SailRig {
   get underway() {
     return this.target > 0.5;
   }
+  /** Manœuvre terminée (plus rien ne bouge hors de la brise). */
+  get settled() {
+    const goal = this.target > 0.5 ? 1 : 0.35;
+    return (
+      Math.abs(this.fill - goal) < 0.01 &&
+      this.rts.every((r) => r.wait <= 0 && r.d === this.target)
+    );
+  }
 
   private squarePt(
     r: SailRt,

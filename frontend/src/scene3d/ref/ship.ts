@@ -368,7 +368,7 @@ function windowAt(
     pts.push(V(Math.cos(a) * (w / 2), h / 2 + Math.sin(a) * (w / 2), 0.04));
   }
   pts.push(V(w / 2, -h / 2, 0.04));
-  const frame = tube(pts, 0.05, 60, 8);
+  const frame = tube(pts, 0.05, 28, 6);
   frame.applyMatrix4(mtx);
   k.add(m.brass, frame);
   k.add(
@@ -399,7 +399,7 @@ function porthole(k: Kit, m: RefMaterials, mtx: THREE.Matrix4, r = 0.32) {
     const a = (i / 8) * Math.PI * 2;
     k.add(
       m.brass,
-      sphere(0.035, 8),
+      new THREE.IcosahedronGeometry(0.035, 0),
       mtx
         .clone()
         .multiply(M(Math.cos(a) * (r + 0.1), Math.sin(a) * (r + 0.1), 0.02))
@@ -417,17 +417,22 @@ function railing(
 ) {
   pts.forEach((p, i) => {
     if (i % every && i !== pts.length - 1) return;
-    k.add(m.brass, cyl(0.03, 0.04, h, 10), M(p.x, p.y + h / 2, p.z));
-    k.add(m.brass, sphere(0.06, 8), M(p.x, p.y + h, p.z));
+    k.add(m.brass, cyl(0.03, 0.04, h, 6, true), M(p.x, p.y + h / 2, p.z));
+    k.add(
+      m.brass,
+      new THREE.IcosahedronGeometry(0.06, 1),
+      M(p.x, p.y + h, p.z)
+    );
   });
   if (pts.length > 1) {
+    const n = Math.min(240, pts.length * 2);
     k.add(
       m.brass,
       tube(
         pts.map((p) => p.clone().setY(p.y + h)),
         0.035,
-        pts.length * 4,
-        8
+        n,
+        6
       )
     );
     k.add(
@@ -435,8 +440,8 @@ function railing(
       tube(
         pts.map((p) => p.clone().setY(p.y + h * 0.5)),
         0.025,
-        pts.length * 4,
-        8
+        n,
+        5
       )
     );
   }

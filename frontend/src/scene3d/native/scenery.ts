@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { NativeFrame } from '../../arpenteur3d/native';
 import type { Quality } from '../quality';
-import { boulder, butte, ranges, type RangeStyle } from '../ref/desert';
+import { boulder, butte, ranges, relief, type RangeStyle } from '../ref/desert';
 import {
   box,
   bez,
@@ -560,6 +560,15 @@ export class BiomeScenery {
   // --- Paysage complet --------------------------------------------------------
 
   private makeSet(biome: string): BiomeSet {
+    relief.res = 0.62;
+    try {
+      return this.makeSetInner(biome);
+    } finally {
+      relief.res = 1;
+    }
+  }
+
+  private makeSetInner(biome: string): BiomeSet {
     const root = new THREE.Group();
     const items: Feature[] = [];
     const r = rng(

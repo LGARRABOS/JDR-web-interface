@@ -182,8 +182,8 @@ export function ShipScene3D(props: ShipSceneProps) {
         last = now;
         if (dt > 250) return; // onglet repris, mesure sans valeur
         avg = avg * 0.92 + dt * 0.08;
-        if (avg > 26 && scale > 0.55) {
-          scale = Math.max(0.55, scale - 0.15);
+        if (avg > 26 && scale > 0.7) {
+          scale = Math.max(0.7, scale - 0.1);
           avg = 16.7;
           calm = 0;
           resize();

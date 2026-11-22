@@ -147,6 +147,9 @@ function strata(y: number, seed: number) {
  * Butte ou éperon : pourtour irrégulier (allongé, orienté), strates en corniche,
  * ravines irrégulières, éboulis au pied, rebord sommital émoussé.
  */
+/** Finesse des buttes (le jeu les allège : elles défilent au loin). */
+export const relief = { res: 1 };
+
 export function butte(
   m: RefMaterials,
   cx: number,
@@ -159,8 +162,8 @@ export function butte(
   /** Pied imposé (sinon : posé sur le relief du labo). */
   base0?: number
 ): THREE.Mesh {
-  const na = 180,
-    ny = 72,
+  const na = Math.round(180 * relief.res),
+    ny = Math.round(72 * relief.res),
     nr = 8;
   const pos: number[] = [],
     uvs: number[] = [],
@@ -261,7 +264,7 @@ export function boulder(
   r: number,
   seed: number
 ): THREE.Mesh {
-  const g = new THREE.IcosahedronGeometry(r, 5);
+  const g = new THREE.IcosahedronGeometry(r, relief.res < 1 ? 3 : 5);
   const p = g.attributes.position as THREE.BufferAttribute;
   const uv = new Float32Array(p.count * 2);
   for (let i = 0; i < p.count; i++) {

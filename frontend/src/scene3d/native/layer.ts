@@ -22,8 +22,8 @@ import {
   type RefShip,
   type ShipLook,
 } from '../ref/ship';
-import { cyl, Kit, lathe, M, torus } from '../ref/kit';
-import { CrewFigure } from './crew';
+import { cyl, Kit, lathe, M, tess, torus } from '../ref/kit';
+import { Crowd } from './crew';
 import { groundMesh, sandHeight, type GroundParams } from './ground';
 import { BiomeScenery } from './scenery';
 
@@ -33,7 +33,6 @@ import { BiomeScenery } from './scenery';
 // dans la scène du moteur Three, avec sa lumière, son ciel et sa brume.
 
 const AETHER = new THREE.Color('#47d9ff');
-const IDENT = new THREE.Matrix4();
 
 /** Matériaux partagés entre les scènes (textures fabriquées une seule fois). */
 const libs = new Map<number, Promise<RefMaterials>>();
@@ -166,11 +165,15 @@ interface ShipRt {
   jets: THREE.Mesh[];
   lamps: THREE.PointLight[];
   podLights: THREE.PointLight[];
-  crew: Map<CrewMember, CrewFigure>;
+  crewStyle: CrewStyle;
   crewMap: Map<CrewMember, CrewMember>;
   deck: number;
   smokeT: number;
   shown: boolean;
+  npc: boolean;
+  sailDt: number;
+  sailTick: number;
+  sailFresh: boolean;
 }
 
 export class NativeLayer implements NativeHost {
@@ -181,7 +184,7 @@ export class NativeLayer implements NativeHost {
   private player: ShipRt | null = null;
   private pending: { build: Build; opts: NativeShipOptions } | null = null;
   private npcs = new Map<string, ShipRt>();
-  private folk = new Map<CrewMember, CrewFigure>();
+  private crowd: Crowd;
   private ground: ReturnType<typeof groundMesh> | null = null;
   private scenery: BiomeScenery | null = null;
   private smoke = new Puffs(900, new THREE.Color('#8a8580'), 0.12);
@@ -205,6 +208,8 @@ export class NativeLayer implements NativeHost {
   ) {
     this.fogU = shared;
     this.root.add(this.smoke.points, this.steam.points, this.dust.points);
+    this.crowd = new Crowd(400, (m) => this.patch(m));
+    this.root.add(this.crowd.root);
     for (const p of [this.smoke, this.steam, this.dust])
       this.patch(p.mat as unknown as THREE.Material, false);
     refLibrary(textures, quality.texSize)
@@ -278,7 +283,44 @@ vArpW = (modelMatrix * arpW).xyz;`
   ): ShipRt {
     const lib = this.lib!;
     const look = lookOf(build, lib, o);
-    const ship = buildShip(lib, look);
+    // Navires du port : facettes allégées (vus de plus loin).
+    tess.detail = crewCount ? 1 : 0.45;
+    let ship: RefShip;
+    try {
+      ship = buildShip(lib, look);
+    } finally {
+      tess.detail = 1;
+    }
+    // Ombres portées : seulement les grandes masses (les détails n'en
+    // donnent presque pas et doubleraient le travail).
+    const big = new Set<THREE.Material>(
+      [
+        look.mats?.hullWood,
+        look.mats?.wall,
+        look.mats?.hullBand,
+        lib.copperSheath,
+        lib.paint,
+        look.mats?.paint,
+        lib.darkWood,
+        lib.ironPlates,
+        lib.deck,
+        lib.spar,
+        ship.sails.material as THREE.Material,
+      ].filter(Boolean) as THREE.Material[]
+    );
+    ship.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh)
+        mesh.castShadow =
+          !(mesh as THREE.InstancedMesh).isInstancedMesh &&
+          big.has(mesh.material as THREE.Material) &&
+          (crewCount ||
+            [
+              look.mats?.hullWood,
+              lib.copperSheath,
+              ship.sails.material,
+            ].includes(mesh.material as THREE.Material));
+    });
     const sailU: SailUniforms = {
       uTime: { value: 0 },
       uSunView: { value: this.sunView },
@@ -309,11 +351,15 @@ vArpW = (modelMatrix * arpW).xyz;`
       jets: [],
       lamps: [],
       podLights: [],
-      crew: new Map(),
+      crewStyle: { body: '#6a4a32', accent: '#c99a45' },
       crewMap: new Map(),
       deck: ship.deck,
       smokeT: 0,
       shown: false,
+      npc: !crewCount,
+      sailDt: 0,
+      sailTick: 0,
+      sailFresh: false,
     };
     ship.nozzles.forEach((p) => {
       const jet = aetherJet(AETHER);
@@ -411,12 +457,7 @@ vArpW = (modelMatrix * arpW).xyz;`
         rt.root.add(g);
       }
     }
-    const style: CrewStyle = opts.parts.crewStyle;
-    for (const c of opts.parts.crew) {
-      const f = new CrewFigure(style, (m) => this.patch(m));
-      rt.crew.set(c, f);
-      rt.root.add(f.root);
-    }
+    rt.crewStyle = opts.parts.crewStyle;
     this.player = rt;
     this.root.add(rt.root);
   }
@@ -440,7 +481,26 @@ vArpW = (modelMatrix * arpW).xyz;`
       (p) => (p.rotation.x += f.dt * 9 * (0.15 + 0.85 * (1 - docked)))
     );
     rt.sailU.uTime.value = f.time;
-    rt.ship.rig.update(f.time, f.dt);
+    // La toile est recalculée sur le processeur : les navires du port à quai,
+    // voiles serrées, ne la recalculent plus ; en manœuvre, une image sur trois.
+    const rig = rt.ship.rig;
+    rt.sailDt += f.dt;
+    if (rt.npc) {
+      rt.sailTick++;
+      const still = rig.settled && !rig.underway;
+      if (still && rt.sailFresh) {
+        rt.sailDt = 0;
+        return this.jets(rt, f, power);
+      }
+      if (!still && rt.sailTick % 3) return this.jets(rt, f, power);
+      rt.sailFresh = still;
+    }
+    rig.update(f.time, rt.sailDt);
+    rt.sailDt = 0;
+    this.jets(rt, f, power);
+  }
+
+  private jets(rt: ShipRt, f: NativeFrame, power: number) {
     rt.jets.forEach((j) => {
       const u = (j.material as THREE.ShaderMaterial).uniforms;
       u.uTime.value = f.time;
@@ -500,11 +560,16 @@ vArpW = (modelMatrix * arpW).xyz;`
       pr.podLights.forEach(
         (l) => (l.intensity = (night ? 8 : 1.5) * (1 - f.dock * 0.6))
       );
-      for (const c of f.crew) {
-        const fig = pr.crew.get(c);
-        if (fig)
-          fig.pose(IDENT, crewPose(pr.crewMap.get(c) ?? c, f.time), 0, 0.95);
-      }
+      this.crowd.begin();
+      const base = pr.root.matrix;
+      for (const c of f.crew)
+        this.crowd.add(
+          base,
+          pr.crewStyle,
+          crewPose(pr.crewMap.get(c) ?? c, f.time),
+          0,
+          0.95
+        );
       this.emit(pr, shipM, f);
     }
 
@@ -536,26 +601,20 @@ vArpW = (modelMatrix * arpW).xyz;`
           this.npcs.delete(k);
         }
       }
-    // Habitants.
-    const used = new Set<CrewMember>();
+    // Habitants (les plus lointains, invisibles à cette taille, sont omis).
+    if (!pr) this.crowd.begin();
+    const cam = this.camera.position;
+    const bm = new THREE.Matrix4();
+    const wp = new THREE.Vector3();
     for (const p of f.crowd) {
-      used.add(p.member);
-      let fig = this.folk.get(p.member);
-      if (!fig) {
-        fig = new CrewFigure(p.style, (m) => this.patch(m));
-        this.folk.set(p.member, fig);
-        this.root.add(fig.root);
-      }
-      fig.root.visible = true;
-      fig.pose(
-        new THREE.Matrix4().fromArray(p.base),
-        crewPose(p.member, f.time),
-        0,
-        0.95
+      bm.fromArray(p.base);
+      wp.set(p.member.pos[0], p.member.pos[1], p.member.pos[2]).applyMatrix4(
+        bm
       );
+      if (wp.distanceToSquared(cam) > 420 * 420) continue;
+      this.crowd.add(bm, p.style, crewPose(p.member, f.time), 0, 0.95);
     }
-    for (const [mb, fig] of this.folk)
-      if (!used.has(mb)) fig.root.visible = false;
+    this.crowd.end();
 
     // Particules : couleur de la lumière du moment.
     const lit = new THREE.Color(

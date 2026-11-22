@@ -271,7 +271,7 @@ export class MeshBuilder {
   /** Pavé centré en x et z, de y = 0 à y = h (arêtes adoucies). */
   box(w: number, h: number, d: number, mat: Mat) {
     const r = Math.min(MeshBuilder.bevel, Math.min(w, h, d) * 0.12);
-    if (r < 0.01) return this.sharpBox(w, h, d, mat);
+    if (r < 0.01 || Math.min(w, h, d) < 0.3) return this.sharpBox(w, h, d, mat);
     const ext: Vec3 = [w / 2, h / 2, d / 2];
     const cy = h / 2;
     // Sommet d'un coin c (signes) vu depuis la face d'axe k : rentré de r
