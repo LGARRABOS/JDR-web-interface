@@ -141,7 +141,7 @@ export async function createRefMaterials(
       { normal: 1.1, contrast: 0.6, roughMul: 0.8 },
       (u, v, t) => {
         const chip = pfbm(u, v, 28, 14, 3, 71);
-        if (chip > 0.7) {
+        if (chip > 0.76) {
           const [wr, wg, wb] = hexLin('#7d5434');
           t.r = wr;
           t.g = wg;

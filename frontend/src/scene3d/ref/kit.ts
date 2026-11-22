@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Outils de modelage : géométries aux UV en mètres, regroupées par matériau
@@ -74,25 +75,98 @@ export class Kit {
   }
 }
 
-/** Boîte aux UV en mètres. */
-export function box(w: number, h: number, d: number): THREE.BufferGeometry {
-  const g = new THREE.BoxGeometry(w, h, d);
-  const uv = g.attributes.uv as THREE.BufferAttribute;
-  // Faces : +x, -x, +y, -y, +z, -z (4 sommets chacune).
-  const dims: [number, number][] = [
-    [d, h],
-    [d, h],
-    [w, d],
-    [w, d],
-    [w, h],
-    [w, h],
-  ];
-  for (let f = 0; f < 6; f++)
-    for (let k = 0; k < 4; k++) {
-      const i = f * 4 + k;
-      uv.setXY(i, uv.getX(i) * dims[f][0], uv.getY(i) * dims[f][1]);
-    }
+/** UV planaires (en mètres) selon l'axe dominant de la normale. */
+function boxUV(g: THREE.BufferGeometry) {
+  const p = g.attributes.position as THREE.BufferAttribute;
+  const n = g.attributes.normal as THREE.BufferAttribute;
+  const uv = new Float32Array(p.count * 2);
+  for (let i = 0; i < p.count; i++) {
+    const ax = Math.abs(n.getX(i)),
+      ay = Math.abs(n.getY(i)),
+      az = Math.abs(n.getZ(i));
+    const x = p.getX(i),
+      y = p.getY(i),
+      z = p.getZ(i);
+    if (ax >= ay && ax >= az) uv.set([z, y], i * 2);
+    else if (ay >= az) uv.set([x, z], i * 2);
+    else uv.set([x, y], i * 2);
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+/** Bloc aux arêtes arrondies (jamais de cube brut), UV en mètres. */
+export function box(
+  w: number,
+  h: number,
+  d: number,
+  r?: number
+): THREE.BufferGeometry {
+  const rr = r ?? Math.min(0.08, Math.min(w, h, d) * 0.22);
+  const g = new RoundedBoxGeometry(w, h, d, 3, Math.max(0.002, rr));
+  boxUV(g);
   return g;
+}
+
+/** Solide de révolution (axe Y) : profil [rayon, hauteur], UV en mètres. */
+export function lathe(
+  profile: [number, number][],
+  seg = 48,
+  phiLen = Math.PI * 2
+): THREE.BufferGeometry {
+  const g = new THREE.LatheGeometry(
+    profile.map(([r, y]) => new THREE.Vector2(Math.max(r, 1e-4), y)),
+    seg,
+    0,
+    phiLen
+  );
+  let len = 0;
+  for (let i = 1; i < profile.length; i++)
+    len += Math.hypot(
+      profile[i][0] - profile[i - 1][0],
+      profile[i][1] - profile[i - 1][1]
+    );
+  const rmax = Math.max(...profile.map((p) => p[0]));
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++)
+    uv.setXY(i, uv.getX(i) * phiLen * rmax, uv.getY(i) * len);
+  return g;
+}
+
+/** Tube lisse le long d'une courbe passant par les points donnés. */
+export function tube(
+  pts: THREE.Vector3[],
+  r: number,
+  seg = 48,
+  radial = 12
+): THREE.BufferGeometry {
+  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  const g = new THREE.TubeGeometry(curve, seg, r, radial, false);
+  const len = curve.getLength();
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++)
+    uv.setXY(i, uv.getX(i) * len, uv.getY(i) * Math.PI * 2 * r);
+  return g;
+}
+
+/** Courbe de Bézier quadratique échantillonnée. */
+export function bez(
+  a: THREE.Vector3,
+  c: THREE.Vector3,
+  b: THREE.Vector3,
+  n = 12
+): THREE.Vector3[] {
+  const out: THREE.Vector3[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    out.push(
+      a
+        .clone()
+        .multiplyScalar((1 - t) * (1 - t))
+        .addScaledVector(c, 2 * t * (1 - t))
+        .addScaledVector(b, t * t)
+    );
+  }
+  return out;
 }
 
 /** Cylindre (axe Y) aux UV en mètres : u autour, v le long. */
@@ -100,7 +174,7 @@ export function cyl(
   r0: number,
   r1: number,
   h: number,
-  seg = 16,
+  seg = 32,
   open = false
 ): THREE.BufferGeometry {
   const g = new THREE.CylinderGeometry(r1, r0, h, seg, 1, open);
@@ -115,10 +189,17 @@ export function torus(
   R: number,
   r: number,
   seg = 24,
-  tube = 6,
+  tubeSeg = 6,
   arc = Math.PI * 2
 ) {
-  const g = new THREE.TorusGeometry(R, r, tube, seg, arc);
+  // Toujours assez de facettes pour paraître lisse.
+  const g = new THREE.TorusGeometry(
+    R,
+    r,
+    Math.max(10, tubeSeg),
+    Math.max(48, seg * 2),
+    arc
+  );
   const uv = g.attributes.uv as THREE.BufferAttribute;
   for (let i = 0; i < uv.count; i++)
     uv.setXY(i, uv.getX(i) * arc * R, uv.getY(i) * Math.PI * 2 * r);
@@ -126,15 +207,8 @@ export function torus(
 }
 
 export function sphere(r: number, seg = 16, phiLen = Math.PI) {
-  const g = new THREE.SphereGeometry(
-    r,
-    seg * 2,
-    seg,
-    0,
-    Math.PI * 2,
-    0,
-    phiLen
-  );
+  const sg = Math.max(16, seg);
+  const g = new THREE.SphereGeometry(r, sg * 2, sg, 0, Math.PI * 2, 0, phiLen);
   const uv = g.attributes.uv as THREE.BufferAttribute;
   for (let i = 0; i < uv.count; i++)
     uv.setXY(i, uv.getX(i) * Math.PI * 2 * r, uv.getY(i) * Math.PI * r);
@@ -210,13 +284,18 @@ export function sweep(
   side?: (i: number) => THREE.Vector3
 ): THREE.BufferGeometry {
   const n = pts.length;
-  const corners: [number, number][] = [
-    [-0.5, -0.5],
-    [0.5, -0.5],
-    [0.5, 0.5],
-    [-0.5, 0.5],
-    [-0.5, -0.5],
-  ];
+  // Profil en rectangle aux coins arrondis (superellipse), refermé.
+  const NP = 20;
+  const corners: [number, number][] = [];
+  for (let i = 0; i <= NP; i++) {
+    const a = (i / NP) * Math.PI * 2 + Math.PI / 4;
+    const c = Math.cos(a),
+      sn = Math.sin(a);
+    corners.push([
+      0.5 * Math.sign(c) * Math.pow(Math.abs(c), 0.5),
+      0.5 * Math.sign(sn) * Math.pow(Math.abs(sn), 0.5),
+    ]);
+  }
   let acc = 0;
   const frames = pts.map((p, i) => {
     const t = new THREE.Vector3()
@@ -229,7 +308,7 @@ export function sweep(
     const u = new THREE.Vector3().crossVectors(s, t).normalize();
     return { p, s, u, acc };
   });
-  return grid(4, n - 1, (i, j) => {
+  return grid(NP, n - 1, (i, j) => {
     const f = frames[j];
     const [a, b] = corners[i];
     return {
@@ -237,7 +316,7 @@ export function sweep(
         .clone()
         .addScaledVector(f.s, a * w)
         .addScaledVector(f.u, b * h),
-      uv: [f.acc, i * (w + h) * 0.5],
+      uv: [f.acc, (i / NP) * (w + h) * 2],
     };
   });
 }

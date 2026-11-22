@@ -127,7 +127,7 @@ export class RefViewer {
   private lamps: THREE.PointLight[] = [];
   private podLights: THREE.PointLight[] = [];
   private jets: THREE.Mesh[] = [];
-  private smoke = new Puffs(700, new THREE.Color('#6d6a68'), 0.12);
+  private smoke = new Puffs(700, new THREE.Color('#8a8580'), 0.12);
   private steam = new Puffs(240, new THREE.Color('#f2efe9'), 0.25);
   private dust = new Puffs(500, new THREE.Color('#d2a273'), 0.2);
   private sailU = {
@@ -397,6 +397,15 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
     }
     this.sailU.uSunCol.value.set(night ? '#3a4560' : '#ffb27a');
     this.sunDir = sunDir;
+    // Chaînes lointaines : même lumière, fondues dans la brume du moment.
+    const far = this.scene.getObjectByName('ranges') as THREE.Mesh | undefined;
+    if (far) {
+      const u = (far.material as THREE.ShaderMaterial).uniforms;
+      u.uSun.value.copy(sunDir);
+      u.uLit.value.set(night ? '#2a3044' : '#e0a27a');
+      u.uShade.value.set(night ? '#0e121c' : '#7a5560');
+      u.uHaze.value.set(night ? '#151b2a' : '#d99a72');
+    }
   }
   private sunDir = new THREE.Vector3(0, 1, 0);
 
@@ -443,7 +452,7 @@ transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
           8 + Math.random() * 3,
           2.6,
           14 + Math.random() * 10,
-          0.3
+          0.2
         )
       );
     });
