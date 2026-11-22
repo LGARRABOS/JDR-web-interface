@@ -14,6 +14,8 @@ import {
 export interface RefMaterials {
   hullWood: THREE.MeshStandardMaterial;
   hullBand: THREE.MeshStandardMaterial;
+  /** murailles des châteaux (sinon le bordé) */
+  wall?: THREE.MeshStandardMaterial;
   deck: THREE.MeshStandardMaterial;
   darkWood: THREE.MeshStandardMaterial;
   spar: THREE.MeshStandardMaterial;
@@ -27,6 +29,9 @@ export interface RefMaterials {
   rope: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial;
   aether: THREE.MeshStandardMaterial;
+  fire: THREE.MeshStandardMaterial;
+  /** proue (figure, éperon) : laiton par défaut */
+  prow?: THREE.MeshStandardMaterial;
   sand: THREE.MeshStandardMaterial;
   cliff: THREE.MeshStandardMaterial;
   rock: THREE.MeshStandardMaterial;
@@ -136,7 +141,7 @@ export async function createRefMaterials(
   const hullBand = material(
     fromPhoto(
       staggered(ph.wood_planks, PLANK_ROWS, 5),
-      '#2d4746',
+      '#c8c8c8',
       [5.4, 2.7],
       { normal: 1.1, contrast: 0.6, roughMul: 0.8 },
       (u, v, t) => {
@@ -150,7 +155,11 @@ export async function createRefMaterials(
         }
       }
     ),
-    { side: THREE.DoubleSide }
+    // Peinture neutre, recolorée par la couleur du matériau (bleu-vert par défaut).
+    {
+      side: THREE.DoubleSide,
+      color: new THREE.Color('#2d4746').multiplyScalar(1 / 0.578),
+    }
   );
   progress(0.2, 'Matériaux');
   await breathe();
@@ -347,6 +356,16 @@ export async function createRefMaterials(
     emissiveIntensity: 2.2,
   });
 
+  const fire = new THREE.MeshStandardMaterial({
+    color: '#3a1404',
+    roughness: 1,
+    emissive: new THREE.Color('#ff7a2a'),
+    emissiveIntensity: 3,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false,
+  });
+
   // Sable : grain de la photo et petites rides du vent.
   progress(0.6, 'Sable');
   await breathe();
@@ -395,6 +414,7 @@ export async function createRefMaterials(
     rope,
     glass,
     aether,
+    fire,
     sand,
     cliff,
     rock,

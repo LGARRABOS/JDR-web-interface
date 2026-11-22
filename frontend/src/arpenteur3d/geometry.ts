@@ -262,8 +262,121 @@ export class MeshBuilder {
       }
   }
 
-  /** Pavé centré en x et z, de y = 0 à y = h. */
+  /**
+   * Arêtes adoucies des pavés (rayon max, m) : un chanfrein aux normales
+   * lissées, qui accroche la lumière comme une arête arrondie.
+   */
+  static bevel = 0.1;
+
+  /** Pavé centré en x et z, de y = 0 à y = h (arêtes adoucies). */
   box(w: number, h: number, d: number, mat: Mat) {
+    const r = Math.min(MeshBuilder.bevel, Math.min(w, h, d) * 0.12);
+    if (r < 0.01) return this.sharpBox(w, h, d, mat);
+    const ext: Vec3 = [w / 2, h / 2, d / 2];
+    const cy = h / 2;
+    // Sommet d'un coin c (signes) vu depuis la face d'axe k : rentré de r
+    // sur les deux autres axes.
+    const P = (c: Vec3, k: number): Vec3 => {
+      const p: Vec3 = [0, 0, 0];
+      for (let i = 0; i < 3; i++)
+        p[i] = c[i] * ext[i] - (i === k ? 0 : c[i] * r);
+      p[1] += cy;
+      return p;
+    };
+    const N = (c: Vec3, k: number): Vec3 => {
+      const n: Vec3 = [0, 0, 0];
+      n[k] = c[k];
+      return n;
+    };
+    const uvOf = (p: Vec3, k: number): [number, number] =>
+      k === 0 ? [p[2], p[1]] : k === 1 ? [p[0], p[2]] : [p[0], p[1]];
+    // Polygone orienté vers l'extérieur.
+    const poly = (pts: Vec3[], ns: Vec3[], ks: number[]) => {
+      const e1 = [
+        pts[1][0] - pts[0][0],
+        pts[1][1] - pts[0][1],
+        pts[1][2] - pts[0][2],
+      ];
+      const e2 = [
+        pts[2][0] - pts[0][0],
+        pts[2][1] - pts[0][1],
+        pts[2][2] - pts[0][2],
+      ];
+      const cx = e1[1] * e2[2] - e1[2] * e2[1];
+      const cyy = e1[2] * e2[0] - e1[0] * e2[2];
+      const cz = e1[0] * e2[1] - e1[1] * e2[0];
+      const o = pts[0];
+      const out = cx * o[0] + cyy * (o[1] - cy) + cz * o[2];
+      const order = pts.map((_, i) => i);
+      if (out < 0) order.reverse();
+      const ids = order.map((i) =>
+        this.vertex(pts[i], ns[i], uvOf(pts[i], ks[i]), mat)
+      );
+      if (ids.length === 3) this.tri(ids[0], ids[1], ids[2]);
+      else this.quad(ids[0], ids[1], ids[2], ids[3]);
+    };
+    const S = [-1, 1];
+    // Faces.
+    for (let k = 0; k < 3; k++)
+      for (const sk of S) {
+        const a = (k + 1) % 3,
+          b = (k + 2) % 3;
+        const cs: Vec3[] = [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ];
+        [
+          [-1, -1],
+          [1, -1],
+          [1, 1],
+          [-1, 1],
+        ].forEach(([ua, ub], i) => {
+          cs[i][k] = sk;
+          cs[i][a] = ua;
+          cs[i][b] = ub;
+        });
+        poly(
+          cs.map((c) => P(c, k)),
+          cs.map((c) => N(c, k)),
+          [k, k, k, k]
+        );
+      }
+    // Chanfreins des arêtes (entre les faces k1 et k2).
+    for (let k1 = 0; k1 < 3; k1++)
+      for (let k2 = k1 + 1; k2 < 3; k2++) {
+        const t = 3 - k1 - k2;
+        for (const s1 of S)
+          for (const s2 of S) {
+            const c0: Vec3 = [0, 0, 0],
+              c1: Vec3 = [0, 0, 0];
+            c0[k1] = c1[k1] = s1;
+            c0[k2] = c1[k2] = s2;
+            c0[t] = -1;
+            c1[t] = 1;
+            poly(
+              [P(c0, k1), P(c1, k1), P(c1, k2), P(c0, k2)],
+              [N(c0, k1), N(c1, k1), N(c1, k2), N(c0, k2)],
+              [k1, k1, k2, k2]
+            );
+          }
+      }
+    // Coins.
+    for (const sx of S)
+      for (const sy of S)
+        for (const sz of S) {
+          const c: Vec3 = [sx, sy, sz];
+          poly(
+            [P(c, 0), P(c, 1), P(c, 2)],
+            [N(c, 0), N(c, 1), N(c, 2)],
+            [0, 1, 2]
+          );
+        }
+  }
+
+  /** Pavé à arêtes vives (centré en x et z, de y = 0 à y = h). */
+  sharpBox(w: number, h: number, d: number, mat: Mat) {
     const x = w / 2;
     const z = d / 2;
     const faces: [Vec3, Vec3[], number, number][] = [

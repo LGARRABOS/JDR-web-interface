@@ -12,6 +12,7 @@ import {
   regionById,
   ROUTES,
 } from '../../arpenteur/keld';
+import { SceneLoader } from './SceneLoader';
 import { desertOf, ShipScene, type ShipSceneProps } from './ShipScene';
 
 // Scène 3D de l'arpenteur (WebGL2). La vue en coupe reste le plan 2D ; sans
@@ -63,12 +64,14 @@ function sceneOf(sector: string, hangar = ''): Scene {
 }
 
 type Engine = 'classic' | 'three';
-const ENGINE_KEY = 'arp-engine';
+// Nouvelle clé : le rendu réaliste devient celui par défaut (l'ancien choix
+// enregistré automatiquement ne doit pas le masquer).
+const ENGINE_KEY = 'arp-engine-2';
 function readEngine(): Engine {
   try {
-    return localStorage.getItem(ENGINE_KEY) === 'three' ? 'three' : 'classic';
+    return localStorage.getItem(ENGINE_KEY) === 'classic' ? 'classic' : 'three';
   } catch {
-    return 'classic';
+    return 'three';
   }
 }
 
@@ -101,6 +104,12 @@ export function ShipScene3D(props: ShipSceneProps) {
   }, [engine]);
   // Incrémenté à chaque moteur prêt (le nouveau se charge en différé).
   const [stageGen, setStageGen] = useState(0);
+  // Rendu réaliste : matériaux et paysages fabriqués sur la machine.
+  const [nativeReady, setNativeReady] = useState(false);
+  const [nativeProg, setNativeProg] = useState({
+    f: 0,
+    label: 'Ouverture des soutes',
+  });
   const stageRef = useRef<Stage | null>(null);
   // Point de vue visé (les entrées le modifient, l'image le rejoint en douceur).
   const camRef = useRef<Cam>({ ...DEFAULT_CAM });
@@ -307,14 +316,32 @@ export function ShipScene3D(props: ShipSceneProps) {
         stageRef.current = null;
       };
     };
+    let offProg: (() => void) | null = null;
     if (engine === 'three') {
       // Nouveau rendu : Three.js n'est chargé que pour ceux qui l'activent.
-      import('../../scene3d/threeBackend')
-        .then(({ ThreeBackend }) => {
+      setNativeReady(false);
+      Promise.all([
+        import('../../scene3d/threeBackend'),
+        import('../../scene3d/native/layer'),
+      ])
+        .then(([{ ThreeBackend }, { onLibraryProgress }]) => {
           if (cancelled) return;
+          offProg = onLibraryProgress((f, label) =>
+            setNativeProg({ f, label })
+          );
           try {
             const backend = new ThreeBackend(canvas, {
               textures: '/textures/pbr/',
+              native: () => {
+                offProg?.();
+                if (cancelled) return;
+                // Une image de plus pour compiler les matériaux avant de lever le voile.
+                requestAnimationFrame(() =>
+                  requestAnimationFrame(
+                    () => !cancelled && setNativeReady(true)
+                  )
+                );
+              },
             });
             cleanup = run(new Stage(canvas, { backend }));
             setStageGen((g) => g + 1);
@@ -335,6 +362,7 @@ export function ShipScene3D(props: ShipSceneProps) {
     }
     return () => {
       cancelled = true;
+      offProg?.();
       cleanup?.();
     };
   }, [use3D, animate, engine]);
@@ -432,6 +460,13 @@ export function ShipScene3D(props: ShipSceneProps) {
         role="img"
         aria-label={`Arpenteur ${doc.name} — glisser pour pivoter, molette ou pincement pour zoomer`}
       />
+      {engine === 'three' && (
+        <SceneLoader
+          visible={!nativeReady}
+          f={nativeProg.f}
+          label={nativeProg.label}
+        />
+      )}
       {travel && (
         <div
           className="pointer-events-none absolute left-1/2 bottom-3 sm:bottom-24 -translate-x-1/2 arp-plate rounded-xl px-4 py-2 text-center min-w-[220px]"
@@ -503,11 +538,11 @@ export function ShipScene3D(props: ShipSceneProps) {
           onClick={() => setEngine(engine === 'three' ? 'classic' : 'three')}
           title={
             engine === 'three'
-              ? 'Nouveau rendu (Three.js, en construction) — revenir au rendu classique'
-              : 'Essayer le nouveau rendu (Three.js, en construction)'
+              ? 'Rendu réaliste — passer au rendu classique (plus léger)'
+              : 'Revenir au rendu réaliste'
           }
           aria-pressed={engine === 'three'}
-          aria-label="Nouveau rendu"
+          aria-label="Rendu réaliste"
         >
           ✦
         </button>

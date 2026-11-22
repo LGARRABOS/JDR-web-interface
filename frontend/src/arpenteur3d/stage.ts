@@ -134,6 +134,8 @@ interface CityRt {
     dims: HangarDims;
   } | null;
   ships: {
+    key: string;
+    build: Build;
     body: GpuMesh;
     glows: GpuMesh;
     x: number;
@@ -194,6 +196,9 @@ export class Stage {
   /** Habillages des habitants (trois tenues). */
   private folk: { torso: GpuMesh; leg: GpuMesh; arm: GpuMesh }[] = [];
   private journey: Journey | null = null;
+  private nat: import('./native').NativeHost | null = null;
+  private npc: import('./native').NativeFrame['npc'] = [];
+  private crowd: import('./native').NativeFrame['crowd'] = [];
   private scrollPos = 0;
   private lastT = -1;
 
@@ -431,8 +436,11 @@ export class Stage {
       });
       // Autres navires du port, chacun avec sa silhouette et ses couleurs.
       const ships = BERTHS.map((q, k) => {
-        const parts = buildShip(npcBuild(c.id, k), { crew: 0, night });
+        const build = npcBuild(c.id, k);
+        const parts = buildShip(build, { crew: 0, night });
         return {
+          key: `${c.id}:${k}`,
+          build,
           body: this.r.upload(parts.body),
           glows: this.r.upload(parts.glows),
           x: q.x,
@@ -538,18 +546,30 @@ export class Stage {
       const y = HOVER_DOCK + (HOVER - HOVER_DOCK) * (1 - dock);
       const bob = Math.sin(time * 1.1 + sh.x) * 0.3 * (1 - dock * 0.8);
       const mdl = chain(base, translation(x, y + bob, sh.z));
+      if (this.nat) {
+        this.npc.push({
+          key: sh.key,
+          build: sh.build,
+          model: mdl,
+          glow: 1 - dock,
+        });
+        continue;
+      }
       items.push({ mesh: sh.body, model: mdl });
       glows.push({ mesh: sh.glows, model: mdl });
     }
-    c.crowd.forEach((p, k) =>
-      poseCrew(items, this.folk[k % this.folk.length], base, p, time)
-    );
+    c.crowd.forEach((p, k) => {
+      if (this.nat)
+        this.crowd.push({ member: p, style: FOLK[k % FOLK.length], base });
+      else poseCrew(items, this.folk[k % this.folk.length], base, p, time);
+    });
   }
 
   setShip(build: Build, opts: StageOptions = {}) {
     this.lastShip = { build, opts };
     this.disposeShip();
     const parts = buildShip(build, { ...opts, night: this.mood === 'night' });
+    this.r.native?.setShip(build, { ...opts, parts });
     this.ship = {
       parts,
       body: this.r.upload(parts.body),
@@ -764,6 +784,11 @@ export class Stage {
     );
     const items: DrawItem[] = [];
     const glows: DrawItem[] = [];
+    // Rendu réaliste prêt : navire, équipage, sol et paysages sont natifs.
+    const nat = this.r.native?.ready ? this.r.native : null;
+    this.nat = nat;
+    this.npc = [];
+    this.crowd = [];
     if (view.ground !== false && inVoid) {
       // Mer de brume d'Aether : îlots qui dérivent et défilent, poussières.
       const v = this.voidOf();
@@ -804,10 +829,12 @@ export class Stage {
       });
     }
     if (view.ground !== false && !inVoid) {
-      items.push({ mesh: this.env.terrain, model: identity() });
-      const bm = this.biomeMeshes(biome);
-      items.push({ mesh: bm.far, model: identity() });
-      items.push(...scenery);
+      const bm = nat ? null : this.biomeMeshes(biome);
+      if (bm) {
+        items.push({ mesh: this.env.terrain, model: identity() });
+        items.push({ mesh: bm.far, model: identity() });
+        items.push(...scenery);
+      }
       if (cityDraw)
         this.drawCity(
           cityDraw.rt,
@@ -817,7 +844,7 @@ export class Stage {
           glows,
           cityDraw.moored
         );
-      if (!calm || Math.abs(calmX) > 900) {
+      if (bm && (!calm || Math.abs(calmX) > 900)) {
         // Les rochers défilent avec le sable (bande bouclée, dessinée deux fois).
         const off = -(this.scrollPos % ROCK_LOOP);
         // Curiosités du paysage, posées sur les dunes, qui défilent en boucle.
@@ -833,15 +860,18 @@ export class Stage {
         });
       }
     }
-    items.push({ mesh: this.ship.body, model: shipM, shadow: true });
-    for (const f of this.ship.fans)
-      items.push({
-        mesh: f.mesh,
-        model: chain(shipM, f.place, rotationY(time * f.speed)),
-        shadow: false,
-      });
-    glows.push({ mesh: this.ship.glows, model: shipM });
-    for (const c of parts.crew) poseCrew(items, this.ship.crew, shipM, c, time);
+    if (!nat) {
+      items.push({ mesh: this.ship.body, model: shipM, shadow: true });
+      for (const f of this.ship.fans)
+        items.push({
+          mesh: f.mesh,
+          model: chain(shipM, f.place, rotationY(time * f.speed)),
+          shadow: false,
+        });
+      glows.push({ mesh: this.ship.glows, model: shipM });
+      for (const c of parts.crew)
+        poseCrew(items, this.ship.crew, shipM, c, time);
+    }
 
     const aspect = this.r.width / this.r.height;
     const fov = view.fov ?? 0.36;
@@ -922,6 +952,25 @@ export class Stage {
       1.15,
       fov * (1 + 0.42 * inHangar) * (1 + 0.9 * (1 - clampT) * inHangar)
     );
+    nat?.frame({
+      time,
+      dt,
+      shipM,
+      dock,
+      scroll: this.scrollPos,
+      calm,
+      calmX,
+      biome: biome.id,
+      duneAmp: biome.dune,
+      inVoid,
+      ground: view.ground !== false,
+      features: !calm || Math.abs(calmX) > 900,
+      night: light.night > 0.5,
+      light,
+      npc: this.npc,
+      crowd: this.crowd,
+      crew: parts.crew,
+    });
     this.r.render(items, glows, { eye, target, fov: fovR }, light, {
       time,
       scroll: this.scrollPos,
@@ -937,9 +986,11 @@ export class Stage {
         14 +
         Math.abs(shipX) * 0.5 +
         (hgc ? (hgc.dims.hx - parts.radius) * inHangar : 0),
-      pods,
+      pods: nat ? [] : pods,
       dust:
-        view.ground === false || dock > 0.5 || inVoid ? null : this.ship.dust,
+        nat || view.ground === false || dock > 0.5 || inVoid
+          ? null
+          : this.ship.dust,
     });
     // Arrivée : le décor de destination devient le décor courant.
     if (j && finished) {
@@ -1123,13 +1174,20 @@ function dustMesh(parts: ShipParts): import('./geometry').MeshData {
 }
 
 /** Pose d'un matelot à l'instant t : position, orientation et angles des membres. */
-function poseCrew(
-  items: DrawItem[],
-  mesh: { torso: GpuMesh; leg: GpuMesh; arm: GpuMesh },
-  shipM: Mat4,
-  c: CrewMember,
-  time: number
-) {
+export interface CrewPose {
+  pos: Vec3;
+  yaw: number;
+  lean: number;
+  bob: number;
+  legL: number;
+  legR: number;
+  armL: number;
+  armR: number;
+  crouch: number;
+}
+
+/** Pose d'un matelot (calcul seul, partagé avec le rendu réaliste). */
+export function crewPose(c: CrewMember, time: number): CrewPose {
   const t = time + c.seed * 7.31;
   let pos: Vec3 = c.pos;
   let yaw = c.yaw;
@@ -1230,6 +1288,20 @@ function poseCrew(
       break;
     }
   }
+  return { pos, yaw, lean, bob, legL, legR, armL, armR, crouch };
+}
+
+function poseCrew(
+  items: DrawItem[],
+  mesh: { torso: GpuMesh; leg: GpuMesh; arm: GpuMesh },
+  shipM: Mat4,
+  c: CrewMember,
+  time: number
+) {
+  const { pos, yaw, lean, bob, legL, legR, armL, armR, crouch } = crewPose(
+    c,
+    time
+  );
   // Un peu plus grands que nature pour rester lisibles à l'échelle du navire.
   const P0 = chain(
     shipM,

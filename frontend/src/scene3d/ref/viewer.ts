@@ -10,7 +10,8 @@ import { detectQuality, type Quality } from '../quality';
 import { buildDesert, groundY } from './desert';
 import { aetherJet, Puffs } from './fx';
 import { createRefMaterials, type RefMaterials } from './materials';
-import { buildShip, type RefShip } from './ship';
+import { patchFlag, patchSail } from './patches';
+import { buildShip, type RefShip, type ShipLook } from './ship';
 
 // Scène de référence de la refonte : le navire neuf dans un canyon de
 // falaises stratifiées, au crépuscule ou de nuit. Autonome (page « labo »).
@@ -141,6 +142,7 @@ export class RefViewer {
   private last = 0;
   private shipY = 0;
   private disposed = false;
+  private look?: ShipLook;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -150,6 +152,7 @@ export class RefViewer {
       preserve?: boolean;
       interactive?: boolean;
       onProgress?: (f: number, label: string) => void;
+      look?: ShipLook;
     }
   ) {
     const r = (this.renderer = new THREE.WebGLRenderer({
@@ -160,6 +163,7 @@ export class RefViewer {
     }));
     this.quality = opts.quality ?? detectQuality(r);
     const q = this.quality;
+    this.look = opts.look;
     r.setPixelRatio(
       Math.min(window.devicePixelRatio || 1, q.tier === 'high' ? 1.5 : 1)
     );
@@ -267,94 +271,18 @@ void main(){ vec4 c = texture2D(tDiffuse, vUv);
 
   private buildShip(m: RefMaterials) {
     // Voiles : un peu de vent dans la toile, et la lumière qui la traverse.
-    m.canvas.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, this.sailU);
-      sh.vertexShader = sh.vertexShader
-        .replace(
-          '#include <common>',
-          '#include <common>\nattribute vec2 sl;\nattribute vec2 sd;\nattribute float hol;\nvarying vec2 vSl;\nvarying vec2 vSd;\nvarying float vHol;'
-        )
-        .replace(
-          '#include <begin_vertex>',
-          '#include <begin_vertex>\nvSl = sl; vSd = sd; vHol = hol;'
-        );
-      // Lumière transmise à travers la toile : calculée avec chaque lampe et
-      // son ombre portée (une voile à l'ombre ne s'illumine pas par derrière).
-      const transmit =
-        'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );\n' +
-        'reflectedLight.directDiffuse += material.diffuseColor * directLight.color * pow(max(-dot(geometryNormal, directLight.direction), 0.), 1.2) * .8 * gThin;';
-      sh.fragmentShader = sh.fragmentShader
-        .replace(
-          '#include <common>',
-          '#include <common>\nuniform vec3 uSunView, uSunCol;\nvarying vec2 vSl;\nvarying vec2 vSd;\nvarying float vHol;\nfloat gThin = 1.;'
-        )
-        .replace(
-          '#include <lights_fragment_begin>',
-          THREE.ShaderChunk.lights_fragment_begin
-            .split(
-              'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );'
-            )
-            .join(transmit)
-        )
-        .replace(
-          '#include <emissivemap_fragment>',
-          `#include <emissivemap_fragment>
-{
-  // Confection : ourlets (gaines), renforts cousus aux angles, bandes de ris
-  // et garcettes, teinte propre à chaque laize, poussière vers la bordure.
-  vec2 s01 = vSl; vec2 dim = max(vSd, vec2(.5));
-  float dx = min(s01.x, 1. - s01.x) * dim.x;
-  float dy = min(s01.y, 1. - s01.y) * dim.y;
-  float hem = 1. - smoothstep(.13, .2, min(dx, dy));
-  float corner = 1. - smoothstep(1.0, 1.12, dx + dy);
-  float cornerSeam = corner * (1. - smoothstep(.015, .03, abs(fract((dx + dy) * 3.) - .5) - .45));
-  float isSquare = step(dim.y, dim.x * 1.05);
-  float yh = s01.y * dim.y;
-  float rk = floor(yh / .95 + .5);
-  float reef = isSquare * step(.5, rk) * step(rk, 2.5) * (1. - smoothstep(.04, .07, abs(yh - rk * .95)));
-  float zz = (s01.x - .5) * dim.x;
-  float pts = reef * (1. - smoothstep(.025, .045, length(vec2((fract(zz / .55) - .5) * .55, yh - rk * .95 + .12))));
-  float lz = floor(zz / .75);
-  float tint = fract(sin(lz * 127.1 + dim.y * 3.1) * 43758.5453);
-  diffuseColor.rgb *= .95 + .08 * tint;
-  diffuseColor.rgb *= 1. - .1 * hem - .1 * corner - .08 * reef - .1 * cornerSeam;
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.22, .17, .12), pts * .8);
-  float dust = smoothstep(.45, 1., s01.y) * .13 * isSquare + .04 * sin(s01.x * 31. + s01.y * 7.) * smoothstep(.6, 1., s01.y);
-  diffuseColor.rgb *= vec3(1. - dust * .7, 1. - dust, 1. - dust * 1.4);
-  // Modelé : le fond du creux s'assombrit, les bords tendus se détachent.
-  float hv = clamp(abs(vHol), 0., 1.);
-  bool concave = vHol >= 0. ? !gl_FrontFacing : gl_FrontFacing;
-  diffuseColor.rgb *= concave ? 1. - .34 * hv : .86 + .16 * hv;
-  // Translucidité : forte sur la toile simple, faible là où elle est doublée.
-  gThin = (1. - .85 * max(max(hem, corner), reef)) * (1. - .8 * cornerSeam);
-  totalEmissiveRadiance += diffuseColor.rgb * uSunCol * .03 * gThin;
-}`
-        );
-    };
+    patchSail(m.canvas, this.sailU);
     // Moins de lumière d'ambiance sur la toile : le modelé du soleil domine.
     m.canvas.envMapIntensity = 0.55;
-    const ship = (this.ship = buildShip(m));
+    const ship = (this.ship = buildShip(m, this.look));
     const flagMat = ship.flags.material as THREE.MeshStandardMaterial;
-    flagMat.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, this.sailU);
-      sh.vertexShader = sh.vertexShader
-        .replace(
-          '#include <common>',
-          '#include <common>\nattribute float sw;\nuniform float uTime;'
-        )
-        .replace(
-          '#include <begin_vertex>',
-          `#include <begin_vertex>
-transformed.z += sw * sin(uTime*6. - sw*7. + position.y) * .45 * sw;
-transformed.y += sw * sin(uTime*4.3 - sw*5.) * .08;`
-        );
-    };
+    patchFlag(flagMat, this.sailU);
     this.shipY = groundY(0, 0) + 9;
     this.shipRoot.add(ship.group);
     this.shipRoot.position.set(0, this.shipY, 0);
     // Lanternes (lumières réelles, actives la nuit).
     ship.lights.slice(0, 8).forEach((p) => {
-      const l = new THREE.PointLight(0xffa860, 0, 22, 2);
+      const l = new THREE.PointLight(ship.lampColor, 0, 22, 2);
       l.position.copy(p);
       this.lamps.push(l);
       ship.group.add(l);

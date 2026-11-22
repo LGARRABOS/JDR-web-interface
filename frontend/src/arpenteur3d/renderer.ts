@@ -110,6 +110,8 @@ export interface RenderOptions {
 export interface RenderBackend {
   readonly width: number;
   readonly height: number;
+  /** Rendu réaliste : navire, équipage, sol et paysages dessinés par le moteur. */
+  readonly native?: import('./native').NativeHost;
   upload(mesh: MeshData): MeshHandle;
   release(mesh: MeshHandle): void;
   setSize(w: number, h: number): void;

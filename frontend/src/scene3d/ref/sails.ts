@@ -40,7 +40,20 @@ export interface JibSpec {
   halyardTo: THREE.Vector3;
   tier: number;
 }
-export type SailSpec = SquareSpec | JibSpec;
+/** Voile aileron à lattes (gréement « pique ») : quadrilatère en arrière du mât. */
+export interface JunkSpec {
+  kind: 'junk';
+  /** pied du guindant (mât), tête du guindant, pic, point d'écoute (bôme) */
+  tack: THREE.Vector3;
+  throat: THREE.Vector3;
+  peak: THREE.Vector3;
+  clew: THREE.Vector3;
+  belly: number;
+  sheetTo: (side: number) => THREE.Vector3;
+  halyardTo: THREE.Vector3;
+  tier: number;
+}
+export type SailSpec = SquareSpec | JibSpec | JunkSpec;
 
 const NU = 30,
   NV = 22;
@@ -72,6 +85,8 @@ export class SailRig {
   private cw = 0;
   private rpos: Float32Array;
   private target = 1;
+  /** Dégâts (0..1) : trous et brûlures dans la toile. */
+  damage = 0;
   private fill = 1;
   private nRun = 0;
   private nGasket = 0;
@@ -88,6 +103,7 @@ export class SailRig {
     specs.forEach((spec, k) => {
       const nu = spec.kind === 'square' ? NU : NJ,
         nv = spec.kind === 'square' ? NV : NJ;
+      const junk = spec.kind === 'junk';
       const base = nvert;
       const w = nu + 1;
       for (let j = 0; j <= nv; j++)
@@ -98,6 +114,9 @@ export class SailRig {
           if (spec.kind === 'square') {
             W = spec.halfTop + spec.halfBot;
             H = spec.yTop - spec.yBot;
+          } else if (spec.kind === 'junk') {
+            W = spec.tack.distanceTo(spec.clew);
+            H = spec.tack.distanceTo(spec.throat);
           } else {
             W = spec.tack.distanceTo(spec.clew);
             H = spec.tack.distanceTo(spec.head);
@@ -116,6 +135,11 @@ export class SailRig {
       // Pourtour (ralingues).
       const border: number[] = [];
       if (spec.kind === 'square') {
+        for (let i = 0; i <= nu; i++) border.push(i);
+        for (let j = 1; j <= nv; j++) border.push(j * w + nu);
+        for (let i = nu - 1; i >= 0; i--) border.push(nv * w + i);
+        for (let j = nv - 1; j >= 0; j--) border.push(j * w);
+      } else if (junk) {
         for (let i = 0; i <= nu; i++) border.push(i);
         for (let j = 1; j <= nv; j++) border.push(j * w + nu);
         for (let i = nu - 1; i >= 0; i--) border.push(nv * w + i);
@@ -184,8 +208,10 @@ export class SailRig {
     this.ropes.frustumCulled = false;
 
     // Manœuvres courantes : écoutes, cargue-points, cargue-fonds, drisses (2 segments chacune).
+    // Voile à lattes : 5 lattes + écoute + drisse.
     for (const r of this.rts)
-      this.nRun += (r.spec.kind === 'square' ? 6 : 3) * 2;
+      this.nRun +=
+        (r.spec.kind === 'square' ? 6 : r.spec.kind === 'junk' ? 7 : 3) * 2;
     const cylG = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
     this.running = new THREE.InstancedMesh(cylG, rope, this.nRun);
     this.running.frustumCulled = false;
@@ -357,8 +383,47 @@ export class SailRig {
     out.copy(p).lerp(q, k);
   }
 
+  private junkPt(
+    r: SailRt,
+    s: JunkSpec,
+    u: number,
+    v: number,
+    t: number,
+    out: THREE.Vector3
+  ) {
+    // u : guindant (mât) → chute ; v : bôme (0) → pic (1).
+    const d = r.d;
+    const live = this.fill * (0.3 + 0.7 * d);
+    const lo = s.tack.clone().lerp(s.clew, u);
+    const hi = s.throat.clone().lerp(s.peak, u);
+    const p = lo.lerp(hi, v);
+    // Creux entre les lattes (5 panneaux) et creux général.
+    const panel = Math.abs(Math.sin(v * Math.PI * 5));
+    const camber = Math.pow(u, 0.6) * (1 - u) * 2.4;
+    p.z +=
+      s.belly *
+      live *
+      camber *
+      (0.75 + 0.25 * panel) *
+      (1 + 0.05 * Math.sin(t * 0.9 + r.phase));
+    p.z += live * 0.1 * Math.pow(u, 5) * Math.sin(t * 7 - v * 9 + r.phase);
+    this.cw = camber * live;
+    // Amenée : les panneaux s'empilent en accordéon sur la bôme.
+    const fold = v * 5;
+    const fk = fold - Math.floor(fold);
+    const stack = s.tack.clone().lerp(s.clew, u);
+    stack.y += 0.12 * Math.floor(fold) + 0.1 * Math.sin(fk * Math.PI);
+    stack.z +=
+      0.18 * Math.sin(fk * Math.PI) * (Math.floor(fold) % 2 ? 1 : -1) +
+      0.03 * Math.sin(t * 1.5 + u * 4);
+    const k = sm(0, 1, (1 - d) * 1.4 - (1 - v) * 0.4);
+    this.cw *= -(1 - k);
+    out.copy(p).lerp(stack, k);
+  }
+
   private pt(r: SailRt, u: number, v: number, t: number, out: THREE.Vector3) {
     if (r.spec.kind === 'square') this.squarePt(r, r.spec, u, v, t, out);
+    else if (r.spec.kind === 'junk') this.junkPt(r, r.spec, u, v, t, out);
     else this.jibPt(r, r.spec, u, v, t, out);
     return out;
   }
@@ -492,6 +557,19 @@ export class SailRig {
           );
           this.gaskets.setMatrixAt(gi++, this.tmp);
         }
+      } else if (s.kind === 'junk') {
+        for (let q = 1; q <= 5; q++) {
+          const a = this.pt(r, 0, q / 5.5, t, V());
+          const b = this.pt(r, 1, q / 5.5, t, V());
+          this.line(ri, a, b, 0, 0.035);
+          ri += 2;
+        }
+        const clew = this.pt(r, 1, 0, t, V());
+        this.line(ri, clew, s.sheetTo(1), 0.05 * slack + sway(1), 0.025);
+        ri += 2;
+        const peak = this.pt(r, 1, 1, t, V());
+        this.line(ri, peak, s.halyardTo, 0.02 + slack * 0.3, 0.025);
+        ri += 2;
       } else {
         for (const side of [-1, 1]) {
           const clew = this.pt(r, 1, 0, t, V());

@@ -147,7 +147,7 @@ function strata(y: number, seed: number) {
  * Butte ou éperon : pourtour irrégulier (allongé, orienté), strates en corniche,
  * ravines irrégulières, éboulis au pied, rebord sommital émoussé.
  */
-function butte(
+export function butte(
   m: RefMaterials,
   cx: number,
   cz: number,
@@ -155,7 +155,9 @@ function butte(
   H: number,
   seed: number,
   elong = 1,
-  rot = 0
+  rot = 0,
+  /** Pied imposé (sinon : posé sur le relief du labo). */
+  base0?: number
 ): THREE.Mesh {
   const na = 180,
     ny = 72,
@@ -165,15 +167,16 @@ function butte(
     cols: number[] = [],
     idx: number[] = [];
   const col = new THREE.Color();
-  let base = Infinity;
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    base = Math.min(
-      base,
-      groundY(cx + Math.cos(a) * R * elong * 1.2, cz + Math.sin(a) * R * 1.2)
-    );
-  }
-  base -= 6;
+  let base = base0 ?? Infinity;
+  if (base0 === undefined)
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      base = Math.min(
+        base,
+        groundY(cx + Math.cos(a) * R * elong * 1.2, cz + Math.sin(a) * R * 1.2)
+      );
+    }
+  if (base0 === undefined) base -= 6;
   const top = (a: number) =>
     H *
       (0.72 +
@@ -251,7 +254,7 @@ function butte(
 }
 
 /** Bloc érodé : arrondi, à demi enfoui, quelques plans de strate adoucis. */
-function boulder(
+export function boulder(
   m: RefMaterials,
   x: number,
   z: number,
@@ -299,7 +302,18 @@ function boulder(
 }
 
 /** Chaînes lointaines : silhouettes de crêtes noyées dans la brume. */
-export function ranges(): THREE.Mesh {
+export type RangeStyle =
+  | 'mesas'
+  | 'aiguilles'
+  | 'domes'
+  | 'falaises'
+  | 'cristaux';
+
+/** Chaînes lointaines, silhouette selon le paysage. */
+export function ranges(
+  style: RangeStyle | 'ref' = 'ref',
+  radius = 2900
+): THREE.Mesh {
   const na = 720,
     nh = 14;
   const pos: number[] = [],
@@ -326,12 +340,37 @@ export function ranges(): THREE.Mesh {
         }
         return s / 1.9;
       };
-      const R = 2900 + (noise(Math.cos(a) * 3, Math.sin(a) * 3) - 0.5) * 500;
-      const peak =
+      const R =
+        radius +
+        (noise(Math.cos(a) * 3, Math.sin(a) * 3) - 0.5) * radius * 0.17;
+      let peak =
         60 +
         230 *
           Math.pow(ridge(11), 2.2) *
           (0.5 + noise(Math.cos(a) * 2 + 4, Math.sin(a) * 2));
+      if (style === 'mesas') {
+        // Tables : sommets tranchés à des hauteurs étagées.
+        const lvl = 70 + 110 * noise(Math.cos(a) * 9 + 2, Math.sin(a) * 9);
+        peak = Math.min(peak * 1.3, lvl);
+      } else if (style === 'aiguilles')
+        peak = 50 + 300 * Math.pow(ridge(23), 4);
+      else if (style === 'domes')
+        peak =
+          40 + 120 * Math.pow(noise(Math.cos(a) * 7, Math.sin(a) * 7 + 3), 1.5);
+      else if (style === 'falaises')
+        peak = Math.min(
+          220,
+          120 + 200 * noise(Math.cos(a) * 4 + 1, Math.sin(a) * 4)
+        );
+      else if (style === 'cristaux') {
+        const sp = Math.pow(
+          Math.abs(
+            Math.sin(a * 140 + noise(Math.cos(a) * 20, Math.sin(a) * 20) * 9)
+          ),
+          14
+        );
+        peak = 50 + 90 * ridge(5) + 260 * sp;
+      }
       const v = j / nh;
       // Pente : de la base (au loin, plus large) au sommet.
       const y = -40 + (peak + 40) * Math.pow(v, 0.85);

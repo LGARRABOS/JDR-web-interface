@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { NativeLayer } from './native/layer';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
@@ -388,6 +389,10 @@ export class ThreeBackend implements RenderBackend {
   private bloom: UnrealBloomPass;
   private gtao: GTAOPass | null = null;
   private fx: ShaderPass;
+  private layer: NativeLayer | null = null;
+  get native(): NativeLayer | undefined {
+    return this.layer ?? undefined;
+  }
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -396,6 +401,8 @@ export class ThreeBackend implements RenderBackend {
       quality?: Quality;
       /** Dossier des textures photographiques (sans elles : motifs seuls). */
       textures?: string;
+      /** Rendu réaliste (navire, équipage, sol, paysages) ; appelé quand prêt. */
+      native?: () => void;
     } = {}
   ) {
     this.renderer = new THREE.WebGLRenderer({
@@ -441,6 +448,16 @@ export class ThreeBackend implements RenderBackend {
     this.sun.shadow.normalBias = 0.04;
     this.sun.shadow.radius = 3;
     this.scene.add(this.sun, this.sun.target);
+    if (opts.native) {
+      this.layer = new NativeLayer(
+        this.u,
+        q,
+        opts.textures ?? '/textures/pbr/',
+        this.camera,
+        opts.native
+      );
+      this.scene.add(this.layer.root);
+    }
     // Lueurs des tuyères.
     for (let i = 0; i < 8; i++) {
       const p = new THREE.PointLight(POD_COLOR, 0, 24, 2);
@@ -612,10 +629,11 @@ export class ThreeBackend implements RenderBackend {
       cam.eye[2] - cam.target[2]
     );
     c.near = Math.min(4, Math.max(0.5, camDist * 0.012));
-    c.far = 2500;
+    c.far = this.layer?.ready ? 4200 : 2500;
     c.position.set(cam.eye[0], cam.eye[1], cam.eye[2]);
     c.lookAt(cam.target[0], cam.target[1], cam.target[2]);
     c.updateProjectionMatrix();
+    this.layer?.beforeRender(this.height, cam.fov);
     this.sky.position.copy(c.position);
 
     // Soleil : couleur du moteur maison (le facteur π équilibre la BRDF de Three).
@@ -718,6 +736,7 @@ export class ThreeBackend implements RenderBackend {
   }
 
   dispose() {
+    this.layer?.dispose();
     this.disposed = true;
     this.u.uPbr.value.dispose();
     this.pool.forEach((m) => this.scene.remove(m));
