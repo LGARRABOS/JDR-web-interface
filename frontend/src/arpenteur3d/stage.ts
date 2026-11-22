@@ -1034,6 +1034,7 @@ export class Stage {
       biome: biome.id,
       nextBiome: j ? j.toBiome.id : undefined,
       duneAmp: biome.dune,
+      terrain: biome.terrain ?? 0,
       inVoid,
       ground: view.ground !== false && !interior,
       features: !calm || Math.abs(calmX) > 900,
@@ -1052,6 +1053,7 @@ export class Stage {
       portal,
       stormColor,
       duneAmp: biome.dune,
+      terrain: biome.terrain ?? 0,
       shadowCenter: [shipX * 0.5, hover, 0],
       shadowRadius:
         parts.radius +

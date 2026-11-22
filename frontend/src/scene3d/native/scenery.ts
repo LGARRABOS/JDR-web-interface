@@ -15,6 +15,7 @@ import {
   tube,
 } from '../ref/kit';
 import type { RefMaterials } from '../ref/materials';
+import { acacia, sylvabaob, type FloraMats } from './flora';
 import { sandHeight, type GroundParams } from './ground';
 
 // Curiosités des paysages (buttes, cheminées de fée, épaves, côtes de géants,
@@ -50,6 +51,8 @@ interface Feature {
   /** Rayon d'emprise (pour l'assise sur la pente et l'écart aux villes). */
   r: number;
   sink: number;
+  /** Lagon : posé au creux des dunes (recherché à chaque tour de boucle). */
+  lagoon?: { n: number; dx: number; dz: number; level: number };
 }
 
 interface BiomeSet {
@@ -63,6 +66,7 @@ interface BiomeSet {
     z: number;
     r: number;
     sink: number;
+    lagoon?: boolean;
   }[];
 }
 
@@ -76,6 +80,9 @@ const FAR: Record<string, RangeStyle> = {
   engrenages: 'mesas',
   oasis: 'domes',
   ruines: 'mesas',
+  odur: 'domes',
+  savane: 'mesas',
+  barkhanes: 'aiguilles',
 };
 
 /** Teintes des roches et des lointains (éclairé, ombre) par paysage. */
@@ -89,6 +96,9 @@ const ROCK: Record<string, [string, string, string]> = {
   engrenages: ['#d8b89a', '#c09070', '#6a5048'],
   oasis: ['#ffffff', '#d9a07a', '#7d6a5a'],
   ruines: ['#f6e2c4', '#d9a07a', '#7d5a5a'],
+  odur: ['#fbf7ef', '#efe6d6', '#a49a8e'],
+  savane: ['#ead6ae', '#cdb07c', '#6e5a44'],
+  barkhanes: ['#f2b88c', '#dc925e', '#7a4a3e'],
 };
 
 export class BiomeScenery {
@@ -106,7 +116,12 @@ export class BiomeScenery {
     water: THREE.MeshStandardMaterial;
     crystal: THREE.MeshStandardMaterial[];
     salt: THREE.MeshStandardMaterial;
+    lagoon?: THREE.MeshStandardMaterial;
+    pond?: THREE.MeshStandardMaterial;
+    wetSand?: THREE.MeshStandardMaterial;
+    mud?: THREE.MeshStandardMaterial;
   };
+  private flora!: FloraMats;
   private cliffs = new Map<string, THREE.MeshStandardMaterial>();
   /** Couleur de base de chaque matériau du paysage (assombri la nuit). */
   private bases = new Map<THREE.MeshStandardMaterial, THREE.Color>();
@@ -164,6 +179,41 @@ export class BiomeScenery {
       } as Partial<THREE.MeshStandardMaterialParameters>),
     };
     patch(this.mats.water);
+    const water = (op: number, rough: number) =>
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: op,
+        roughness: rough,
+        metalness: 0.05,
+        depthWrite: false,
+        emissive: new THREE.Color('#0a3a46'),
+        emissiveIntensity: 0.6,
+      });
+    this.mats.lagoon = water(0.9, 0.04);
+    this.mats.pond = water(0.92, 0.12);
+    this.mats.wetSand = tint(lib.sand, '#d8cdb8', {
+      roughness: 0.55,
+    } as Partial<THREE.MeshStandardMaterialParameters>);
+    this.mats.mud = tint(lib.sand, '#7a6448', {
+      roughness: 0.7,
+    } as Partial<THREE.MeshStandardMaterialParameters>);
+    for (const m of [this.mats.lagoon, this.mats.pond]) {
+      m.polygonOffset = true;
+      m.polygonOffsetFactor = -1;
+      patch(m);
+    }
+    this.flora = {
+      bark: tint(lib.darkWood, '#9a8a78', {
+        roughness: 0.95,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      leaf: tint(lib.canvas, '#6f7d3c', {
+        side: THREE.DoubleSide,
+        roughness: 0.9,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      rock: tint(lib.rock, '#c9b8a0'),
+      rope: lib.rope,
+    };
   }
 
   private cliff(biome: string) {
@@ -565,6 +615,139 @@ export class BiomeScenery {
     return g;
   }
 
+  /** Lagon (ou point d'eau de la savane) : eau claire au centre, berge mouillée. */
+  private lagoon(r: () => number, savanna: boolean): THREE.Object3D {
+    const g = new THREE.Group();
+    const R = (savanna ? 12 : 20) + r() * (savanna ? 8 : 16);
+    const n = 56;
+    const pos: number[] = [0, 0, 0],
+      col: number[] = [];
+    const deep = new THREE.Color(savanna ? '#2f5a4a' : '#0a86b8'),
+      shallow = new THREE.Color(savanna ? '#6f8a5e' : '#3fd8d0');
+    col.push(deep.r, deep.g, deep.b);
+    const idx: number[] = [];
+    const ph = r() * 6;
+    const stretch = savanna ? 0 : 0.45;
+    const radius = (a: number) =>
+      R *
+      (1 + 0.18 * Math.sin(a * 3 + ph) + 0.08 * Math.sin(a * 7 + ph * 2)) *
+      (1 + stretch * Math.cos(a) ** 2);
+    // Centre profond (anneau intérieur), bord turquoise clair.
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const rr = radius(a);
+      pos.push(Math.cos(a) * rr * 0.55, 0, Math.sin(a) * rr * 0.55);
+      col.push(deep.r, deep.g, deep.b);
+      pos.push(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+      col.push(shallow.r, shallow.g, shallow.b);
+      if (i < n) {
+        const a0 = 1 + i * 2,
+          b0 = 1 + (i + 1) * 2;
+        idx.push(0, b0, a0, a0, b0, a0 + 1, a0 + 1, b0, b0 + 1);
+      }
+    }
+    const wg = new THREE.BufferGeometry();
+    wg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    wg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    wg.setIndex(idx);
+    wg.computeVertexNormals();
+    // Pourtour (16 rayons) : l'eau monte jusqu'au point le plus bas de la rive.
+    g.userData.rim = Array.from({ length: 16 }, (_, i) =>
+      radius((i / 16) * Math.PI * 2)
+    );
+    const water = new THREE.Mesh(
+      wg,
+      savanna ? this.mats.pond : this.mats.lagoon
+    );
+    water.receiveShadow = true;
+    g.add(water);
+    // Berge : anneau de sable mouillé qui plonge sous les dunes.
+    const sp: number[] = [],
+      sidx: number[] = [];
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const rr = radius(a);
+      for (const [dr, dy] of [
+        [-1.5, -0.05],
+        [3, -0.25],
+        [9, -2.5],
+      ])
+        sp.push(Math.cos(a) * (rr + dr), dy, Math.sin(a) * (rr + dr));
+    }
+    for (let i = 0; i < n; i++)
+      for (let k = 0; k < 2; k++) {
+        const a0 = i * 3 + k,
+          b0 = (i + 1) * 3 + k;
+        sidx.push(a0, a0 + 1, b0, b0, a0 + 1, b0 + 1);
+      }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+    sg.setIndex(sidx);
+    sg.computeVertexNormals();
+    const shore = new THREE.Mesh(
+      sg,
+      savanna ? this.mats.mud : this.mats.wetSand
+    );
+    shore.receiveShadow = true;
+    g.add(shore);
+    if (savanna)
+      for (let i = 0; i < 3; i++) {
+        const a = r() * Math.PI * 2;
+        const t = acacia(this.flora, 6 + r() * 4, Math.floor(r() * 999));
+        t.position.set(Math.cos(a) * (R + 5), 0, Math.sin(a) * (R + 5));
+        g.add(t);
+      }
+    return g;
+  }
+
+  /** Kraig : rocher sculpté par le vent (champignon, aiguille ou table). */
+  private kraig(r: () => number, biome: string): THREE.Object3D {
+    const g = new THREE.Group();
+    const lib = { ...this.lib, cliff: this.cliff(biome) };
+    const kind = r();
+    if (kind < 0.45) {
+      // Champignon : pied rongé à la base, large chapeau de roche dure.
+      const H = 7 + r() * 12;
+      const R = 2.5 + r() * 2.5;
+      g.add(
+        butte(lib, 0, 0, R * 1.2, H, Math.floor(r() * 1000), 1, r() * 3, -3)
+      );
+      const cap = boulder(lib, 0, 0, R * 1.9, r() * 50);
+      cap.position.set(0, H * 0.62, 0);
+      cap.scale.set(1.25, 0.55, 1.15);
+      g.add(cap);
+    } else if (kind < 0.75) {
+      // Aiguilles groupées.
+      const n = 2 + Math.floor(r() * 3);
+      for (let i = 0; i < n; i++)
+        g.add(
+          butte(
+            lib,
+            (r() - 0.5) * 14,
+            (r() - 0.5) * 10,
+            2.5 + r() * 3,
+            14 + r() * 26,
+            Math.floor(r() * 1000),
+            1,
+            r() * 3,
+            -3
+          )
+        );
+    } else {
+      // Table percée par l'érosion : deux piliers et un linteau.
+      const H = 9 + r() * 8;
+      for (const s of [-1, 1])
+        g.add(
+          butte(lib, s * 6, 0, 3.5 + r(), H, Math.floor(r() * 1000), 1.2, 0, -3)
+        );
+      const lintel = boulder(lib, 0, 0, 6.5, r() * 50);
+      lintel.position.set(0, H * 0.92, 0);
+      lintel.scale.set(1.5, 0.45, 0.7);
+      g.add(lintel);
+    }
+    return g;
+  }
+
   // --- Paysage complet --------------------------------------------------------
 
   private makeSet(biome: string): BiomeSet {
@@ -582,7 +765,14 @@ export class BiomeScenery {
         obj.matrixAutoUpdate = true;
         obj.visible = false;
         set.root.add(obj);
-        set.items.push({ obj, x: q.x, z: q.z, r: q.r, sink: q.sink });
+        set.items.push({
+          obj,
+          x: q.x,
+          z: q.z,
+          r: q.r,
+          sink: q.sink,
+          lagoon: q.lagoon ? { n: NaN, dx: 0, dz: 0, level: 0 } : undefined,
+        });
       }
     } finally {
       relief.res = 1;
@@ -615,9 +805,33 @@ export class BiomeScenery {
       make: () => THREE.Object3D
     ) => list.push({ w, tall, r: rad, make });
     const rocks = () => this.rockField(r, biome);
+    let lagoons = false;
     const spur = () =>
       this.butteObj(r, biome, 22 + r() * 22, 30 + r() * 40, 1.4 + r());
     switch (biome) {
+      case 'odur':
+        // Mawarennes : dunes immaculées, lagons azur au creux des dunes.
+        add(4, false, 30, () => this.lagoon(r, false));
+        add(1, false, 10, rocks);
+        lagoons = true;
+        break;
+      case 'savane':
+        add(3, true, 16, () =>
+          sylvabaob(this.flora, 22 + r() * 22, Math.floor(r() * 999))
+        );
+        add(4, false, 8, () =>
+          acacia(this.flora, 7 + r() * 5, Math.floor(r() * 999))
+        );
+        add(2, false, 18, () => this.lagoon(r, true));
+        lagoons = true;
+        break;
+      case 'barkhanes':
+        add(3, true, 12, () => this.kraig(r, biome));
+        add(2, true, 26, () =>
+          this.butteObj(r, biome, 10 + r() * 8, 12 + r() * 16, 2.6 + r() * 1.5)
+        );
+        add(2, false, 12, rocks);
+        break;
       case 'sel':
         add(4, false, 20, () => this.crust(r));
         add(2, false, 6, () => this.crystals(r, false));
@@ -678,13 +892,33 @@ export class BiomeScenery {
       const it = bag[Math.floor(r() * bag.length)];
       // Côté caméra (+z), seuls de petits éléments approchent.
       const camSide = r() < 0.3;
-      const z = camSide
+      let z = camSide
         ? it.tall
           ? 190 + r() * 120
           : 40 + r() * 140
         : -(40 + it.r + Math.pow(r(), 1.4) * 240);
-      queue.push({ make: it.make, x, z, r: it.r, sink: it.tall ? 1.5 : 0.4 });
+      // Lagons : hors du lit de l'Odur et de la route.
+      const isLagoon = lagoons && it.r >= 18;
+      if (isLagoon) z = Math.sign(z) * Math.max(Math.abs(z), 105 + it.r);
+      queue.push({
+        make: it.make,
+        x,
+        z,
+        r: it.r,
+        sink: it.tall ? 1.5 : 0.4,
+        lagoon: isLagoon,
+      });
     }
+    // Le plus vieux et le plus grand sylvabaob de Keld : un repère qu'on
+    // voit venir de loin dans la savane.
+    if (biome === 'savane')
+      queue.push({
+        make: () => sylvabaob(this.flora, 115, 4242),
+        x: 420,
+        z: -560,
+        r: 50,
+        sink: 4,
+      });
     // Les plus proches du navire d'abord.
     queue.sort((a, b) => Math.abs(a.x) - Math.abs(b.x));
     const far = ranges(FAR[biome] ?? 'mesas', 2300);
@@ -764,6 +998,43 @@ export class BiomeScenery {
       it.obj.visible = !nearCity;
       if (nearCity) continue;
       if (Math.abs(x) > LOOP / 2 - 30) x = Math.sign(x) * (LOOP / 2 - 30);
+      const lg = it.lagoon;
+      if (lg) {
+        // À chaque tour de boucle le sable dessous change : on cherche le creux.
+        const n = Math.floor((it.x - g.scroll) / LOOP + 0.5);
+        if (n !== lg.n) {
+          lg.n = n;
+          let best = Infinity;
+          for (let a = -4; a <= 4; a++)
+            for (let b = -4; b <= 4; b++) {
+              const h = sandHeight(x + a * 14, it.z + b * 14, g);
+              if (h < best) {
+                best = h;
+                lg.dx = a * 14;
+                lg.dz = b * 14;
+              }
+            }
+          // Niveau : le plus bas de la rive, pour que l'eau ne déborde jamais.
+          const rim = (it.obj.userData.rim as number[] | undefined) ?? [];
+          let lvl = Infinity;
+          rim.forEach((rr, i) => {
+            const a = (i / rim.length) * Math.PI * 2;
+            lvl = Math.min(
+              lvl,
+              sandHeight(
+                x + lg.dx + Math.cos(a) * rr,
+                it.z + lg.dz + Math.sin(a) * rr,
+                g
+              )
+            );
+          });
+          lg.level = Number.isFinite(lvl)
+            ? Math.max(best + 0.3, lvl - 0.9)
+            : best + 0.9;
+        }
+        it.obj.position.set(x + lg.dx, lg.level, it.z + lg.dz);
+        continue;
+      }
       // Assise : le point le plus bas de l'emprise (rien ne flotte).
       const rr = it.r * 0.6;
       const y = Math.min(

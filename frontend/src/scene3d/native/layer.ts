@@ -24,6 +24,8 @@ import {
 } from '../ref/ship';
 import { cyl, Kit, lathe, M, tess, torus } from '../ref/kit';
 import { Crowd } from './crew';
+import { Herds } from './fauna';
+import { grassField } from './flora';
 import { sandHeight, type GroundParams } from './ground';
 import { BiomeScenery } from './scenery';
 
@@ -186,6 +188,8 @@ export class NativeLayer implements NativeHost {
   private pending: { build: Build; opts: NativeShipOptions } | null = null;
   private npcs = new Map<string, ShipRt>();
   private crowd: Crowd;
+  private grass: THREE.Mesh;
+  private herds: Herds;
   private scenery: BiomeScenery | null = null;
   private smoke = new Puffs(900, new THREE.Color('#8a8580'), 0.12);
   private steam = new Puffs(260, new THREE.Color('#f2efe9'), 0.25);
@@ -212,6 +216,16 @@ export class NativeLayer implements NativeHost {
     this.root.add(this.smoke.points, this.steam.points, this.dust.points);
     this.crowd = new Crowd(400, (m) => this.patch(m));
     this.root.add(this.crowd.root);
+    // Savane : herbes sèches (carte graphique) et grands troupeaux.
+    this.grass = grassField(
+      shared as unknown as Record<string, { value: unknown }>,
+      quality.tier === 'low' ? 9000 : 16000
+    );
+    this.patch(this.grass.material as THREE.Material);
+    this.grass.visible = false;
+    this.herds = new Herds((m) => this.patch(m));
+    this.herds.root.visible = false;
+    this.root.add(this.grass, this.herds.root);
     for (const p of [this.smoke, this.steam, this.dust])
       this.patch(p.mat as unknown as THREE.Material, false);
     refLibrary(textures, quality.texSize)
@@ -553,8 +567,12 @@ vArpW = (modelMatrix * arpW).xyz;`
       amp: f.duneAmp,
       calm: f.calm,
       calmX: f.calmX,
+      terrain: f.terrain,
     };
     this.scenery?.frame(f, this.gp);
+    const savanna = f.biome === 'savane' && f.ground && !f.inVoid;
+    this.grass.visible = savanna;
+    this.herds.frame(f.time, this.gp, savanna);
     this.scenery?.preload(f.nextBiome);
 
     // Navire de la partie.

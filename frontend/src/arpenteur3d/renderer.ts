@@ -99,6 +99,8 @@ export interface RenderOptions {
   portal?: number;
   /** Amplitude des dunes (paysage du secteur). */
   duneAmp?: number;
+  /** Relief propre au paysage (voir Biome.terrain). */
+  terrain?: number;
   stormColor?: Vec3;
   shadowCenter: Vec3;
   shadowRadius: number;
@@ -458,6 +460,7 @@ export class Renderer implements RenderBackend {
     gl.uniform1f(this.u(m, 'uScroll'), opts.scroll);
     gl.uniform1f(this.u(m, 'uCalm'), opts.calm ?? 0);
     gl.uniform1f(this.u(m, 'uDuneAmp'), opts.duneAmp ?? 1);
+    gl.uniform1f(this.u(m, 'uTerrain'), opts.terrain ?? 0);
     gl.uniform1f(this.u(m, 'uCalmX'), opts.calmX ?? 0);
     gl.uniform1f(this.u(m, 'uShadowOn'), shadowOn ? 1 : 0);
     const pods = (opts.pods ?? []).slice(0, 8);
@@ -493,6 +496,7 @@ export class Renderer implements RenderBackend {
       gl.uniform1f(this.u(d, 'uTime'), opts.time);
       gl.uniform1f(this.u(d, 'uScroll'), opts.scroll);
       gl.uniform1f(this.u(d, 'uDuneAmp'), opts.duneAmp ?? 1);
+      gl.uniform1f(this.u(d, 'uTerrain'), opts.terrain ?? 0);
       const sc = light.sunColor;
       const k = 0.35;
       gl.uniform3f(

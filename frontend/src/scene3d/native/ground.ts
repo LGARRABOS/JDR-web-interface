@@ -7,6 +7,8 @@ export interface GroundParams {
   amp: number;
   calm: number;
   calmX: number;
+  /** Relief propre au paysage (voir Biome.terrain). */
+  terrain?: number;
 }
 
 const fract = (x: number) => x - Math.floor(x);
@@ -65,11 +67,57 @@ function swell(x: number, y: number) {
   );
 }
 
+export const odurC = (x: number) =>
+  16 * Math.sin(x * 0.0023) + 8 * Math.sin(x * 0.0061 + 1.3);
+/** Présence du lit de l'Odur (1 dedans, 0 hors du fleuve de sable). */
+export function odurIn(qx: number, z: number, terrain = 0) {
+  return terrain === 1 ? 1 - sm(36, 50, Math.abs(z - odurC(qx))) : 0;
+}
+function barchans(qx: number, qz: number) {
+  let h = 0;
+  const cx = 560,
+    cz = 460;
+  const gx = Math.floor(qx / cx - 0.5),
+    gz = Math.floor(qz / cz - 0.5);
+  for (let i = 0; i < 2; i++)
+    for (let j = 0; j < 2; j++) {
+      const ax = gx + i,
+        az = gz + j;
+      const r1 = hash(ax * 1.7 + 3.1, az * 1.7 + 3.1),
+        r2 = hash(ax * 2.3 + 7.9, az * 2.3 + 7.9),
+        r3 = hash(ax + 11.3, az + 11.3);
+      const ox = (ax + 0.5 + (r1 - 0.5) * 0.5) * cx,
+        oz = (az + 0.5 + (r2 - 0.5) * 0.5) * cz;
+      const R = 110 + 70 * r3;
+      const H = 60 + 70 * r1;
+      const dx = qx - ox,
+        dz = qz - oz;
+      const body = Math.exp(
+        -((dx * dx) / (R * R * 0.8) + (dz * dz) / (R * R * 0.55))
+      );
+      const ex = dx - R * 0.55;
+      const lee = Math.exp(
+        -((ex * ex) / (R * R * 0.3) + (dz * dz) / (R * R * 0.22))
+      );
+      h = Math.max(h, H * Math.min(1, Math.max(0, body - 0.9 * lee)));
+    }
+  return h;
+}
+
 /** Hauteur du sable au point (x, z) de la scène (même formule que le shader). */
 export function sandHeight(x: number, z: number, g: GroundParams) {
   const qx = x + g.scroll;
   const k = sm(260, 850, Math.hypot(x, z));
   const flat = g.calm * (1 - sm(520, 950, Math.hypot(x - g.calmX, z)));
-  const h = dune(qx, z, g.amp) + k * swell(qx, z);
+  let h = dune(qx, z, g.amp) + k * swell(qx, z);
+  const t = g.terrain ?? 0;
+  if (t === 1) {
+    const riv = odurIn(qx, z, 1);
+    h =
+      h * 1.3 +
+      3 +
+      (-3.5 + 0.25 * Math.sin(qx * 0.05 + z * 0.03) - (h * 1.3 + 3)) * riv;
+  } else if (t === 2) h = h * 0.5 + (fbm(qx * 0.004, z * 0.004) - 0.5) * 7;
+  else if (t === 3) h += barchans(qx, z) * sm(95, 190, Math.abs(z));
   return h + (-1 - h) * flat;
 }

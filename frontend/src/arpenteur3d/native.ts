@@ -34,6 +34,8 @@ export interface NativeFrame {
   /** Paysage d'arrivée d'un voyage (préparé en arrière-plan). */
   nextBiome?: string;
   duneAmp: number;
+  /** Relief propre au paysage (voir Biome.terrain). */
+  terrain: number;
   inVoid: boolean;
   ground: boolean;
   /** Bande de curiosités visible (pas de ville proche). */

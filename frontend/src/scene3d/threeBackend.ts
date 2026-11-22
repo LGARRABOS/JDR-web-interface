@@ -59,6 +59,7 @@ function sharedUniforms() {
     uCalm: { value: 0 },
     uCalmX: { value: 0 },
     uDuneAmp: { value: 1 },
+    uTerrain: { value: 0 },
     uSandA: { value: new THREE.Vector3() },
     uSandB: { value: new THREE.Vector3() },
     uRockA: { value: new THREE.Vector3() },
@@ -325,6 +326,7 @@ function dustMaterial(u: Shared): THREE.ShaderMaterial {
       uTime: u.uTime,
       uScroll: u.uScroll,
       uDuneAmp: u.uDuneAmp,
+      uTerrain: u.uTerrain,
       uRight: { value: new THREE.Vector3(1, 0, 0) },
       uUp: { value: new THREE.Vector3(0, 1, 0) },
       uDustColor: { value: new THREE.Vector3() },
@@ -627,6 +629,7 @@ export class ThreeBackend implements RenderBackend {
     u.uCalm.value = opts.calm ?? 0;
     u.uCalmX.value = opts.calmX ?? 0;
     u.uDuneAmp.value = opts.duneAmp ?? 1;
+    u.uTerrain.value = opts.terrain ?? 0;
     const v3 = (t: THREE.Vector3, a: readonly number[]) =>
       t.set(a[0], a[1], a[2]);
     v3(u.uSandA.value, light.sandA);

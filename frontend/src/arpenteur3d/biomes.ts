@@ -26,7 +26,10 @@ export type BiomeId =
   | 'cristaux'
   | 'engrenages'
   | 'oasis'
-  | 'ruines';
+  | 'ruines'
+  | 'odur'
+  | 'savane'
+  | 'barkhanes';
 
 export interface Biome {
   id: BiomeId;
@@ -37,6 +40,12 @@ export interface Biome {
   /** Teinte du sable (mélangée à la palette du désert). */
   sand?: string;
   sandMix?: number;
+  /**
+   * Relief propre au paysage : 0 dunes ordinaires, 1 Odur des sables
+   * (fleuve de sable fin entre de hautes dunes blanches), 2 savane (plaine
+   * ondulée), 3 bande de barkhanes (dunes en croissant géantes).
+   */
+  terrain?: number;
 }
 
 export const BIOMES: Record<BiomeId, Biome> = {
@@ -85,12 +94,39 @@ export const BIOMES: Record<BiomeId, Biome> = {
     sandMix: 0.25,
   },
   ruines: { id: 'ruines', dune: 1.1, far: 'mesas' },
+  // Mahibori — M1 : l'Odur des sables traverse les Mawarennes (dunes blanches, lagons).
+  odur: {
+    id: 'odur',
+    dune: 1.35,
+    far: 'domes',
+    sand: '#f6f1e6',
+    sandMix: 0.72,
+    terrain: 1,
+  },
+  // M2 : savane des grands troupeaux, grands sylvabaobs.
+  savane: {
+    id: 'savane',
+    dune: 1,
+    far: 'mesas',
+    sand: '#a99857',
+    sandMix: 0.68,
+    terrain: 2,
+  },
+  // M3 : bande de barkhanes et formations de kraigs.
+  barkhanes: {
+    id: 'barkhanes',
+    dune: 1.1,
+    far: 'aiguilles',
+    sand: '#dca06a',
+    sandMix: 0.3,
+    terrain: 3,
+  },
 };
 
 const BY_SECTOR: Record<string, BiomeId> = {
-  M1: 'dunes',
-  M2: 'sel',
-  M3: 'ruines',
+  M1: 'odur',
+  M2: 'savane',
+  M3: 'barkhanes',
   P1: 'cheminees',
   P2: 'canyons',
   P3: 'dunes',
@@ -638,6 +674,17 @@ export function featuresMesh(
       add(2, true, oasis);
       add(2, false, (x, z) => palm(x, z));
       add(1, false, rockField);
+      break;
+    case 'odur':
+      add(2, false, rockField);
+      break;
+    case 'savane':
+      add(2, false, (x, z) => palm(x, z));
+      add(1, true, oasis);
+      break;
+    case 'barkhanes':
+      add(3, true, spur);
+      add(2, false, rockField);
       break;
     case 'ruines':
       add(3, true, colonnade);

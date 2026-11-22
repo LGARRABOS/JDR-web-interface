@@ -2,6 +2,7 @@
 
 export const COMMON = /* glsl */ `
 uniform float uDuneAmp;
+uniform float uTerrain;
 float hash(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*noise(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return s;}
@@ -13,6 +14,42 @@ float dune(vec2 p){
 // Grandes ondulations du désert, loin du navire seulement.
 float swell(vec2 p){
   return 9.*sin(p.x*.0042 + sin(p.y*.0031)*2.2) + 6.*sin(p.y*.0063 - p.x*.0024) + (fbm(p*.0025) - .5)*12.;
+}
+// Odur des sables : lit sinueux de sable fin que suit la route du navire.
+float odurC(float x){ return 16.*sin(x*.0023) + 8.*sin(x*.0061 + 1.3); }
+float odurIn(vec2 q){ return uTerrain == 1. ? 1. - smoothstep(36., 50., abs(q.y - odurC(q.x))) : 0.; }
+// Barkhanes : dunes en croissant géantes, cornes sous le vent (+x).
+float barchans(vec2 q){
+  float h = 0.;
+  vec2 cs = vec2(560., 460.);
+  vec2 g = floor(q / cs - .5);
+  for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) {
+    vec2 c = g + vec2(float(i), float(j));
+    float r1 = hash(c*1.7 + 3.1), r2 = hash(c*2.3 + 7.9), r3 = hash(c + 11.3);
+    vec2 ctr = (c + .5 + (vec2(r1, r2) - .5)*.5) * cs;
+    float R = 110. + 70.*r3;
+    float H = 60. + 70.*r1;
+    vec2 d = q - ctr;
+    float body = exp(-(d.x*d.x/(R*R*.8) + d.y*d.y/(R*R*.55)));
+    vec2 e = d - vec2(R*.55, 0.);
+    float lee = exp(-(e.x*e.x/(R*R*.3) + e.y*e.y/(R*R*.22)));
+    h = max(h, H*clamp(body - .9*lee, 0., 1.));
+  }
+  return h;
+}
+// Relief du sable : q = position dans le désert (défilement compris), w = scène.
+float terrainH(vec2 q, vec2 w){
+  float k = smoothstep(260., 850., length(w));
+  float h = dune(q) + k*swell(q);
+  if (uTerrain == 1.) {
+    float riv = odurIn(q);
+    h = mix(h*1.3 + 3., -3.5 + .25*sin(q.x*.05 + q.y*.03), riv);
+  } else if (uTerrain == 2.) {
+    h = h*.5 + (fbm(q*.004) - .5)*7.;
+  } else if (uTerrain == 3.) {
+    h += barchans(q) * smoothstep(95., 190., abs(w.y));
+  }
+  return h;
 }
 `;
 
@@ -58,13 +95,13 @@ void deformVertex(vec3 pos, vec3 nrm, vec4 m, mat4 model, out vec4 wp, out vec3 
     float k = smoothstep(260., 850., length(wp.xz));
     // Autour d'une ville, le sol est aplani (place, faubourgs), les dunes reprennent au loin.
     float flat_ = uCalm * (1. - smoothstep(520., 950., length(wp.xz - vec2(uCalmX, 0.))));
-    wp.y = mix(dune(q) + k*swell(q), -1., flat_);
+    wp.y = mix(terrainH(q, wp.xz), -1., flat_);
     float e = .8 + k*6.;
     vec2 ex = vec2(e, 0.), ez = vec2(0., e);
     n = normalize(vec3(
-      dune(q-ex)+k*swell(q-ex) - dune(q+ex)-k*swell(q+ex),
+      terrainH(q-ex, wp.xz-ex) - terrainH(q+ex, wp.xz+ex),
       2.*e/max(1. - flat_, .02),
-      dune(q-ez)+k*swell(q-ez) - dune(q+ez)-k*swell(q+ez)));
+      terrainH(q-ez, wp.xz-ez) - terrainH(q+ez, wp.xz+ez)));
   } else {
     n = mat3(model) * n;
     // Mer de brume : houle lente de volutes.
@@ -75,7 +112,7 @@ void deformVertex(vec3 pos, vec3 nrm, vec4 m, mat4 model, out vec4 wp, out vec3 
     // Rochers posés sur le sable : ils épousent la dune sous eux (m.w = 1).
     if ((m.x == 9. && m.w > .5) || uDrape > .5) {
       vec2 q = wp.xz + vec2(uScroll, 0.);
-      wp.y += dune(q) + smoothstep(260., 850., length(wp.xz))*swell(q);
+      wp.y += terrainH(q, wp.xz);
     }
   }
 }
@@ -219,6 +256,26 @@ export const SURFACE_CHAIN = /* glsl */ `
     albedo *= .92 + .1*rip2;
     rough = .95; metal = 0.;
     k = 1.;
+    // Savane : herbes sèches en plaques (paille, olive), le sable affleure.
+    if (uTerrain == 2.) {
+      float pt = fbm(q*.03), pt2 = fbm(q*.25);
+      float lum = dot(uSandB, vec3(.2126, .7152, .0722)) / .45;
+      vec3 grassC = mix(vec3(.6, .49, .25), vec3(.4, .41, .2), smoothstep(.42, .7, pt)) * (.78 + .44*pt2) * lum;
+      float cover = smoothstep(.32, .52, pt + .25*(pt2 - .5));
+      albedo = mix(albedo, grassC, cover*.85);
+      h = mix(h, (pt2 - .5)*.05 + rip2*.01, cover);
+    }
+    // Odur : sable très fin qui coule comme de l'eau vers la mer.
+    float riv = odurIn(q);
+    if (riv > 0.) {
+      float fl = sin((q.x - uTime*2.4)*2.2 + q.y*.4 + fbm(q*.07 - vec2(uTime*.12, 0.))*6.) * detail(wm, .4);
+      float sheen = fbm(q*.05 - vec2(uTime*.2, 0.));
+      // Sable doré, plus fin et plus sombre que les dunes blanches, moiré.
+      vec3 gold = albedo * vec3(.86, .63, .4) * (.9 + .2*sheen);
+      albedo = mix(albedo, gold, riv);
+      h = mix(h, fl*.03 + rip2*.006, riv);
+      rough = mix(rough, .62, riv);
+    }
   } else if (pat == 16.) {
     // Mer de brume d'Aether : volutes lentes qui se replient sur elles-mêmes,
     // veines lumineuses qui affleurent par endroits.
