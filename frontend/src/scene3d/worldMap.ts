@@ -250,6 +250,7 @@ export class WorldMapScene {
   private vortex: THREE.Group;
   private pins = new THREE.Group();
   private hangarMark: THREE.Group;
+  private flash: THREE.Sprite;
   private cabin: Cabin;
   private linkU = { uTime: { value: 0 } };
   private starTex: THREE.Texture;
@@ -665,6 +666,32 @@ void main(){ float dash = step(.45, fract(vUv.x * uLen * .9 - uTime * (.6 + uOn)
     sc.add(this.hangarMark);
     // Repères (épingles).
     sc.add(this.pins);
+    // Éclair d'Aether (téléportation vers ou depuis la position inconnue).
+    const fc = document.createElement('canvas');
+    fc.width = fc.height = 128;
+    const fg = fc.getContext('2d')!;
+    const gr = fg.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.25, 'rgba(200,160,255,0.9)');
+    gr.addColorStop(0.6, 'rgba(140,90,255,0.35)');
+    gr.addColorStop(1, 'rgba(120,80,255,0)');
+    fg.fillStyle = gr;
+    fg.fillRect(0, 0, 128, 128);
+    const ft = keep(new THREE.CanvasTexture(fc));
+    this.flash = new THREE.Sprite(
+      keep(
+        new THREE.SpriteMaterial({
+          map: ft,
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        })
+      )
+    );
+    this.flash.scale.setScalar(2);
+    this.flash.visible = false;
+    this.flash.renderOrder = 15;
+    sc.add(this.flash);
     // Étoile des lieux-dits.
     const st = document.createElement('canvas');
     st.width = st.height = 64;
@@ -832,7 +859,32 @@ void main(){ float dash = step(.45, fract(vUv.x * uLen * .9 - uTime * (.6 + uOn)
     const tr = st.travel;
     let pos: THREE.Vector3 | null;
     let dir = new THREE.Vector3(1, 0, 0);
-    if (tr) {
+    let warp = 1;
+    // Vers ou depuis la position inconnue : pas de trajet sur la carte, le
+    // navire disparaît dans un éclair d'Aether et reparaît à l'arrivée.
+    const portal =
+      tr && (tr.from === UNKNOWN || tr.to === UNKNOWN || !tr.from || !tr.to);
+    this.flash.visible = false;
+    if (tr && portal) {
+      const after = tr.p >= 0.5;
+      const id = after ? tr.to || UNKNOWN : tr.from || UNKNOWN;
+      pos = this.nodePoint(id);
+      if (pos) pos.y += id === UNKNOWN ? 1 : 0.9;
+      if (pos && id !== UNKNOWN) pos.z += 1.3;
+      // Rétrécit et s'efface juste avant le milieu, renaît juste après.
+      const k = after
+        ? Math.min(1, (tr.p - 0.5) / 0.12)
+        : Math.min(1, (0.5 - tr.p) / 0.12);
+      warp = k * k * (3 - 2 * k);
+      if (pos && warp < 1) {
+        this.flash.visible = true;
+        this.flash.position.copy(pos);
+        const f = 1 - warp;
+        this.flash.scale.setScalar(1 + f * 3);
+        (this.flash.material as THREE.SpriteMaterial).opacity =
+          Math.sin(f * Math.PI * 0.5) * 0.9;
+      }
+    } else if (tr) {
       const a = this.nodePoint(tr.from),
         b = this.nodePoint(tr.to);
       if (a && b) {
@@ -849,7 +901,8 @@ void main(){ float dash = step(.45, fract(vUv.x * uLen * .9 - uTime * (.6 + uOn)
       if (pos) pos.y += cur === UNKNOWN ? 1 : 0.9;
       if (pos && cur !== UNKNOWN) pos.z += 1.3;
     }
-    this.ship.visible = !!pos;
+    this.ship.visible = !!pos && warp > 0.02;
+    this.ship.scale.setScalar(Math.max(0.02, warp));
     if (pos) {
       this.ship.position.copy(pos);
       this.ship.position.y += Math.sin(time * 1.6) * 0.05;

@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import type { CrewPose } from '../arpenteur3d/stage';
+import type { CrewStyle } from '../arpenteur3d/shipModel';
+import { Crowd } from './native/crew';
 import type { RefMaterials } from './ref/materials';
 
 // Cabine du capitaine autour de la maquette : grand bureau, objets de
@@ -118,8 +121,8 @@ export function buildCabin(
 
   // --- Cabine : plancher, lambris, plafond à poutres ---
   const floorY = top - BH - 34;
-  const RW = BW + 160,
-    RD = BD + 150,
+  const RW = BW + 260,
+    RD = BD + 420,
     RH = 150;
   const floor = mesh(
     uvScale(new THREE.PlaneGeometry(RW, RD), 0.12),
@@ -677,9 +680,325 @@ export function buildCabin(
     handle.rotation.z = -Math.PI / 2;
   }
 
+  // --- Tapis sous le bureau, globe, coffre, tonneau (vus derrière la table) ---
+  {
+    const cv = document.createElement('canvas');
+    cv.width = 512;
+    cv.height = 320;
+    const c2 = cv.getContext('2d')!;
+    c2.fillStyle = '#5a1e18';
+    c2.fillRect(0, 0, 512, 320);
+    c2.strokeStyle = '#c9a24a';
+    c2.lineWidth = 10;
+    c2.strokeRect(18, 18, 476, 284);
+    c2.strokeStyle = '#2a1a3a';
+    c2.lineWidth = 16;
+    c2.strokeRect(44, 44, 424, 232);
+    c2.fillStyle = '#c9a24a';
+    for (let i = 0; i < 6; i++) {
+      c2.beginPath();
+      c2.ellipse(256, 160, 150 - i * 22, 80 - i * 12, 0, 0, Math.PI * 2);
+      c2.strokeStyle = i % 2 ? '#c9a24a' : '#2a1a3a';
+      c2.lineWidth = 6;
+      c2.stroke();
+    }
+    const rt = keep(new THREE.CanvasTexture(cv));
+    rt.colorSpace = THREE.SRGBColorSpace;
+    const rug = mesh(
+      new THREE.PlaneGeometry(BW + 70, BD + 60),
+      keep(new THREE.MeshStandardMaterial({ map: rt, roughness: 1 })),
+      0,
+      floorY + 0.2,
+      4,
+      false
+    );
+    rug.rotation.x = -Math.PI / 2;
+  }
+  const farZ = 4 - BD / 2;
+  // Globe terrestre sur pied, à droite au fond.
+  {
+    const x = BW / 2 + 46,
+      z = farZ - 56;
+    mesh(
+      new THREE.CylinderGeometry(5, 7, 2, 20),
+      lib.darkWood,
+      x,
+      floorY + 1,
+      z
+    );
+    mesh(
+      new THREE.CylinderGeometry(1.2, 1.6, 30, 12),
+      lib.darkWood,
+      x,
+      floorY + 17,
+      z
+    );
+    const globe = mesh(
+      new THREE.SphereGeometry(9, 28, 18),
+      parchment,
+      x,
+      floorY + 42,
+      z
+    );
+    globe.rotation.z = 0.4;
+    const mer = mesh(
+      new THREE.TorusGeometry(10, 0.5, 8, 40),
+      lib.brass,
+      x,
+      floorY + 42,
+      z
+    );
+    mer.rotation.set(0, Math.PI / 2, 0.4);
+  }
+  // Coffre de marin, à gauche au fond.
+  {
+    const x = -BW / 2 - 34,
+      z = farZ - 66;
+    mesh(
+      uvScale(new THREE.BoxGeometry(26, 14, 15), 0.3),
+      lib.hullWood,
+      x,
+      floorY + 7,
+      z
+    );
+    const lid = mesh(
+      new THREE.CylinderGeometry(7.5, 7.5, 26, 16, 1, false, 0, Math.PI),
+      lib.hullWood,
+      x,
+      floorY + 14,
+      z
+    );
+    lid.rotation.z = Math.PI / 2;
+    for (const dx of [-9, 9])
+      mesh(
+        new THREE.BoxGeometry(1.2, 15, 15.4),
+        lib.castIron,
+        x + dx,
+        floorY + 7.5,
+        z,
+        false
+      );
+    // Tonneau.
+    const barrel = new THREE.LatheGeometry(
+      [
+        [9, 0],
+        [10.5, 8],
+        [11, 13],
+        [10.5, 18],
+        [9, 26],
+      ].map(([a, b]) => new THREE.Vector2(a, b)),
+      20
+    );
+    mesh(barrel, lib.hullWood, x + 6, floorY, z - 26);
+    for (const y of [4, 13, 22])
+      mesh(
+        new THREE.TorusGeometry(10.7, 0.5, 6, 30),
+        lib.castIron,
+        x + 6,
+        floorY + y,
+        z - 26,
+        false
+      ).rotation.x = Math.PI / 2;
+  }
+
+  // Petite table ronde au fond, où deux officiers discutent, chopes en main.
+  {
+    const x = -W * 0.22 + 5,
+      z = farZ - 72;
+    mesh(
+      new THREE.CylinderGeometry(16, 16, 2, 28),
+      lib.darkWood,
+      x,
+      floorY + 46,
+      z
+    );
+    mesh(
+      new THREE.CylinderGeometry(2, 2.5, 44, 12),
+      lib.darkWood,
+      x,
+      floorY + 23,
+      z
+    );
+    mesh(
+      new THREE.CylinderGeometry(9, 10, 2, 20),
+      lib.darkWood,
+      x,
+      floorY + 1,
+      z
+    );
+    const pewter = mat({ color: '#8d8e90', metalness: 0.9, roughness: 0.4 });
+    for (const dx of [-5, 6])
+      mesh(
+        new THREE.CylinderGeometry(2, 2.2, 5, 16),
+        pewter,
+        x + dx,
+        floorY + 49.5,
+        z + (dx > 0 ? 3 : -2)
+      );
+    mesh(
+      new THREE.BoxGeometry(12, 0.3, 8),
+      parchment,
+      x + 1,
+      floorY + 47.2,
+      z - 4,
+      false
+    ).rotation.y = 0.4;
+    // Lanterne au-dessus d'eux.
+    mesh(
+      new THREE.CylinderGeometry(3.4, 3.4, 9, 8, 1, true),
+      glass,
+      x,
+      floorY + 108,
+      z,
+      false
+    );
+    mesh(
+      new THREE.SphereGeometry(1.1, 10, 8),
+      keep(new THREE.MeshBasicMaterial({ color: '#ffcf7a' })),
+      x,
+      floorY + 108,
+      z,
+      false
+    );
+    const back = new THREE.PointLight('#ffb46a', 1400, 260, 1.6);
+    back.position.set(x, floorY + 104, z);
+    g.add(back);
+  }
+
+  // --- Équipage autour de la table : deux officiers penchés sur la carte qui
+  // discutent, un timonier qui fait les cent pas, un matelot appuyé au bureau,
+  // un autre au globe. ---
+  const crowd = new Crowd(8, () => {});
+  g.add(crowd.root);
+  const FIG = 44; // personnages à l'échelle du bureau (1 m réel ≈ 44 unités)
+  const styles: CrewStyle[] = [
+    { body: '#24324a', accent: '#c9a24a' },
+    { body: '#5a2a22', accent: '#d8b06a' },
+    { body: '#3d4a2c', accent: '#8a6a3a' },
+    { body: '#6b5a44', accent: '#2a2420' },
+    { body: '#2e2a3e', accent: '#b8862c' },
+  ];
+  const yawTo = (dx: number, dz: number) => Math.atan2(-dz, dx);
+  const pose = (
+    o: Partial<CrewPose> & { pos: [number, number, number] }
+  ): CrewPose => ({
+    yaw: 0,
+    lean: 0,
+    bob: 0,
+    legL: 0,
+    legR: 0,
+    armL: 0.08,
+    armR: 0.08,
+    crouch: 0,
+    ...o,
+  });
+  const people = (t: number): [CrewStyle, CrewPose][] => {
+    // Positions en unités de la carte, ramenées à l'échelle des personnages.
+    const P = (x: number, z: number): [number, number, number] => [
+      x / FIG,
+      0,
+      z / FIG,
+    ];
+    const out: [CrewStyle, CrewPose][] = [];
+    const edge = farZ - 70;
+    // Deux officiers au bord du bureau, face à la carte : l'un parle en
+    // gesticulant, l'autre écoute puis montre un point de la carte.
+    const talkA = Math.sin(t * 0.7) > -0.2;
+    out.push([
+      styles[0],
+      pose({
+        pos: P(-W * 0.22 - 16, edge),
+        yaw: yawTo(1, 0.3),
+        lean: 0.08 + 0.04 * Math.sin(t * 1.7),
+        armR: talkA ? 0.55 + 0.3 * Math.sin(t * 3.1) : 0.2,
+        armL: 0.15,
+      }),
+    ]);
+    const point = Math.sin(t * 0.7 + 2.4) > 0.3;
+    out.push([
+      styles[1],
+      pose({
+        pos: P(-W * 0.22 + 26, edge - 4),
+        yaw: yawTo(-1, 0.25),
+        lean: point ? 0.18 : 0.05 + 0.03 * Math.sin(t * 1.1),
+        armL: point ? 0.95 + 0.05 * Math.sin(t * 2) : 0.15,
+        armR: 0.3,
+      }),
+    ]);
+    // Le timonier fait les cent pas derrière eux.
+    {
+      const span = BW * 0.9;
+      const speed = 20;
+      const leg = span / speed;
+      const cyc = t % (2 * leg + 5);
+      let u: number, dir: number;
+      if (cyc < leg) {
+        u = cyc / leg;
+        dir = 1;
+      } else if (cyc < leg + 2.5) {
+        u = 1;
+        dir = 0;
+      } else if (cyc < 2 * leg + 2.5) {
+        u = 1 - (cyc - leg - 2.5) / leg;
+        dir = -1;
+      } else {
+        u = 0;
+        dir = 0;
+      }
+      const x = -span / 2 + u * span;
+      const ph = ((u * span) / FIG) * ((Math.PI * 2) / 1.5);
+      const walk = dir !== 0;
+      out.push([
+        styles[2],
+        pose({
+          pos: P(x, edge - 40),
+          yaw: dir > 0 ? yawTo(1, 0) : dir < 0 ? yawTo(-1, 0) : yawTo(0, 1),
+          legL: walk ? Math.sin(ph) * 0.45 : 0,
+          legR: walk ? -Math.sin(ph) * 0.45 : 0,
+          armL: walk ? -Math.sin(ph) * 0.3 + 0.08 : 0.1,
+          armR: walk ? Math.sin(ph) * 0.3 + 0.08 : 0.1,
+          bob: walk ? Math.abs(Math.cos(ph)) * 0.04 : 0,
+        }),
+      ]);
+    }
+    // Un matelot appuyé au bureau, à gauche, qui suit la discussion.
+    out.push([
+      styles[3],
+      pose({
+        pos: P(-BW / 2 - 50, farZ - 30),
+        yaw: yawTo(0.6, 1),
+        lean: 0.04 + 0.02 * Math.sin(t * 0.9),
+        armL: 0.15,
+        armR: 0.15,
+      }),
+    ]);
+    // Le second, à droite, prend des notes (la main va et vient).
+    out.push([
+      styles[4],
+      pose({
+        pos: P(BW / 2 + 30, farZ - 60),
+        yaw: yawTo(1, -0.3),
+        lean: 0.1,
+        armR: 0.9 + 0.12 * Math.sin(t * 1.5),
+        armL: 0.1,
+      }),
+    ]);
+    return out;
+  };
+  const placeCrowd = (t: number) => {
+    crowd.begin();
+    const m = new THREE.Matrix4()
+      .makeTranslation(0, floorY, 0)
+      .multiply(new THREE.Matrix4().makeScale(FIG, FIG, FIG));
+    for (const [st, p] of people(t)) crowd.add(m, st, p, 0, 1);
+    crowd.end();
+  };
+  placeCrowd(0);
+
   return {
     group: g,
     update(time: number) {
+      placeCrowd(time);
       for (const f of flames) {
         const k =
           0.85 +

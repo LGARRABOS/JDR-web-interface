@@ -111,7 +111,7 @@ export function WorldMap3D({
     if (id === at && !travel && spotsOf(at).length) {
       const p = sceneRef.current?.nodePoint(id);
       const v = viewRef.current;
-      if (p && v) v.flyTo(p, 9, 750, () => setMode('zone'));
+      if (p && v) v.flyTo(p.setY(8), 32, 750, () => setMode('zone'));
       else setMode('zone');
       return;
     }
@@ -167,13 +167,14 @@ export function WorldMap3D({
         if (spotsOf(id).length) state.current.withSpots.add(id);
       const r = wrap.getBoundingClientRect();
       const cam = new THREE.PerspectiveCamera(
-        34,
+        40,
         r.width / Math.max(1, r.height),
         0.5,
-        900
+        1200
       );
-      cam.position.set(0, 62, 42);
-      cam.lookAt(0, 0, 1);
+      // Angle unique : la carte sur le bureau, l'équipage dans la cabine derrière.
+      cam.position.set(0, 62, 90);
+      cam.lookAt(0, 8, -22);
       wm.update(0, state.current);
       await warmScene(
         wm.scene,
@@ -193,7 +194,7 @@ export function WorldMap3D({
         bounds: { x: wm.width / 2 + 14, z: wm.depth / 2 + 13 },
         start: {
           pos: cam.position.clone(),
-          target: new THREE.Vector3(0, 0, 1),
+          target: new THREE.Vector3(0, 8, -22),
         },
         frame: (time) => wm.update(time, state.current),
         onHover: (e) => {
@@ -237,9 +238,9 @@ export function WorldMap3D({
         const { scene: zm } = cachedZoneMap(at, zkit, spotsOf(at), ZONE_PERIOD);
         await zm.populate();
         if (disposed) return;
-        const zc = new THREE.PerspectiveCamera(34, cam.aspect, 0.5, 900);
-        zc.position.set(0, 56, 36);
-        zc.lookAt(0, 0, 1);
+        const zc = new THREE.PerspectiveCamera(40, cam.aspect, 0.5, 1200);
+        zc.position.set(0, 60, 84);
+        zc.lookAt(0, 8, -22);
         await warmScene(zm.scene, zc);
       }
     };
@@ -381,8 +382,7 @@ export function WorldMap3D({
             </div>
           )}
           <p className="pointer-events-none absolute left-3 bottom-2 text-[11px] text-[#cdb68c] opacity-70">
-            Clic gauche maintenu pour déplacer la carte · clic droit pour
-            tourner · molette pour zoomer
+            Clic gauche maintenu pour déplacer la carte · molette pour zoomer
           </p>
         </div>
         {panel && (

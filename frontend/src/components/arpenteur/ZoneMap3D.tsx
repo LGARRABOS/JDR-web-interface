@@ -109,13 +109,14 @@ export function ZoneMap3D({
       );
       const r = wrap.getBoundingClientRect();
       const cam = new THREE.PerspectiveCamera(
-        34,
+        40,
         r.width / Math.max(1, r.height),
         0.5,
-        900
+        1200
       );
-      cam.position.set(0, 56, 36);
-      cam.lookAt(0, 0, 1);
+      // Angle unique : la carte sur le bureau, l'équipage dans la cabine derrière.
+      cam.position.set(0, 60, 84);
+      cam.lookAt(0, 8, -22);
       // (Aussi quand une ouverture précédente a été fermée en plein modelage.)
       void fresh;
       await zm.populate(
@@ -148,7 +149,7 @@ export function ZoneMap3D({
         bounds: { x: zm.width / 2 + 14, z: zm.depth / 2 + 13 },
         start: {
           pos: cam.position.clone(),
-          target: new THREE.Vector3(0, 0, 1),
+          target: new THREE.Vector3(0, 8, -22),
         },
         frame: (time) =>
           zm.update(live.stage?.mapInfo() ?? null, time, state.current),
@@ -311,8 +312,7 @@ export function ZoneMap3D({
           </div>
         )}
         <p className="pointer-events-none absolute left-3 bottom-2 text-[11px] text-[#cdb68c] opacity-70">
-          Clic gauche maintenu pour déplacer la carte · clic droit pour tourner
-          · molette pour zoomer
+          Clic gauche maintenu pour déplacer la carte · molette pour zoomer
         </p>
       </div>
     </div>

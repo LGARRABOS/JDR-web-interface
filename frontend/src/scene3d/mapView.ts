@@ -107,25 +107,27 @@ export function createMapView(
   const renderer = mapRenderer();
   const canvas = renderer.domElement;
   wrap.prepend(canvas);
-  const camera = opts.camera ?? new THREE.PerspectiveCamera(34, 1, 0.5, 900);
+  const camera = opts.camera ?? new THREE.PerspectiveCamera(40, 1, 0.5, 1200);
   camera.position.copy(opts.start.pos);
   const controls = new OrbitControls(camera, canvas);
   controls.target.copy(opts.start.target);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minDistance = 10;
-  controls.maxDistance = 120;
+  controls.minDistance = 28;
+  controls.maxDistance = 170;
   controls.minPolarAngle = 0.12;
   controls.maxPolarAngle = 1.25;
   controls.screenSpacePanning = false;
-  // Clic gauche maintenu : on fait glisser la carte ; clic droit : on tourne
-  // autour ; molette : zoom. Au doigt : glisser, pincer.
+  // Un seul angle de vue (le décor est fait pour lui) : clic gauche maintenu
+  // pour faire glisser la carte, molette pour zoomer. Au doigt : glisser,
+  // pincer.
+  controls.enableRotate = false;
   controls.mouseButtons = {
     LEFT: THREE.MOUSE.PAN,
     MIDDLE: THREE.MOUSE.DOLLY,
-    RIGHT: THREE.MOUSE.ROTATE,
+    RIGHT: THREE.MOUSE.PAN,
   };
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
   controls.panSpeed = 1.1;
   controls.update();
 
@@ -226,7 +228,7 @@ export function createMapView(
       oz = t.z;
     t.x = Math.max(-opts.bounds.x, Math.min(opts.bounds.x, t.x));
     t.z = Math.max(-opts.bounds.z, Math.min(opts.bounds.z, t.z));
-    t.y = 0;
+    t.y = opts.start.target.y;
     camera.position.x += t.x - ox;
     camera.position.z += t.z - oz;
     controls.update();
