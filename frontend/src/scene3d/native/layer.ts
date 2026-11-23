@@ -26,6 +26,7 @@ import { cyl, Kit, lathe, M, tess, torus } from '../ref/kit';
 import { Crowd } from './crew';
 import { AetherRealm } from './aether';
 import { Herds } from './fauna';
+import { Landmarks } from './landmarks';
 import { grassField } from './flora';
 import { sandHeight, type GroundParams } from './ground';
 import { BiomeScenery } from './scenery';
@@ -192,6 +193,7 @@ export class NativeLayer implements NativeHost {
   private grass: THREE.Mesh;
   private herds: Herds;
   private aether: AetherRealm | null = null;
+  private landmarks: Landmarks | null = null;
   private scenery: BiomeScenery | null = null;
   private smoke = new Puffs(900, new THREE.Color('#8a8580'), 0.12);
   private steam = new Puffs(260, new THREE.Color('#f2efe9'), 0.25);
@@ -242,6 +244,8 @@ export class NativeLayer implements NativeHost {
           shared as unknown as Record<string, { value: unknown }>
         );
         this.root.add(this.aether.root);
+        this.landmarks = new Landmarks(lib, this.aether);
+        this.root.add(this.landmarks.root);
         if (this.pending) this.setShip(this.pending.build, this.pending.opts);
         this.ready = true;
         this.onReady();
@@ -584,8 +588,16 @@ vArpW = (modelMatrix * arpW).xyz;`
     this.herds.frame(f.time, this.gp, savanna);
     this.scenery?.preload(f.nextBiome);
     // Mer de brume d'Aether (position inconnue), préparée pendant le voyage.
+    // Repères des lieux-dits (devant lesquels le navire s'arrête).
+    const clear = this.landmarks ? this.landmarks.frame(f) : [];
     if (this.aether) {
-      this.aether.frame(f, f.scroll, f.inVoid && f.ground, this.pointScale);
+      this.aether.frame(
+        f,
+        f.scroll,
+        f.inVoid && f.ground,
+        this.pointScale,
+        clear
+      );
       if (f.nextVoid && !f.inVoid) this.aether.work(2);
     }
 
@@ -771,5 +783,6 @@ vArpW = (modelMatrix * arpW).xyz;`
     this.npcs.clear();
     this.scenery?.dispose();
     this.aether?.dispose();
+    this.landmarks?.dispose();
   }
 }

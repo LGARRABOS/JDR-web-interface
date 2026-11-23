@@ -35,6 +35,8 @@ export interface NativeFrame {
   nextBiome?: string;
   /** Voyage vers la mer de brume d'Aether (préparée en arrière-plan). */
   nextVoid?: boolean;
+  /** Repères des lieux-dits proches (x : position le long du trajet). */
+  spots?: { id: string; look: string; x: number }[];
   duneAmp: number;
   /** Relief propre au paysage (voir Biome.terrain). */
   terrain: number;

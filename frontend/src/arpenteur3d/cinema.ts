@@ -64,11 +64,34 @@ const smooth = (x: number) => {
 };
 
 /** Plan visé au point p du trajet, et son poids (0 : vue du joueur). */
+// Trajet vers un lieu-dit (même zone) : poursuite pour voir le repère sortir
+// de la brume devant le navire, plongée, puis contre-plongée à l'arrivée.
+const HOP: Key[][] = [
+  [
+    [0.1, CHASE],
+    [0.45, CHASE],
+    [0.62, AERIAL],
+    [0.82, HERO],
+  ],
+  [
+    [0.1, CHASE],
+    [0.3, SIDE],
+    [0.5, CHASE],
+    [0.8, HERO],
+  ],
+];
+
+/** Plan visé sur un trajet vers un lieu-dit. */
+export function hopShotAt(p: number, seed: number) {
+  return shotAt(p, seed, HOP);
+}
+
 export function shotAt(
   p: number,
-  seed: number
+  seed: number,
+  set = VARIANTS
 ): { shot: Shot; weight: number } {
-  const keys = VARIANTS[Math.abs(Math.floor(seed)) % VARIANTS.length];
+  const keys = set[Math.abs(Math.floor(seed)) % set.length];
   let a = keys[0],
     b = keys[keys.length - 1];
   if (p <= keys[0][0]) b = a;

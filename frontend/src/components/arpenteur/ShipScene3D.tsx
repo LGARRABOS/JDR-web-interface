@@ -3,6 +3,7 @@ import { installedGuns } from '../../arpenteur/logic';
 import type { Mood } from '../../arpenteur3d/environment';
 import { Stage, type Scene } from '../../arpenteur3d/stage';
 import { travelEase, travelNow } from '../../arpenteur/travel';
+import { OPEN, spotById } from '../../arpenteur/spots';
 import { useTravel } from './useTravel';
 import {
   cityById,
@@ -138,6 +139,13 @@ export function ShipScene3D(props: ShipSceneProps) {
   const travel = useTravel(mapTravel);
   const travelKey = mapTravel
     ? `${mapTravel.from}|${mapTravel.to}|${mapTravel.startedAt}|${mapTravel.duration}`
+    : '';
+  // Lieu-dit de la zone, et trajet en cours pour s'y rendre.
+  const spot = doc.map.spot ?? '';
+  const mapHop = doc.map.hop ?? null;
+  const hop = useTravel(mapHop);
+  const hopKey = mapHop
+    ? `${mapHop.from}|${mapHop.to}|${mapHop.startedAt}|${mapHop.duration}`
     : '';
   // Bandeau d'arrivée, affiché quelques secondes quand un voyage se termine.
   const [banner, setBanner] = useState<{ title: string; sub: string } | null>(
@@ -462,6 +470,53 @@ export function ShipScene3D(props: ShipSceneProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [use3D, animate, sector, travelKey, hangar, stageGen]);
 
+  // Lieu-dit : le navire s'y rend (trajet calé sur l'heure de départ) ou y
+  // est déjà arrêté. Après l'effet du décor, qui peut l'avoir remis à zéro.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!use3D || !stage) return;
+    const s = spotById(spot);
+    const view = (id: string) => {
+      const x = spotById(id);
+      return x ? { id: x.id, look: x.look } : null;
+    };
+    const now = travelNow(mapHop);
+    const reduced =
+      !animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    stage.setSpot(
+      s ? { id: s.id, look: s.look } : null,
+      now && !reduced && !travelNow(mapTravel)
+        ? {
+            from: now.from === OPEN ? null : view(now.from),
+            startMs: now.start,
+            durationMs: now.duration,
+          }
+        : null
+    );
+    canvasRef.current?.dispatchEvent(new Event('arp-ship'));
+    // hopKey résume mapHop, travelKey mapTravel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [use3D, animate, sector, spot, hopKey, travelKey, hangar, stageGen]);
+
+  // Arrivée devant un lieu-dit : bandeau.
+  const wasHopping = useRef(false);
+  useEffect(() => {
+    if (hop) {
+      wasHopping.current = true;
+      return;
+    }
+    if (!wasHopping.current) return;
+    wasHopping.current = false;
+    const s = spotById(spot);
+    setBanner(
+      s
+        ? { title: s.name, sub: 'Lieu-dit' }
+        : { title: 'Au large', sub: nodeName(sector, doc.map.sectorNames) }
+    );
+    const t = setTimeout(() => setBanner(null), 5200);
+    return () => clearTimeout(t);
+  }, [hop, spot, sector, doc.map.sectorNames]);
+
   // Jour / nuit : passage progressif (instantané si les animations sont réduites).
   useEffect(() => {
     const stage = stageRef.current;
@@ -527,6 +582,28 @@ export function ShipScene3D(props: ShipSceneProps) {
           f={nativeReady ? 1 : nativeProg.f}
           label={nativeReady ? 'Retour à bord' : nativeProg.label}
         />
+      )}
+      {hop && !travel && (
+        <div
+          className="pointer-events-none absolute left-1/2 bottom-3 sm:bottom-24 -translate-x-1/2 arp-plate rounded-xl px-4 py-2 text-center min-w-[220px]"
+          role="status"
+        >
+          <p className="font-heading text-[10px] uppercase tracking-[0.3em] opacity-80">
+            {hop.to === OPEN ? 'Reprend le large' : 'En route vers'}
+          </p>
+          <p className="font-heading text-base sm:text-lg leading-tight">
+            {spotById(hop.to)?.name ?? nodeName(sector, doc.map.sectorNames)}
+          </p>
+          <div className="mt-1.5 h-1.5 rounded-full bg-black/40 overflow-hidden">
+            <div
+              className="h-full bg-[#7ff3ff]"
+              style={{ width: `${Math.round(travelEase(hop.p) * 100)}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[11px] opacity-80">
+            arrivée dans {hop.remaining} s
+          </p>
+        </div>
       )}
       {travel && (
         <div

@@ -283,6 +283,11 @@ type MapState struct {
 	// Hangar : secteur de la ville où l'équipage possède son hangar ("" : aucun).
 	// Attribué par le MJ ; le navire s'y amarre et l'atelier n'y travaille que là.
 	Hangar string `json:"hangar"`
+	// Spot : lieu-dit de la zone où l'arpenteur est arrêté ("" : au large).
+	Spot string `json:"spot"`
+	// Hop : trajet en cours d'un lieu-dit à l'autre, sans changer de zone
+	// ("~" désigne le large). Horodaté par le serveur comme les voyages.
+	Hop *Travel `json:"hop"`
 }
 
 // Travel : départ de From vers To à StartedAt (horodaté par le serveur),

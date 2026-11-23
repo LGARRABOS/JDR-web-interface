@@ -193,6 +193,31 @@ func TestTravelThroughPortal(t *testing.T) {
 	}
 }
 
+func TestHopToSpot(t *testing.T) {
+	// Trajet vers un lieu-dit, sans changer de zone : horodaté par le serveur,
+	// identifiants gardés tels quels (pas de majuscules forcées).
+	d := Default()
+	next := d.Map
+	next.Spot = "arche-brisee"
+	next.Hop = &Travel{From: "~", To: "arche-brisee", StartedAt: "2001-01-01T00:00:00Z", Duration: 18}
+	raw, _ := json.Marshal(next)
+	if err := d.Apply(SectionMap, raw, false); err != nil {
+		t.Fatal(err)
+	}
+	h := d.Map.Hop
+	if h == nil || h.To != "arche-brisee" || h.Duration != 18 || h.StartedAt == "2001-01-01T00:00:00Z" {
+		t.Fatalf("trajet mal normalisé : %+v", h)
+	}
+	if d.Map.Spot != "arche-brisee" {
+		t.Fatalf("lieu-dit perdu : %q", d.Map.Spot)
+	}
+	d.Map.Hop = &Travel{From: "x", To: "x", StartedAt: h.StartedAt, Duration: 18}
+	Normalize(&d)
+	if d.Map.Hop != nil {
+		t.Fatal("un trajet sur place est rejeté")
+	}
+}
+
 func TestMapMood(t *testing.T) {
 	d := Default()
 	d.Map.Mood = "night"

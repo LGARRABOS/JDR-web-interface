@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { spotById } from '../../arpenteur/spots';
 import { ArpenteurAPI } from '../../api/client';
 import { nodeName, regionById } from '../../arpenteur/keld';
 import { crewPlaces, postsOf } from '../../arpenteur/logic';
@@ -112,6 +113,7 @@ export function ArpenteurView({
   const sectorLabel = sector
     ? `${nodeName(sector, doc.map.sectorNames)}${regionById(sector) && doc.map.sectorNames[sector] ? ` · ${sector}` : ''}`
     : 'Position inconnue';
+  const spotHere = spotById(doc.map.spot);
   const shownBuild = preview?.build ?? doc.build;
   const constRatio =
     doc.combat.constitution / Math.max(1, doc.combat.constitutionMax);
@@ -128,6 +130,7 @@ export function ArpenteurView({
         {crewPlaces(doc.crew.members)}/{doc.crew.capacity}
       </Chip>
       <Chip label="Secteur">{sectorLabel}</Chip>
+      {spotHere && <Chip label="Lieu-dit">{spotHere.name}</Chip>}
       {doc.pending && <Chip label="Chantier">{doc.pending.label}</Chip>}
       {myPosts.length > 0 && <Chip label="Vous">{myPosts.join(', ')}</Chip>}
     </>

@@ -23,6 +23,7 @@ import type {
 import type { GameStore } from '../../realtime/gameStore';
 import { getErrorMessage } from '../../utils/errorMessage';
 import { KeldMap } from './KeldMap';
+import { SpotsCard } from './SpotsCard';
 import { useTravel } from './useTravel';
 import { TRAVEL_SECONDS } from '../../arpenteur/travel';
 import {
@@ -89,6 +90,8 @@ export function MapPanel({
         sector: id,
         destination: map.destination === id ? '' : map.destination,
         trail: [...map.trail, { sector: id, at: new Date().toISOString() }],
+        spot: '',
+        hop: null,
         travel: go
           ? {
               from: map.sector || UNKNOWN,
@@ -108,6 +111,8 @@ export function MapPanel({
         ...map,
         sector: '',
         destination: '',
+        spot: '',
+        hop: null,
         travel: {
           from: map.sector,
           to: UNKNOWN,
@@ -190,6 +195,8 @@ export function MapPanel({
           </Btn>
         )}
       </div>
+
+      <SpotsCard map={map} can={can} save={save} />
 
       {view === 'reseau' ? (
         <div className="grid gap-4 xl:grid-cols-[1fr_320px]">

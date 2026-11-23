@@ -409,6 +409,16 @@ func NormalizeMap(m *MapState) {
 			m.Travel = nil
 		}
 	}
+	m.Spot = text(m.Spot, 40)
+	if t := m.Hop; t != nil {
+		t.From = text(t.From, 40)
+		t.To = text(t.To, 40)
+		t.Duration = clamp(t.Duration, 5, 120)
+		t.StartedAt = text(t.StartedAt, 40)
+		if _, err := time.Parse(time.RFC3339Nano, t.StartedAt); err != nil || t.From == "" || t.To == "" || t.From == t.To {
+			m.Hop = nil
+		}
+	}
 	markers := []Marker{}
 	seen := map[string]bool{}
 	for _, mk := range m.Markers {

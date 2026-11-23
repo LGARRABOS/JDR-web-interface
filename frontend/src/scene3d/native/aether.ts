@@ -53,10 +53,10 @@ export class AetherRealm {
     uShade: { value: new THREE.Color() },
     uScale: { value: 600 },
   };
-  private fallMat: THREE.ShaderMaterial;
+  readonly fallMat: THREE.ShaderMaterial;
   private isles: Isle[] = [];
   private queue: (() => void)[] = [];
-  private m: {
+  readonly m: {
     moss: THREE.MeshStandardMaterial;
     rock: THREE.MeshStandardMaterial;
     stone: THREE.MeshStandardMaterial;
@@ -102,7 +102,9 @@ export class AetherRealm {
       rock: tint(lib.rock, '#5e5676', {
         map: null,
       } as Partial<THREE.MeshStandardMaterialParameters>),
-      stone: tint(lib.rock, '#d8ccc0'),
+      stone: tint(lib.rock, '#9c93ab', {
+        map: null,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
       root: tint(lib.darkWood, '#6a5a52', {
         roughness: 0.95,
       } as Partial<THREE.MeshStandardMaterialParameters>),
@@ -292,7 +294,7 @@ void main(){
 
   // --- Îles -------------------------------------------------------------------
 
-  private isle(
+  isle(
     seed: number,
     size: number,
     opts: { ruins: boolean; crystals: boolean; tree: boolean; falls: number }
@@ -625,8 +627,9 @@ void main(){
     }
   }
 
-  private add(i: Isle) {
-    i.obj.traverse((o) => {
+  /** Brume du jeu sur tous les matériaux d'un objet. */
+  adopt(obj: THREE.Object3D) {
+    obj.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (
         mesh.isMesh &&
@@ -634,6 +637,10 @@ void main(){
       )
         this.patch(mesh.material as THREE.Material);
     });
+  }
+
+  private add(i: Isle) {
+    this.adopt(i.obj);
     this.root.add(i.obj);
     this.isles.push(i);
   }
@@ -645,7 +652,13 @@ void main(){
       this.queue.shift()!();
   }
 
-  frame(f: NativeFrame, scroll: number, visible: boolean, pointScale: number) {
+  frame(
+    f: NativeFrame,
+    scroll: number,
+    visible: boolean,
+    pointScale: number,
+    clear: number[] = []
+  ) {
     this.root.visible = visible;
     if (!visible) return;
     this.work(this.isles.length < 4 ? 14 : 5);
@@ -674,6 +687,12 @@ void main(){
         i.y + Math.sin(f.time * 0.25 + i.phase) * i.amp,
         i.z
       );
+      // Place libre autour des repères des lieux-dits.
+      i.obj.visible =
+        !i.loop ||
+        i.z < -330 ||
+        i.z > 0 ||
+        clear.every((c) => Math.abs(x - c) > 110);
       i.obj.rotation.y = Math.sin(f.time * 0.03 + i.phase) * 0.05;
     }
   }
