@@ -534,6 +534,22 @@ export class ThreeBackend implements RenderBackend {
     }
     // Seuil haut : seules les vraies sources (lampes, Aether) rayonnent, pas les
     // murs blancs au soleil (sinon l'image paraît floue et voilée).
+    // Garde-fou : un pixel invalide (NaN, infini) serait étalé par le flou
+    // lumineux en grands aplats noirs ; on le neutralise avant.
+    this.composer.addPass(
+      new ShaderPass({
+        uniforms: { tDiffuse: { value: null } },
+        vertexShader:
+          'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+        fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+void main(){
+  vec4 c = texture2D(tDiffuse, vUv);
+  bvec4 bad = bvec4(c.r != c.r || !(abs(c.r) < 1e4), c.g != c.g || !(abs(c.g) < 1e4), c.b != c.b || !(abs(c.b) < 1e4), c.a != c.a || !(abs(c.a) < 1e4));
+  if (any(bad)) c = vec4(0., 0., 0., 1.);
+  gl_FragColor = vec4(min(c.rgb, vec3(64.)), c.a);
+}`,
+      })
+    );
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.4, 2.2);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());

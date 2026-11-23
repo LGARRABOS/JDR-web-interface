@@ -29,6 +29,24 @@ function rnd(seed: number) {
 
 type U = Record<string, { value: unknown }>;
 
+/** Remplace les normales nulles ou invalides par la verticale. */
+export function safeNormals(g: THREE.BufferGeometry) {
+  const n = g.attributes.normal as THREE.BufferAttribute | undefined;
+  if (!n) return;
+  const a = n.array as Float32Array;
+  let bad = false;
+  for (let i = 0; i < a.length; i += 3) {
+    const l = a[i] * a[i] + a[i + 1] * a[i + 1] + a[i + 2] * a[i + 2];
+    if (!(l > 1e-8) || !Number.isFinite(l)) {
+      a[i] = 0;
+      a[i + 1] = 1;
+      a[i + 2] = 0;
+      bad = true;
+    }
+  }
+  if (bad) n.needsUpdate = true;
+}
+
 interface Isle {
   obj: THREE.Object3D;
   x: number;
@@ -169,7 +187,8 @@ float cloudH(vec2 p){
   vec2 q = p*.0055 + vec2(uTime*.004, uTime*.0025);
   vec2 w = vec2(fbm(q*1.7 + 3.1), fbm(q*1.7 + 7.3));
   float b = fbm(q + w*1.3);
-  float bill = pow(smoothstep(.22, .86, b), 1.5);
+  float bs = smoothstep(.22, .86, b);
+  float bill = bs * sqrt(bs);
   float small = fbm(p*.028 + w*2. - vec2(uTime*.012, 0.));
   return bill*18. + small*3.5;
 }`;
@@ -200,7 +219,8 @@ diffuseColor.rgb *= mix(uLow, uHigh, smoothstep(.05, .9, vCloud));`
         .replace(
           '#include <emissivemap_fragment>',
           `#include <emissivemap_fragment>
-totalEmissiveRadiance += uGlow * pow(1. - vCloud, 3.);`
+float cg = clamp(1. - vCloud, 0., 1.);
+totalEmissiveRadiance += uGlow * cg * cg * cg;`
         );
     };
     mat.customProgramCacheKey = () => 'arp-aether-sea';
@@ -254,7 +274,8 @@ varying float vA;
 void main(){
   vec2 c = gl_PointCoord - .5;
   float d = length(c) * 2.;
-  float a = pow(max(0., 1. - d*d), 2.) * .3 * vA;
+  float e = max(0., 1. - d*d);
+  float a = e * e * .3 * vA;
   if (a < .004) discard;
   gl_FragColor = vec4(mix(uShade, uLit, .55 - c.y), a);
 }`,
@@ -286,7 +307,7 @@ void main(){
   vec2 q = vec2(vUv.x * 6., vUv.y * 5. + uTime * .6);
   float n = n2(q) * .6 + n2(q * 2.3) * .4;
   float edge = smoothstep(0., .25, vUv.x) * smoothstep(1., .75, vUv.x);
-  float a = smoothstep(.3, .9, n) * edge * pow(1. - vUv.y, .8) * .4;
+  float a = smoothstep(.3, .9, n) * edge * pow(max(1e-4, 1. - vUv.y), .8) * .4;
   gl_FragColor = vec4(uCol * (1.1 + n * .3), a);
 }`,
     });
@@ -352,9 +373,12 @@ void main(){
           0.18 * Math.sin(a * 4 + t * 9 + seed) +
           0.12 * Math.sin(a * 9 - t * 5) +
           0.1 * Math.sin(t * 23 + a * 2);
-        const prof =
-          Math.pow(1 - t, 1.25) * (1 - 0.15 * Math.sin(t * Math.PI * 3)) +
-          (t > 0.97 ? 0 : 0.02);
+        // La pointe garde un petit rayon : un sommet écrasé en un seul point
+        // donnerait des normales nulles (pixels noirs sur certaines cartes).
+        const prof = Math.max(
+          0.025,
+          Math.pow(1 - t, 1.25) * (1 - 0.15 * Math.sin(t * Math.PI * 3)) + 0.02
+        );
         const rr = rim(a) * 1.02 * prof * lump;
         bp.push(
           Math.cos(a) * rr,
@@ -627,15 +651,19 @@ void main(){
     }
   }
 
-  /** Brume du jeu sur tous les matériaux d'un objet. */
+  /**
+   * Brume du jeu sur tous les matériaux d'un objet, et normales assainies :
+   * une normale nulle ou invalide (sommet dégénéré) rend NaN dans l'éclairage
+   * sur certaines cartes graphiques (Firefox / Windows), et le flou lumineux
+   * étale ces pixels en grands aplats noirs.
+   */
   adopt(obj: THREE.Object3D) {
     obj.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      if (
-        mesh.isMesh &&
-        !(mesh.material as THREE.ShaderMaterial).isShaderMaterial
-      )
+      if (!mesh.isMesh) return;
+      if (!(mesh.material as THREE.ShaderMaterial).isShaderMaterial)
         this.patch(mesh.material as THREE.Material);
+      safeNormals(mesh.geometry);
     });
   }
 
