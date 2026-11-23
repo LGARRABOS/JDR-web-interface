@@ -1,7 +1,5 @@
 import * as THREE from 'three';
-import type { CrewPose } from '../arpenteur3d/stage';
-import type { CrewStyle } from '../arpenteur3d/shipModel';
-import { Crowd } from './native/crew';
+import { Figure, restPose, type FigureLook } from './figure';
 import type { RefMaterials } from './ref/materials';
 
 // Cabine du capitaine autour de la maquette : grand bureau, objets de
@@ -868,64 +866,117 @@ export function buildCabin(
   // --- Équipage autour de la table : deux officiers penchés sur la carte qui
   // discutent, un timonier qui fait les cent pas, un matelot appuyé au bureau,
   // un autre au globe. ---
-  const crowd = new Crowd(8, () => {});
-  g.add(crowd.root);
   const FIG = 44; // personnages à l'échelle du bureau (1 m réel ≈ 44 unités)
-  const styles: CrewStyle[] = [
-    { body: '#24324a', accent: '#c9a24a' },
-    { body: '#5a2a22', accent: '#d8b06a' },
-    { body: '#3d4a2c', accent: '#8a6a3a' },
-    { body: '#6b5a44', accent: '#2a2420' },
-    { body: '#2e2a3e', accent: '#b8862c' },
+  const crew = new THREE.Group();
+  crew.position.y = floorY;
+  crew.scale.setScalar(FIG);
+  g.add(crew);
+  const looks: FigureLook[] = [
+    // Le capitaine : bicorne, épaulettes, barbe.
+    {
+      coat: '#1f2c45',
+      trim: '#b8862c',
+      vest: '#d8c9a0',
+      breeches: '#e6dcc4',
+      skin: '#d6a483',
+      hair: '#3a2a1e',
+      hat: 'bicorne',
+      beard: true,
+      epaulettes: true,
+    },
+    // Le second : tricorne, épaulettes.
+    {
+      coat: '#6a2420',
+      trim: '#d8b06a',
+      vest: '#2a2a30',
+      breeches: '#d9cfb8',
+      skin: '#c48d6a',
+      hair: '#1c1612',
+      hat: 'tricorne',
+      epaulettes: true,
+    },
+    // Le timonier : matelot au foulard.
+    {
+      coat: '#7a2e22',
+      trim: '#2f4a6a',
+      vest: '#4a3a28',
+      breeches: '#3a3f4a',
+      skin: '#a8724e',
+      hair: '#2a1c12',
+      hat: 'foulard',
+      sailor: true,
+    },
+    // Le navigateur, au globe.
+    {
+      coat: '#2f4030',
+      trim: '#c9a24a',
+      vest: '#8a6a3a',
+      breeches: '#3a3028',
+      skin: '#e0b494',
+      hair: '#8a6a44',
+      hat: 'tricorne',
+    },
+    // Un matelot barbu, bras croisés.
+    {
+      coat: '#2a3550',
+      trim: '#a83a2a',
+      vest: '#5a4630',
+      breeches: '#4a4038',
+      skin: '#b98663',
+      hair: '#4a3020',
+      hat: 'aucun',
+      beard: true,
+      sailor: true,
+    },
   ];
-  const yawTo = (dx: number, dz: number) => Math.atan2(-dz, dx);
-  const pose = (
-    o: Partial<CrewPose> & { pos: [number, number, number] }
-  ): CrewPose => ({
-    yaw: 0,
-    lean: 0,
-    bob: 0,
-    legL: 0,
-    legR: 0,
-    armL: 0.08,
-    armR: 0.08,
-    crouch: 0,
-    ...o,
+  const figs = looks.map((l) => {
+    const f = new Figure(l, lib.brass);
+    crew.add(f.root);
+    own.push(f);
+    return f;
   });
-  const people = (t: number): [CrewStyle, CrewPose][] => {
-    // Positions en unités de la carte, ramenées à l'échelle des personnages.
-    const P = (x: number, z: number): [number, number, number] => [
-      x / FIG,
-      0,
-      z / FIG,
-    ];
-    const out: [CrewStyle, CrewPose][] = [];
-    const edge = farZ - 70;
-    // Deux officiers au bord du bureau, face à la carte : l'un parle en
-    // gesticulant, l'autre écoute puis montre un point de la carte.
-    const talkA = Math.sin(t * 0.7) > -0.2;
-    out.push([
-      styles[0],
-      pose({
-        pos: P(-W * 0.22 - 16, edge),
-        yaw: yawTo(1, 0.3),
-        lean: 0.08 + 0.04 * Math.sin(t * 1.7),
-        armR: talkA ? 0.55 + 0.3 * Math.sin(t * 3.1) : 0.2,
-        armL: 0.15,
-      }),
-    ]);
-    const point = Math.sin(t * 0.7 + 2.4) > 0.3;
-    out.push([
-      styles[1],
-      pose({
-        pos: P(-W * 0.22 + 26, edge - 4),
-        yaw: yawTo(-1, 0.25),
-        lean: point ? 0.18 : 0.05 + 0.03 * Math.sin(t * 1.1),
-        armL: point ? 0.95 + 0.05 * Math.sin(t * 2) : 0.15,
-        armR: 0.3,
-      }),
-    ]);
-    // Le timonier fait les cent pas derrière eux.
+  const yawTo = (dx: number, dz: number) => Math.atan2(-dz, dx);
+  const M = (v: number) => v / FIG;
+  const tableX = -W * 0.22 + 5,
+    tableZ = farZ - 72;
+  const placeCrew = (t: number) => {
+    // Le capitaine parle en gesticulant, tourné vers le second.
+    {
+      const p = restPose();
+      const talk = Math.sin(t * 0.7) > -0.2;
+      p.x = M(tableX - 20);
+      p.z = M(tableZ + 6);
+      p.yaw = yawTo(1, -0.25);
+      p.lean = 0.05 + 0.03 * Math.sin(t * 1.3);
+      p.headYaw = 0.15 * Math.sin(t * 0.9);
+      p.nod = 0.06 * Math.sin(t * 2.3);
+      p.armR = talk
+        ? {
+            fwd: 0.7 + 0.25 * Math.sin(t * 3.1),
+            side: 0.25,
+            bend: 1.0 + 0.35 * Math.sin(t * 2.6),
+          }
+        : { fwd: 0.1, side: 0.08, bend: 0.25 };
+      // Main gauche derrière le dos.
+      p.armL = { fwd: -0.3, side: 0.1, bend: 1.3, turn: -0.6 };
+      figs[0].pose(p);
+    }
+    // Le second écoute, une main sur la table, puis désigne un point.
+    {
+      const p = restPose();
+      const point = Math.sin(t * 0.7 + 2.4) > 0.35;
+      p.x = M(tableX + 20);
+      p.z = M(tableZ - 2);
+      p.yaw = yawTo(-1, 0.15);
+      p.lean = point ? 0.16 : 0.06;
+      p.nod = point ? 0.12 : 0.05 + 0.08 * Math.max(0, Math.sin(t * 1.7));
+      p.armR = point
+        ? { fwd: 1.25, side: 0.05, bend: 0.12 }
+        : { fwd: 0.55, side: 0.12, bend: 0.75 };
+      p.armL = { fwd: 0.05, side: 0.08, bend: 0.3 };
+      figs[1].pose(p);
+    }
+    // Le timonier fait les cent pas au fond.
     {
       const span = BW * 0.9;
       const speed = 20;
@@ -945,60 +996,67 @@ export function buildCabin(
         u = 0;
         dir = 0;
       }
-      const x = -span / 2 + u * span;
-      const ph = ((u * span) / FIG) * ((Math.PI * 2) / 1.5);
-      const walk = dir !== 0;
-      out.push([
-        styles[2],
-        pose({
-          pos: P(x, edge - 40),
-          yaw: dir > 0 ? yawTo(1, 0) : dir < 0 ? yawTo(-1, 0) : yawTo(0, 1),
-          legL: walk ? Math.sin(ph) * 0.45 : 0,
-          legR: walk ? -Math.sin(ph) * 0.45 : 0,
-          armL: walk ? -Math.sin(ph) * 0.3 + 0.08 : 0.1,
-          armR: walk ? Math.sin(ph) * 0.3 + 0.08 : 0.1,
-          bob: walk ? Math.abs(Math.cos(ph)) * 0.04 : 0,
-        }),
-      ]);
+      const p = restPose();
+      p.x = M(-span / 2 + u * span);
+      p.z = M(farZ - 110);
+      p.yaw = dir > 0 ? yawTo(1, 0) : dir < 0 ? yawTo(-1, 0) : yawTo(0, 1);
+      if (dir !== 0) {
+        const ph = ((u * span) / FIG) * ((Math.PI * 2) / 1.4);
+        const sw = Math.sin(ph);
+        p.legL = { fwd: sw * 0.42, bend: Math.max(0, -Math.cos(ph)) * 0.7 };
+        p.legR = { fwd: -sw * 0.42, bend: Math.max(0, Math.cos(ph)) * 0.7 };
+        p.armL = { fwd: -sw * 0.35, side: 0.08, bend: 0.3 };
+        p.armR = { fwd: sw * 0.35, side: 0.08, bend: 0.3 };
+        p.bob = Math.abs(Math.cos(ph)) * 0.025;
+        p.lean = 0.05;
+      } else {
+        // Mains dans le dos à chaque bout.
+        p.armL = { fwd: -0.35, side: 0.1, bend: 1.3, turn: -0.7 };
+        p.armR = { fwd: -0.35, side: 0.1, bend: 1.3, turn: -0.7 };
+        p.headYaw = 0.4 * Math.sin(t * 0.8);
+      }
+      figs[2].pose(p);
     }
-    // Un matelot appuyé au bureau, à gauche, qui suit la discussion.
-    out.push([
-      styles[3],
-      pose({
-        pos: P(-BW / 2 - 50, farZ - 30),
-        yaw: yawTo(0.6, 1),
-        lean: 0.04 + 0.02 * Math.sin(t * 0.9),
-        armL: 0.15,
-        armR: 0.15,
-      }),
-    ]);
-    // Le second, à droite, prend des notes (la main va et vient).
-    out.push([
-      styles[4],
-      pose({
-        pos: P(BW / 2 + 30, farZ - 60),
-        yaw: yawTo(1, -0.3),
-        lean: 0.1,
-        armR: 0.9 + 0.12 * Math.sin(t * 1.5),
-        armL: 0.1,
-      }),
-    ]);
-    return out;
+    // Le navigateur fait tourner le globe et l'étudie.
+    {
+      const p = restPose();
+      p.x = M(BW / 2 + 22);
+      p.z = M(farZ - 58);
+      p.yaw = yawTo(1, -0.15);
+      p.lean = 0.12;
+      p.nod = 0.15;
+      p.headYaw = 0.1 * Math.sin(t * 0.5);
+      p.armR = {
+        fwd: 0.95 + 0.12 * Math.sin(t * 1.5),
+        side: 0.05,
+        bend: 0.5 + 0.2 * Math.sin(t * 1.5),
+      };
+      p.armL = { fwd: 0.1, side: 0.08, bend: 0.2 };
+      figs[3].pose(p);
+    }
+    // Le matelot, bras croisés, suit la discussion en se balançant.
+    {
+      const p = restPose();
+      p.x = M(-BW / 2 - 46);
+      p.z = M(farZ - 34);
+      p.yaw = yawTo(0.7, 0.4);
+      p.twist = 0.05 * Math.sin(t * 0.6);
+      p.headYaw = 0.25 + 0.15 * Math.sin(t * 0.45);
+      p.bob = 0.008 * Math.sin(t * 1.2);
+      // Bras croisés : avant-bras repliés à l'horizontale devant la poitrine.
+      p.armL = { fwd: 0.12, side: 0.1, bend: 1.5, turn: 1.15 };
+      p.armR = { fwd: 0.18, side: 0.1, bend: 1.42, turn: 1.05 };
+      p.legL = { fwd: 0.08, bend: 0.05 };
+      p.legR = { fwd: -0.06, bend: 0 };
+      figs[4].pose(p);
+    }
   };
-  const placeCrowd = (t: number) => {
-    crowd.begin();
-    const m = new THREE.Matrix4()
-      .makeTranslation(0, floorY, 0)
-      .multiply(new THREE.Matrix4().makeScale(FIG, FIG, FIG));
-    for (const [st, p] of people(t)) crowd.add(m, st, p, 0, 1);
-    crowd.end();
-  };
-  placeCrowd(0);
+  placeCrew(0);
 
   return {
     group: g,
     update(time: number) {
-      placeCrowd(time);
+      placeCrew(time);
       for (const f of flames) {
         const k =
           0.85 +
