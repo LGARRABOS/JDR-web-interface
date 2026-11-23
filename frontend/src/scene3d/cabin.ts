@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { Figure, restPose, type FigureLook } from './figure';
 import type { RefMaterials } from './ref/materials';
 
 // Cabine du capitaine autour de la maquette : grand bureau, objets de
@@ -120,7 +119,7 @@ export function buildCabin(
   // --- Cabine : plancher, lambris, plafond à poutres ---
   const floorY = top - BH - 34;
   const RW = BW + 260,
-    RD = BD + 420,
+    RD = BD + 300,
     RH = 150;
   const floor = mesh(
     uvScale(new THREE.PlaneGeometry(RW, RD), 0.12),
@@ -198,123 +197,533 @@ export function buildCabin(
     );
   }
 
-  // --- Hublots sur la mer de brume (mur du fond) ---
-  const portY = top + 40;
-  for (const px of [-RW * 0.22, RW * 0.22]) {
-    const ring = mesh(
-      new THREE.TorusGeometry(15, 2.4, 14, 40),
-      lib.brass,
-      px,
-      portY,
-      -RD / 2 + 2,
+  const zW = -RD / 2;
+  // --- Galerie de poupe : grandes fenêtres à petits carreaux sur la brume ---
+  const skyTex = (() => {
+    const cv = document.createElement('canvas');
+    cv.width = 256;
+    cv.height = 512;
+    const c = cv.getContext('2d')!;
+    const gr = c.createLinearGradient(0, 0, 0, 512);
+    gr.addColorStop(0, '#6d58b8');
+    gr.addColorStop(0.55, '#c9b2ff');
+    gr.addColorStop(0.75, '#efe4ff');
+    gr.addColorStop(1, '#b49ae6');
+    c.fillStyle = gr;
+    c.fillRect(0, 0, 256, 512);
+    const rr = rnd(31);
+    // Nuages et îles lointaines en silhouette.
+    for (let i = 0; i < 40; i++) {
+      c.fillStyle = `rgba(255,255,255,${0.08 + rr() * 0.12})`;
+      c.beginPath();
+      c.ellipse(
+        rr() * 256,
+        300 + rr() * 200,
+        30 + rr() * 60,
+        8 + rr() * 14,
+        0,
+        0,
+        Math.PI * 2
+      );
+      c.fill();
+    }
+    c.fillStyle = 'rgba(70,50,120,0.55)';
+    for (let i = 0; i < 3; i++) {
+      const x = 30 + rr() * 200,
+        y = 160 + rr() * 140,
+        w = 20 + rr() * 30;
+      c.beginPath();
+      c.moveTo(x - w, y);
+      c.lineTo(x + w, y);
+      c.lineTo(x + w * 0.2, y + w * 0.9);
+      c.closePath();
+      c.fill();
+    }
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return keep(t);
+  })();
+  const winW = 26,
+    winH = 64,
+    winGap = 7,
+    winN = 5,
+    winY = floorY + 52;
+  const galW = winN * winW + (winN - 1) * winGap;
+  const velvet = keep(
+    new THREE.MeshPhysicalMaterial({
+      color: '#6a1f1c',
+      roughness: 0.8,
+      sheen: 1,
+      sheenColor: new THREE.Color('#c0605a'),
+    })
+  );
+  for (let i = 0; i < winN; i++) {
+    const x = -galW / 2 + winW / 2 + i * (winW + winGap);
+    // Chaque fenêtre montre un morceau différent du ciel.
+    const tex = keep(skyTex.clone());
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.repeat.set(0.45, 1);
+    tex.offset.set(i * 0.19, 0);
+    tex.needsUpdate = true;
+    mesh(
+      new THREE.PlaneGeometry(winW, winH),
+      keep(new THREE.MeshBasicMaterial({ map: tex })),
+      x,
+      winY + winH / 2,
+      zW + 0.6,
       false
     );
-    void ring;
-    for (let k = 0; k < 8; k++) {
-      const a = (k / 8) * Math.PI * 2;
+    // Croisillons et cadre.
+    for (const dx of [-winW / 2, -winW / 6, winW / 6, winW / 2])
       mesh(
-        new THREE.SphereGeometry(0.9, 8, 6),
+        new THREE.BoxGeometry(
+          dx === -winW / 2 || dx === winW / 2 ? 2.2 : 0.9,
+          winH,
+          1.6
+        ),
+        lib.darkWood,
+        x + dx,
+        winY + winH / 2,
+        zW + 1.2,
+        false
+      );
+    for (let k = 0; k <= 4; k++)
+      mesh(
+        new THREE.BoxGeometry(winW, k === 0 || k === 4 ? 2.2 : 0.9, 1.6),
+        lib.darkWood,
+        x,
+        winY + (k * winH) / 4,
+        zW + 1.2,
+        false
+      );
+    // Pilastre sculpté entre deux fenêtres, chapiteau de laiton.
+    if (i < winN - 1) {
+      const px = x + winW / 2 + winGap / 2;
+      mesh(
+        new THREE.BoxGeometry(winGap - 1, winH + 8, 4),
+        lib.hullWood,
+        px,
+        winY + winH / 2,
+        zW + 2,
+        false
+      );
+      mesh(
+        new THREE.BoxGeometry(winGap + 1, 2, 5),
         lib.brass,
-        px + Math.cos(a) * 15,
-        portY + Math.sin(a) * 15,
-        -RD / 2 + 4.2,
+        px,
+        winY + winH + 4,
+        zW + 2.4,
         false
       );
     }
-    // Vitre : ciel violet de l'Aether, lumineux.
-    const sky = mesh(
-      new THREE.CircleGeometry(13.5, 40),
-      keep(new THREE.MeshBasicMaterial({ color: '#c9b2ff' })),
-      px,
-      portY,
-      -RD / 2 + 1,
-      false
-    );
-    void sky;
   }
-  // Lumière froide qui entre par les hublots.
-  const cool = new THREE.DirectionalLight('#b9a8ff', 0.8);
-  cool.position.set(0, portY, -RD / 2);
+  // Linteau et allège ; banquette de velours sous les fenêtres.
+  mesh(
+    uvScale(new THREE.BoxGeometry(galW + 14, 8, 6), 0.3),
+    lib.darkWood,
+    0,
+    winY + winH + 6,
+    zW + 3,
+    false
+  );
+  mesh(
+    uvScale(new THREE.BoxGeometry(galW + 10, winY - floorY - 14, 16), 0.3),
+    lib.hullWood,
+    0,
+    floorY + (winY - floorY - 14) / 2,
+    zW + 8,
+    false
+  );
+  mesh(new THREE.BoxGeometry(galW + 6, 5, 18), velvet, 0, winY - 11.5, zW + 9);
+  for (let i = 0; i < 4; i++)
+    mesh(
+      new THREE.CapsuleGeometry(4, 8, 4, 10),
+      velvet,
+      -galW / 2 + 22 + i * (galW / 4),
+      winY - 4,
+      zW + 6
+    ).rotation.z = Math.PI / 2;
+  // Lumière froide qui entre par la galerie, et ses rayons.
+  const cool = new THREE.DirectionalLight('#c4b2ff', 1.1);
+  cool.position.set(0, winY + winH, zW);
   cool.target.position.set(0, top, 0);
   g.add(cool, cool.target);
-
-  // --- Étagère de livres (mur du fond, entre les hublots) ---
-  const shelfY = top + 22;
-  const r = rnd(7);
-  for (let row = 0; row < 3; row++) {
-    const y = shelfY + row * 16;
-    mesh(
-      new THREE.BoxGeometry(46, 1.2, 10),
-      lib.darkWood,
-      0,
-      y,
-      -RD / 2 + 6,
+  const shaftM = keep(
+    new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      vertexShader:
+        'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
+      fragmentShader: `varying vec2 vUv; void main(){ float a = smoothstep(0., .25, vUv.x) * smoothstep(1., .75, vUv.x) * vUv.y * .06; gl_FragColor = vec4(vec3(.8,.72,1.) * a, a); }`,
+    })
+  );
+  for (let i = 0; i < winN; i++) {
+    const x = -galW / 2 + winW / 2 + i * (winW + winGap);
+    const sh = mesh(
+      new THREE.PlaneGeometry(winW, 150),
+      shaftM,
+      x,
+      winY - 20,
+      zW + 60,
       false
     );
-    let x = -21;
-    while (x < 21) {
-      const w = 1.4 + r() * 2.2,
-        h = 9 + r() * 5;
-      const b = mesh(
-        new THREE.BoxGeometry(w, h, 7 + r() * 2),
-        leather[Math.floor(r() * leather.length)],
-        x + w / 2,
-        y + 0.6 + h / 2,
-        -RD / 2 + 6,
+    sh.rotation.x = -1.0;
+    sh.renderOrder = 5;
+  }
+  // Poussières qui flottent dans la lumière.
+  const motes = (() => {
+    const n = 140;
+    const pos = new Float32Array(n * 3);
+    const rr = rnd(5);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = (rr() - 0.5) * galW;
+      pos[i * 3 + 1] = floorY + 10 + rr() * 110;
+      pos[i * 3 + 2] = zW + 12 + rr() * 70;
+    }
+    const geo = keep(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const m = keep(
+      new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: `uniform float uTime; varying float vA;
+void main(){ vec3 p = position; float s = fract(sin(dot(p.xz, vec2(12.9,78.2))) * 43758.5);
+  p.y += sin(uTime * .3 + s * 20.) * 3.; p.x += sin(uTime * .2 + s * 9.) * 2.;
+  vec4 mv = modelViewMatrix * vec4(p, 1.); gl_Position = projectionMatrix * mv;
+  gl_PointSize = (0.6 + s * 0.9) * 300. / max(1., -mv.z); vA = .15 + .35 * s; }`,
+        fragmentShader: `varying float vA; void main(){ float d = length(gl_PointCoord - .5); if (d > .5) discard; gl_FragColor = vec4(vec3(1., .92, .8) * vA * (1. - d * 2.), 1.); }`,
+      })
+    );
+    const pts = new THREE.Points(geo, m);
+    g.add(pts);
+    return m;
+  })();
+
+  // --- Bibliothèques de part et d'autre de la galerie ---
+  const r = rnd(7);
+  const bottle = mat({
+    color: '#2f6a4a',
+    roughness: 0.08,
+    transparent: true,
+    opacity: 0.7,
+  });
+  for (const sx of [-1, 1]) {
+    const cx = sx * (galW / 2 + 30);
+    const bw = 40,
+      bh = 112;
+    mesh(
+      uvScale(new THREE.BoxGeometry(bw + 4, bh, 4), 0.3),
+      lib.darkWood,
+      cx,
+      floorY + bh / 2,
+      zW + 2,
+      false
+    );
+    for (const dx of [-bw / 2, bw / 2])
+      mesh(
+        uvScale(new THREE.BoxGeometry(3, bh, 16), 0.3),
+        lib.darkWood,
+        cx + dx,
+        floorY + bh / 2,
+        zW + 9,
         false
       );
-      if (r() < 0.12) b.rotation.z = 0.25;
-      x += w + 0.15;
+    mesh(
+      uvScale(new THREE.BoxGeometry(bw + 8, 5, 19), 0.3),
+      lib.darkWood,
+      cx,
+      floorY + bh + 1,
+      zW + 9,
+      false
+    );
+    mesh(
+      new THREE.BoxGeometry(bw + 8, 1.2, 1),
+      lib.brass,
+      cx,
+      floorY + bh - 1,
+      zW + 18.6,
+      false
+    );
+    for (let row = 0; row < 5; row++) {
+      const y = floorY + 6 + row * 21;
+      mesh(
+        new THREE.BoxGeometry(bw, 1.4, 15),
+        lib.darkWood,
+        cx,
+        y,
+        zW + 9,
+        false
+      );
+      let x = cx - bw / 2 + 1.5;
+      while (x < cx + bw / 2 - 4) {
+        const k = r();
+        if (k < 0.08 && x < cx + bw / 2 - 8) {
+          // Bouteille (avec un navire dedans, une fois sur deux).
+          const b = mesh(
+            new THREE.CapsuleGeometry(2.2, 6, 6, 12),
+            bottle,
+            x + 3,
+            y + 6,
+            zW + 10,
+            false
+          );
+          b.rotation.z = row % 2 ? Math.PI / 2 : 0;
+          x += 7;
+          continue;
+        }
+        if (k < 0.12 && x < cx + bw / 2 - 8) {
+          // Instrument de laiton.
+          mesh(
+            new THREE.CylinderGeometry(2.2, 2.2, 1.2, 16),
+            lib.brass,
+            x + 3,
+            y + 1.4,
+            zW + 10,
+            false
+          ).rotation.x = Math.PI / 2;
+          x += 7;
+          continue;
+        }
+        const w = 1.4 + r() * 2.2,
+          h = 11 + r() * 6;
+        const b = mesh(
+          new THREE.BoxGeometry(w, h, 9 + r() * 3),
+          leather[Math.floor(r() * leather.length)],
+          x + w / 2,
+          y + 0.7 + h / 2,
+          zW + 10,
+          false
+        );
+        if (r() < 0.1) b.rotation.z = 0.22;
+        x += w + 0.2;
+      }
     }
   }
 
-  // --- Lanterne suspendue au-dessus du bureau ---
-  const lanternY = top + 52;
-  mesh(
-    new THREE.CylinderGeometry(0.25, 0.25, RH - (lanternY - floorY) - 4, 6),
-    lib.castIron,
+  // --- Horloge de parquet (à droite) : balancier qui oscille ---
+  const pendulum = new THREE.Group();
+  {
+    const x = galW / 2 + 70,
+      z = zW + 10;
+    mesh(
+      uvScale(new THREE.BoxGeometry(18, 100, 12), 0.3),
+      lib.hullWood,
+      x,
+      floorY + 50,
+      z,
+      false
+    );
+    mesh(
+      uvScale(new THREE.BoxGeometry(22, 8, 14), 0.3),
+      lib.darkWood,
+      x,
+      floorY + 104,
+      z,
+      false
+    );
+    const fc = document.createElement('canvas');
+    fc.width = fc.height = 256;
+    const f = fc.getContext('2d')!;
+    f.fillStyle = '#efe4c8';
+    f.beginPath();
+    f.arc(128, 128, 120, 0, Math.PI * 2);
+    f.fill();
+    f.strokeStyle = '#3a2a18';
+    f.lineWidth = 6;
+    f.stroke();
+    f.fillStyle = '#3a2a18';
+    f.font = 'bold 30px Georgia, serif';
+    f.textAlign = 'center';
+    f.textBaseline = 'middle';
+    ['XII', 'III', 'VI', 'IX'].forEach((t, i) =>
+      f.fillText(
+        t,
+        128 + Math.sin((i * Math.PI) / 2) * 92,
+        128 - Math.cos((i * Math.PI) / 2) * 92
+      )
+    );
+    f.lineWidth = 7;
+    f.beginPath();
+    f.moveTo(128, 128);
+    f.lineTo(128 + 55, 128 - 30);
+    f.moveTo(128, 128);
+    f.lineTo(128 - 10, 128 - 80);
+    f.stroke();
+    const ft = keep(new THREE.CanvasTexture(fc));
+    ft.colorSpace = THREE.SRGBColorSpace;
+    mesh(
+      new THREE.CircleGeometry(7, 32),
+      keep(new THREE.MeshStandardMaterial({ map: ft, roughness: 0.6 })),
+      x,
+      floorY + 86,
+      z + 6.1,
+      false
+    );
+    mesh(
+      new THREE.TorusGeometry(7.3, 0.6, 8, 32),
+      lib.brass,
+      x,
+      floorY + 86,
+      z + 6.2,
+      false
+    );
+    // Fenêtre du balancier.
+    mesh(
+      new THREE.PlaneGeometry(10, 40),
+      keep(
+        new THREE.MeshStandardMaterial({ color: '#120c08', roughness: 0.9 })
+      ),
+      x,
+      floorY + 52,
+      z + 6.05,
+      false
+    );
+    pendulum.position.set(x, floorY + 72, z + 6.3);
+    const rod = new THREE.Mesh(
+      keep(new THREE.CylinderGeometry(0.25, 0.25, 26, 6)),
+      lib.brass
+    );
+    rod.position.y = -13;
+    const bob = new THREE.Mesh(
+      keep(new THREE.CylinderGeometry(3.4, 3.4, 0.6, 24)),
+      lib.brass
+    );
+    bob.rotation.x = Math.PI / 2;
+    bob.position.y = -27;
+    pendulum.add(rod, bob);
+    g.add(pendulum);
+    mesh(
+      new THREE.PlaneGeometry(10.5, 42),
+      glass,
+      x,
+      floorY + 52,
+      z + 6.6,
+      false
+    );
+  }
+
+  // --- Poêle de fonte (à gauche) : feu qui rougeoie ---
+  let fireLight: THREE.PointLight;
+  let fireGlow: THREE.MeshBasicMaterial;
+  {
+    const x = -galW / 2 - 72,
+      z = zW + 26;
+    mesh(
+      new THREE.CylinderGeometry(11, 12, 30, 24),
+      lib.castIron,
+      x,
+      floorY + 22,
+      z
+    );
+    mesh(
+      new THREE.CylinderGeometry(13, 13, 2.5, 24),
+      lib.castIron,
+      x,
+      floorY + 38,
+      z
+    );
+    mesh(
+      new THREE.CylinderGeometry(12.5, 11, 4, 24),
+      lib.brass,
+      x,
+      floorY + 6,
+      z
+    );
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      mesh(
+        new THREE.CylinderGeometry(1.2, 0.8, 6, 8),
+        lib.castIron,
+        x + Math.cos(a) * 10,
+        floorY + 3,
+        z + Math.sin(a) * 10
+      );
+    }
+    mesh(
+      new THREE.CylinderGeometry(3, 3, RH - 40, 14),
+      lib.castIron,
+      x,
+      floorY + 39 + (RH - 40) / 2,
+      z,
+      false
+    );
+    fireGlow = keep(new THREE.MeshBasicMaterial({ color: '#ff7a2a' }));
+    mesh(
+      new THREE.PlaneGeometry(11, 9),
+      fireGlow,
+      x + 0.5,
+      floorY + 20,
+      z + 11.6,
+      false
+    ).rotation.y = 0.05;
+    for (let k = 0; k < 4; k++)
+      mesh(
+        new THREE.BoxGeometry(0.8, 9.5, 0.8),
+        lib.castIron,
+        x - 3.5 + k * 2.4,
+        floorY + 20,
+        z + 12,
+        false
+      );
+    fireLight = new THREE.PointLight('#ff8a3a', 700, 160, 1.7);
+    fireLight.position.set(x, floorY + 22, z + 18);
+    g.add(fireLight);
+    // Bûches à côté.
+    for (let k = 0; k < 4; k++) {
+      const log = mesh(
+        new THREE.CylinderGeometry(2.2, 2.2, 18, 10),
+        lib.hullWood,
+        x + 22,
+        floorY + 2.2 + (k > 2 ? 4 : 0),
+        z + 6 + (k % 3) * 4.6
+      );
+      log.rotation.x = Math.PI / 2;
+    }
+  }
+
+  // --- Lanternes suspendues qui se balancent avec le roulis ---
+  const swing: { g: THREE.Group; phase: number; amp: number }[] = [];
+  const lanternAt = (x: number, z: number, y: number, phase: number) => {
+    const piv = new THREE.Group();
+    piv.position.set(x, floorY + RH - 3, z);
+    g.add(piv);
+    const L = floorY + RH - 3 - y;
+    const part = (geo: THREE.BufferGeometry, m: THREE.Material, yy: number) => {
+      const mm = new THREE.Mesh(keep(geo), m);
+      mm.position.y = yy;
+      piv.add(mm);
+      return mm;
+    };
+    part(
+      new THREE.CylinderGeometry(0.25, 0.25, L - 6, 6),
+      lib.castIron,
+      -(L - 6) / 2
+    );
+    part(new THREE.CylinderGeometry(3.2, 4, 1.4, 8), lib.brass, -L + 6);
+    part(new THREE.ConeGeometry(4, 3, 8), lib.brass, -L + 8);
+    part(new THREE.CylinderGeometry(3.4, 3.4, 9, 8, 1, true), glass, -L);
+    part(new THREE.CylinderGeometry(4, 3.2, 1.2, 8), lib.brass, -L - 5);
+    const fl = part(
+      new THREE.SphereGeometry(1.1, 10, 8),
+      keep(new THREE.MeshBasicMaterial({ color: '#ffcf7a' })),
+      -L
+    );
+    const light = new THREE.PointLight('#ffb46a', 900, 240, 1.6);
+    light.position.y = -L - 2;
+    piv.add(light);
+    swing.push({ g: piv, phase, amp: 0.05 });
+    return { flame: fl, light };
+  };
+  const { flame: lFlame, light: lantern } = lanternAt(
     -W * 0.25,
-    (lanternY + floorY + RH) / 2 + 2,
     -6,
-    false
+    top + 52,
+    0
   );
-  mesh(
-    new THREE.CylinderGeometry(3.2, 4, 1.4, 8),
-    lib.brass,
-    -W * 0.25,
-    lanternY + 6,
-    -6,
-    false
-  );
-  mesh(
-    new THREE.CylinderGeometry(3.4, 3.4, 9, 8, 1, true),
-    glass,
-    -W * 0.25,
-    lanternY,
-    -6,
-    false
-  );
-  mesh(
-    new THREE.CylinderGeometry(4, 3.2, 1.2, 8),
-    lib.brass,
-    -W * 0.25,
-    lanternY - 5,
-    -6,
-    false
-  );
-  const lFlame = mesh(
-    new THREE.SphereGeometry(1.1, 10, 8),
-    keep(new THREE.MeshBasicMaterial({ color: '#ffcf7a' })),
-    -W * 0.25,
-    lanternY,
-    -6,
-    false
-  );
-  const lantern = new THREE.PointLight('#ffb46a', 900, 220, 1.6);
-  lantern.position.set(-W * 0.25, lanternY - 2, -6);
-  // Pas d'ombres pour la lanterne : une lumière ponctuelle ombrée redessine
-  // la scène six fois par image.
-  g.add(lantern);
 
   // --- Objets sur le bureau ---
   const y0 = top;
@@ -799,10 +1208,42 @@ export function buildCabin(
       ).rotation.x = Math.PI / 2;
   }
 
-  // Petite table ronde au fond, où deux officiers discutent, chopes en main.
+  // Petite table ronde avec échiquier, chopes et deux chaises.
+  const pewter = mat({ color: '#8d8e90', metalness: 0.9, roughness: 0.4 });
+  const chair = (x: number, z: number, yaw: number) => {
+    const c = new THREE.Group();
+    c.position.set(x, floorY, z);
+    c.rotation.y = yaw;
+    g.add(c);
+    const part = (
+      geo: THREE.BufferGeometry,
+      m: THREE.Material,
+      px: number,
+      py: number,
+      pz: number
+    ) => {
+      const mm = new THREE.Mesh(keep(geo), m);
+      mm.position.set(px, py, pz);
+      mm.castShadow = mm.receiveShadow = true;
+      c.add(mm);
+    };
+    part(new THREE.BoxGeometry(18, 2, 18), lib.darkWood, 0, 20, 0);
+    part(new THREE.BoxGeometry(17, 2.5, 17), velvet, 0, 22, 0);
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1])
+        part(
+          new THREE.CylinderGeometry(0.9, 0.7, 20, 8),
+          lib.darkWood,
+          sx * 7.5,
+          10,
+          sz * 7.5
+        );
+    part(new THREE.BoxGeometry(2, 26, 18), lib.darkWood, -8.5, 34, 0);
+    part(new THREE.BoxGeometry(1, 18, 14), velvet, -7.2, 34, 0);
+  };
   {
-    const x = -W * 0.22 + 5,
-      z = farZ - 72;
+    const x = -W * 0.48,
+      z = farZ - 78;
     mesh(
       new THREE.CylinderGeometry(16, 16, 2, 28),
       lib.darkWood,
@@ -824,239 +1265,170 @@ export function buildCabin(
       floorY + 1,
       z
     );
-    const pewter = mat({ color: '#8d8e90', metalness: 0.9, roughness: 0.4 });
-    for (const dx of [-5, 6])
+    for (const dx of [-8, 9])
       mesh(
         new THREE.CylinderGeometry(2, 2.2, 5, 16),
         pewter,
         x + dx,
         floorY + 49.5,
-        z + (dx > 0 ? 3 : -2)
+        z + (dx > 0 ? 6 : -5)
       );
-    mesh(
-      new THREE.BoxGeometry(12, 0.3, 8),
-      parchment,
-      x + 1,
-      floorY + 47.2,
-      z - 4,
-      false
-    ).rotation.y = 0.4;
-    // Lanterne au-dessus d'eux.
-    mesh(
-      new THREE.CylinderGeometry(3.4, 3.4, 9, 8, 1, true),
-      glass,
+    // Échiquier en cours de partie.
+    const cc = document.createElement('canvas');
+    cc.width = cc.height = 128;
+    const c2 = cc.getContext('2d')!;
+    for (let i = 0; i < 8; i++)
+      for (let j = 0; j < 8; j++) {
+        c2.fillStyle = (i + j) % 2 ? '#2a1a10' : '#e4cf9c';
+        c2.fillRect(i * 16, j * 16, 16, 16);
+      }
+    const ct = keep(new THREE.CanvasTexture(cc));
+    ct.colorSpace = THREE.SRGBColorSpace;
+    const board = mesh(
+      new THREE.BoxGeometry(14, 0.8, 14),
+      keep(new THREE.MeshStandardMaterial({ map: ct, roughness: 0.5 })),
       x,
-      floorY + 108,
+      floorY + 47.4,
       z,
       false
     );
-    mesh(
-      new THREE.SphereGeometry(1.1, 10, 8),
-      keep(new THREE.MeshBasicMaterial({ color: '#ffcf7a' })),
-      x,
-      floorY + 108,
-      z,
-      false
-    );
-    const back = new THREE.PointLight('#ffb46a', 1400, 260, 1.6);
-    back.position.set(x, floorY + 104, z);
-    g.add(back);
+    board.rotation.y = 0.3;
+    const rr = rnd(13);
+    const ivory = mat({ color: '#efe6d0', roughness: 0.4 });
+    const ebony = mat({ color: '#1a1412', roughness: 0.35 });
+    for (let k = 0; k < 14; k++) {
+      const h = 1.2 + rr() * 1.4;
+      const pc = mesh(
+        new THREE.CylinderGeometry(0.35, 0.6, h, 10),
+        k % 2 ? ivory : ebony,
+        x + (rr() - 0.5) * 11,
+        floorY + 47.8 + h / 2,
+        z + (rr() - 0.5) * 11,
+        false
+      );
+      void pc;
+    }
+    chair(x - 24, z, 0);
+    chair(x + 24, z + 2, Math.PI);
   }
-
-  // --- Équipage autour de la table : deux officiers penchés sur la carte qui
-  // discutent, un timonier qui fait les cent pas, un matelot appuyé au bureau,
-  // un autre au globe. ---
-  const FIG = 44; // personnages à l'échelle du bureau (1 m réel ≈ 44 unités)
-  const crew = new THREE.Group();
-  crew.position.y = floorY;
-  crew.scale.setScalar(FIG);
-  g.add(crew);
-  const looks: FigureLook[] = [
-    // Le capitaine : bicorne, épaulettes, barbe.
-    {
-      coat: '#1f2c45',
-      trim: '#b8862c',
-      vest: '#d8c9a0',
-      breeches: '#e6dcc4',
-      skin: '#d6a483',
-      hair: '#3a2a1e',
-      hat: 'bicorne',
-      beard: true,
-      epaulettes: true,
-    },
-    // Le second : tricorne, épaulettes.
-    {
-      coat: '#6a2420',
-      trim: '#d8b06a',
-      vest: '#2a2a30',
-      breeches: '#d9cfb8',
-      skin: '#c48d6a',
-      hair: '#1c1612',
-      hat: 'tricorne',
-      epaulettes: true,
-    },
-    // Le timonier : matelot au foulard.
-    {
-      coat: '#7a2e22',
-      trim: '#2f4a6a',
-      vest: '#4a3a28',
-      breeches: '#3a3f4a',
-      skin: '#a8724e',
-      hair: '#2a1c12',
-      hat: 'foulard',
-      sailor: true,
-    },
-    // Le navigateur, au globe.
-    {
-      coat: '#2f4030',
-      trim: '#c9a24a',
-      vest: '#8a6a3a',
-      breeches: '#3a3028',
-      skin: '#e0b494',
-      hair: '#8a6a44',
-      hat: 'tricorne',
-    },
-    // Un matelot barbu, bras croisés.
-    {
-      coat: '#2a3550',
-      trim: '#a83a2a',
-      vest: '#5a4630',
-      breeches: '#4a4038',
-      skin: '#b98663',
-      hair: '#4a3020',
-      hat: 'aucun',
-      beard: true,
-      sailor: true,
-    },
-  ];
-  const figs = looks.map((l) => {
-    const f = new Figure(l, lib.brass);
-    crew.add(f.root);
-    own.push(f);
-    return f;
-  });
-  const yawTo = (dx: number, dz: number) => Math.atan2(-dz, dx);
-  const M = (v: number) => v / FIG;
-  const tableX = -W * 0.22 + 5,
-    tableZ = farZ - 72;
-  const placeCrew = (t: number) => {
-    // Le capitaine parle en gesticulant, tourné vers le second.
-    {
-      const p = restPose();
-      const talk = Math.sin(t * 0.7) > -0.2;
-      p.x = M(tableX - 20);
-      p.z = M(tableZ + 6);
-      p.yaw = yawTo(1, -0.25);
-      p.lean = 0.05 + 0.03 * Math.sin(t * 1.3);
-      p.headYaw = 0.15 * Math.sin(t * 0.9);
-      p.nod = 0.06 * Math.sin(t * 2.3);
-      p.armR = talk
-        ? {
-            fwd: 0.7 + 0.25 * Math.sin(t * 3.1),
-            side: 0.25,
-            bend: 1.0 + 0.35 * Math.sin(t * 2.6),
-          }
-        : { fwd: 0.1, side: 0.08, bend: 0.25 };
-      // Main gauche derrière le dos.
-      p.armL = { fwd: -0.3, side: 0.1, bend: 1.3, turn: -0.6 };
-      figs[0].pose(p);
+  // Fauteuil du capitaine, derrière le bureau.
+  {
+    const c = new THREE.Group();
+    // Repoussé et tourné de biais : il ne cache pas la galerie.
+    c.position.set(W * 0.16, floorY, farZ - 24);
+    c.rotation.y = 0.45;
+    c.scale.setScalar(0.85);
+    g.add(c);
+    const part = (
+      geo: THREE.BufferGeometry,
+      m: THREE.Material,
+      px: number,
+      py: number,
+      pz: number
+    ) => {
+      const mm = new THREE.Mesh(keep(geo), m);
+      mm.position.set(px, py, pz);
+      mm.castShadow = mm.receiveShadow = true;
+      c.add(mm);
+    };
+    const hide = mat({ color: '#4a1c14', roughness: 0.55 });
+    part(new THREE.BoxGeometry(26, 4, 22), lib.darkWood, 0, 20, 0);
+    part(new THREE.BoxGeometry(24, 4, 20), hide, 0, 24, 0);
+    part(new THREE.BoxGeometry(28, 52, 4), lib.darkWood, 0, 44, -11);
+    part(new THREE.BoxGeometry(23, 44, 2), hide, 0, 46, -9);
+    for (const sx of [-1, 1]) {
+      part(new THREE.BoxGeometry(3, 14, 22), lib.darkWood, sx * 13.5, 31, 0);
+      part(
+        new THREE.CylinderGeometry(1.1, 0.9, 20, 8),
+        lib.darkWood,
+        sx * 11,
+        10,
+        9
+      );
+      part(
+        new THREE.CylinderGeometry(1.1, 0.9, 20, 8),
+        lib.darkWood,
+        sx * 11,
+        10,
+        -9
+      );
+      part(new THREE.SphereGeometry(2, 12, 10), lib.brass, sx * 13, 71, -11);
     }
-    // Le second écoute, une main sur la table, puis désigne un point.
-    {
-      const p = restPose();
-      const point = Math.sin(t * 0.7 + 2.4) > 0.35;
-      p.x = M(tableX + 20);
-      p.z = M(tableZ - 2);
-      p.yaw = yawTo(-1, 0.15);
-      p.lean = point ? 0.16 : 0.06;
-      p.nod = point ? 0.12 : 0.05 + 0.08 * Math.max(0, Math.sin(t * 1.7));
-      p.armR = point
-        ? { fwd: 1.25, side: 0.05, bend: 0.12 }
-        : { fwd: 0.55, side: 0.12, bend: 0.75 };
-      p.armL = { fwd: 0.05, side: 0.08, bend: 0.3 };
-      figs[1].pose(p);
+    for (let k = 0; k < 7; k++)
+      part(
+        new THREE.SphereGeometry(0.5, 8, 6),
+        lib.brass,
+        -10.5 + k * 3.5,
+        68,
+        -7.9
+      );
+  }
+  // Pipe posée près de la chope, qui fume encore.
+  const smoke: { s: THREE.Sprite; t0: number }[] = [];
+  {
+    const x = R + 6,
+      z = 13;
+    mesh(
+      new THREE.CylinderGeometry(1.1, 0.8, 2, 14),
+      lib.darkWood,
+      x,
+      y0 + 1.6,
+      z
+    );
+    const stem = mesh(
+      new THREE.CylinderGeometry(0.22, 0.25, 7, 8),
+      lib.darkWood,
+      x - 3.5,
+      y0 + 0.9,
+      z + 0.5
+    );
+    stem.rotation.z = Math.PI / 2 - 0.2;
+    const sc = document.createElement('canvas');
+    sc.width = sc.height = 64;
+    const sg = sc.getContext('2d')!;
+    const grd = sg.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, 'rgba(230,225,220,0.55)');
+    grd.addColorStop(1, 'rgba(230,225,220,0)');
+    sg.fillStyle = grd;
+    sg.fillRect(0, 0, 64, 64);
+    const st = keep(new THREE.CanvasTexture(sc));
+    for (let k = 0; k < 10; k++) {
+      const sp = new THREE.Sprite(
+        keep(
+          new THREE.SpriteMaterial({
+            map: st,
+            transparent: true,
+            depthWrite: false,
+          })
+        )
+      );
+      sp.position.set(x, y0 + 3, z);
+      g.add(sp);
+      smoke.push({ s: sp, t0: k * 0.6 });
     }
-    // Le timonier fait les cent pas au fond.
-    {
-      const span = BW * 0.9;
-      const speed = 20;
-      const leg = span / speed;
-      const cyc = t % (2 * leg + 5);
-      let u: number, dir: number;
-      if (cyc < leg) {
-        u = cyc / leg;
-        dir = 1;
-      } else if (cyc < leg + 2.5) {
-        u = 1;
-        dir = 0;
-      } else if (cyc < 2 * leg + 2.5) {
-        u = 1 - (cyc - leg - 2.5) / leg;
-        dir = -1;
-      } else {
-        u = 0;
-        dir = 0;
-      }
-      const p = restPose();
-      p.x = M(-span / 2 + u * span);
-      p.z = M(farZ - 110);
-      p.yaw = dir > 0 ? yawTo(1, 0) : dir < 0 ? yawTo(-1, 0) : yawTo(0, 1);
-      if (dir !== 0) {
-        const ph = ((u * span) / FIG) * ((Math.PI * 2) / 1.4);
-        const sw = Math.sin(ph);
-        p.legL = { fwd: sw * 0.42, bend: Math.max(0, -Math.cos(ph)) * 0.7 };
-        p.legR = { fwd: -sw * 0.42, bend: Math.max(0, Math.cos(ph)) * 0.7 };
-        p.armL = { fwd: -sw * 0.35, side: 0.08, bend: 0.3 };
-        p.armR = { fwd: sw * 0.35, side: 0.08, bend: 0.3 };
-        p.bob = Math.abs(Math.cos(ph)) * 0.025;
-        p.lean = 0.05;
-      } else {
-        // Mains dans le dos à chaque bout.
-        p.armL = { fwd: -0.35, side: 0.1, bend: 1.3, turn: -0.7 };
-        p.armR = { fwd: -0.35, side: 0.1, bend: 1.3, turn: -0.7 };
-        p.headYaw = 0.4 * Math.sin(t * 0.8);
-      }
-      figs[2].pose(p);
-    }
-    // Le navigateur fait tourner le globe et l'étudie.
-    {
-      const p = restPose();
-      p.x = M(BW / 2 + 22);
-      p.z = M(farZ - 58);
-      p.yaw = yawTo(1, -0.15);
-      p.lean = 0.12;
-      p.nod = 0.15;
-      p.headYaw = 0.1 * Math.sin(t * 0.5);
-      p.armR = {
-        fwd: 0.95 + 0.12 * Math.sin(t * 1.5),
-        side: 0.05,
-        bend: 0.5 + 0.2 * Math.sin(t * 1.5),
-      };
-      p.armL = { fwd: 0.1, side: 0.08, bend: 0.2 };
-      figs[3].pose(p);
-    }
-    // Le matelot, bras croisés, suit la discussion en se balançant.
-    {
-      const p = restPose();
-      p.x = M(-BW / 2 - 46);
-      p.z = M(farZ - 34);
-      p.yaw = yawTo(0.7, 0.4);
-      p.twist = 0.05 * Math.sin(t * 0.6);
-      p.headYaw = 0.25 + 0.15 * Math.sin(t * 0.45);
-      p.bob = 0.008 * Math.sin(t * 1.2);
-      // Bras croisés : avant-bras repliés à l'horizontale devant la poitrine.
-      p.armL = { fwd: 0.12, side: 0.1, bend: 1.5, turn: 1.15 };
-      p.armR = { fwd: 0.18, side: 0.1, bend: 1.42, turn: 1.05 };
-      p.legL = { fwd: 0.08, bend: 0.05 };
-      p.legR = { fwd: -0.06, bend: 0 };
-      figs[4].pose(p);
-    }
-  };
-  placeCrew(0);
+  }
 
   return {
     group: g,
     update(time: number) {
-      placeCrew(time);
+      // Roulis : les lanternes et le balancier oscillent, le feu rougeoie,
+      // la pipe fume, la poussière danse dans la lumière.
+      for (const l of swing) {
+        l.g.rotation.z = Math.sin(time * 0.55 + l.phase) * l.amp;
+        l.g.rotation.x = Math.sin(time * 0.4 + l.phase * 2) * l.amp * 0.6;
+      }
+      pendulum.rotation.z = Math.sin(time * Math.PI * 0.5) * 0.16;
+      const fk = 0.8 + 0.12 * Math.sin(time * 9) + 0.08 * Math.sin(time * 23.7);
+      fireLight.intensity = 700 * fk;
+      fireGlow.color.setRGB(1, 0.42 * fk + 0.1, 0.12);
+      for (const p of smoke) {
+        const u = ((time + p.t0) % 6) / 6;
+        p.s.position.y = y0 + 3 + u * 26;
+        p.s.position.x = R + 6 + Math.sin(time * 0.8 + p.t0 * 3) * u * 3;
+        p.s.scale.setScalar(1.5 + u * 6);
+        p.s.material.opacity = Math.sin(u * Math.PI) * 0.5;
+      }
+      motes.uniforms.uTime.value = time;
       for (const f of flames) {
         const k =
           0.85 +
