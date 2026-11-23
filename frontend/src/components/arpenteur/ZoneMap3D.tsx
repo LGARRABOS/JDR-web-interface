@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { live } from '../../arpenteur3d/live';
 import { nodeName } from '../../arpenteur/keld';
 import {
@@ -12,6 +11,7 @@ import {
   type Spot,
 } from '../../arpenteur/spots';
 import type { MapState } from '../../arpenteur/types';
+import { createMapView } from '../../scene3d/mapView';
 import { ZoneMapScene, type ZoneMapKit } from '../../scene3d/zoneMap';
 import { useTravel } from './useTravel';
 
@@ -24,11 +24,14 @@ export function ZoneMap3D({
   can,
   save,
   onClose,
+  onBack,
 }: {
   map: MapState;
   can: boolean;
   save: (next: MapState, log?: string) => void;
   onClose: () => void;
+  /** Retour à la carte des secteurs (quand on y est entré depuis elle). */
+  onBack?: () => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -87,121 +90,43 @@ export function ZoneMap3D({
       canvas: HTMLCanvasElement,
       wrap: HTMLDivElement
     ) => {
-      const renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: true,
-        powerPreference: 'high-performance',
-      });
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.05;
       const zm = new ZoneMapScene(kit, spots, ZONE_PERIOD);
-      const cam = new THREE.PerspectiveCamera(34, 1, 0.5, 900);
-      // Vue d'ensemble, légèrement inclinée, centrée sur le navire.
       const first = live.stage?.mapInfo();
       if (first) zm.update(first, 0, state.current);
+      const hitOf = (e: PointerEvent) => {
+        const p = view.pick(e, zm.hits);
+        return {
+          spot: spotById(p.obj ? (p.obj.userData.spot as string) : ''),
+          x: p.x,
+          y: p.y,
+        };
+      };
       // Vue d'ensemble de la carte, posée sur le bureau.
-      cam.position.set(0, 56, 36);
-      const controls = new OrbitControls(cam, canvas);
-      controls.target.set(0, 0, 1);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.08;
-      controls.minDistance = 12;
-      controls.maxDistance = 120;
-      controls.minPolarAngle = 0.12;
-      controls.maxPolarAngle = 1.25;
-      controls.screenSpacePanning = false;
-      // Clic gauche maintenu : on fait glisser la carte ; clic droit : on
-      // tourne autour ; molette : zoom. Au doigt : glisser, pincer.
-      controls.mouseButtons = {
-        LEFT: THREE.MOUSE.PAN,
-        MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: THREE.MOUSE.ROTATE,
-      };
-      controls.touches = {
-        ONE: THREE.TOUCH.PAN,
-        TWO: THREE.TOUCH.DOLLY_ROTATE,
-      };
-      controls.panSpeed = 1.1;
-      controls.update();
-      const resize = () => {
-        const r = wrap.getBoundingClientRect();
-        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-        renderer.setSize(r.width, r.height, false);
-        cam.aspect = r.width / Math.max(1, r.height);
-        cam.updateProjectionMatrix();
-      };
-      const ro = new ResizeObserver(resize);
-      ro.observe(wrap);
-      resize();
-      // Survol et clic sur les lieux-dits.
-      const ray = new THREE.Raycaster();
-      const ndc = new THREE.Vector2();
-      const pickAt = (e: PointerEvent) => {
-        const r = canvas.getBoundingClientRect();
-        ndc.set(
-          ((e.clientX - r.left) / r.width) * 2 - 1,
-          -((e.clientY - r.top) / r.height) * 2 + 1
-        );
-        ray.setFromCamera(ndc, cam);
-        const hit = ray.intersectObjects(zm.hits, false)[0];
-        const id = hit ? (hit.object.userData.spot as string) : '';
-        return { id, x: e.clientX - r.left, y: e.clientY - r.top };
-      };
-      let down: { x: number; y: number } | null = null;
-      const onMove = (e: PointerEvent) => {
-        const p = pickAt(e);
-        const s = spotById(p.id);
-        setHover(s ? { spot: s, x: p.x, y: p.y } : null);
-        canvas.style.cursor = s ? 'pointer' : down ? 'grabbing' : 'grab';
-      };
-      const onDown = (e: PointerEvent) =>
-        (down = { x: e.clientX, y: e.clientY });
-      const onUp = (e: PointerEvent) => {
-        // Un clic (pas un glissé pour tourner la vue) sur un lieu : on y va.
-        if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6) {
-          const p = pickAt(e);
-          if (p.id) pickRef.current(p.id);
-        }
-        down = null;
-      };
-      const onLeave = () => setHover(null);
-      canvas.addEventListener('pointermove', onMove);
-      canvas.addEventListener('pointerdown', onDown);
-      canvas.addEventListener('pointerup', onUp);
-      canvas.addEventListener('pointerleave', onLeave);
-      const t0 = performance.now();
-      let raf = 0;
-      const frame = () => {
-        raf = requestAnimationFrame(frame);
-        if (document.hidden) return;
-        const info = live.stage?.mapInfo() ?? null;
-        zm.update(info, (performance.now() - t0) / 1000, state.current);
-        // La vue reste au-dessus de la maquette.
-        // La vue reste au-dessus du bureau (la carte et ses abords).
-        const t = controls.target;
-        const ox = t.x,
-          oz = t.z;
-        t.x = Math.max(-zm.width / 2 - 14, Math.min(zm.width / 2 + 14, t.x));
-        t.z = Math.max(-zm.depth / 2 - 12, Math.min(zm.depth / 2 + 14, t.z));
-        t.y = 0;
-        cam.position.x += t.x - ox;
-        cam.position.z += t.z - oz;
-        controls.update();
-        renderer.render(zm.scene, cam);
-      };
-      raf = requestAnimationFrame(frame);
+      const view = createMapView(canvas, wrap, {
+        scene: zm.scene,
+        bounds: { x: zm.width / 2 + 14, z: zm.depth / 2 + 13 },
+        start: {
+          pos: new THREE.Vector3(0, 56, 36),
+          target: new THREE.Vector3(0, 0, 1),
+        },
+        frame: (time) =>
+          zm.update(live.stage?.mapInfo() ?? null, time, state.current),
+        onHover: (e) => {
+          const h = hitOf(e);
+          setHover(h.spot ? { spot: h.spot, x: h.x, y: h.y } : null);
+          if (h.spot) canvas.style.cursor = 'pointer';
+          else if (canvas.style.cursor === 'pointer')
+            canvas.style.cursor = 'grab';
+        },
+        onClick: (e) => {
+          const h = hitOf(e);
+          if (h.spot) pickRef.current(h.spot.id);
+        },
+        onLeave: () => setHover(null),
+      });
       return () => {
-        cancelAnimationFrame(raf);
-        ro.disconnect();
-        canvas.removeEventListener('pointermove', onMove);
-        canvas.removeEventListener('pointerdown', onDown);
-        canvas.removeEventListener('pointerup', onUp);
-        canvas.removeEventListener('pointerleave', onLeave);
-        controls.dispose();
+        view.dispose();
         zm.dispose();
-        renderer.dispose();
       };
     };
     return () => {
@@ -232,6 +157,15 @@ export function ZoneMap3D({
       aria-label="Carte des lieux-dits"
     >
       <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-white/10 bg-[#15100b]">
+        {onBack && (
+          <button
+            type="button"
+            className="h-8 px-3 rounded-full border border-white/20 text-[#e9dcc0] text-sm hover:bg-white/10"
+            onClick={onBack}
+          >
+            ← Secteurs
+          </button>
+        )}
         <div>
           <p className="font-heading text-[10px] uppercase tracking-[0.3em] text-[#cdb68c] opacity-80">
             Lieux-dits

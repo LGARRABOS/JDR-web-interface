@@ -1,17 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArpenteurAPI } from '../../api/client';
 import { MARKER_KINDS } from '../../arpenteur/catalog';
-import {
-  CITIES,
-  DESERTS,
-  REGIONS,
-  cityById,
-  isKnownNode,
-  neighbors,
-  nodeName,
-  UNKNOWN,
-  regionById,
-} from '../../arpenteur/keld';
+import { neighbors, nodeName, UNKNOWN, regionById } from '../../arpenteur/keld';
 import { newId, shortDateTime, type Rights } from '../../arpenteur/logic';
 import type { UpdateFn } from '../../arpenteur/useArpenteur';
 import type {
@@ -23,19 +13,12 @@ import type {
 import type { GameStore } from '../../realtime/gameStore';
 import { getErrorMessage } from '../../utils/errorMessage';
 import { KeldMap } from './KeldMap';
-import { ZoneMap3D } from './ZoneMap3D';
+import { WorldMap3D } from './WorldMap3D';
+import { MarkerEditor } from './MapMarkers';
+import { toUnknown } from '../../arpenteur/mapActions';
 import { spotsOf } from '../../arpenteur/spots';
 import { useTravel } from './useTravel';
-import { TRAVEL_SECONDS } from '../../arpenteur/travel';
-import {
-  Btn,
-  Card,
-  Dialog,
-  LiveField,
-  ReadOnlyHint,
-  SelectField,
-  TextField,
-} from './ui';
+import { Btn, Card } from './ui';
 
 interface Props {
   gameId: number;
@@ -46,15 +29,6 @@ interface Props {
   store: GameStore;
   onError: (msg: string) => void;
 }
-
-const NODE_OPTIONS = [
-  { id: '', label: '—' },
-  ...REGIONS.map((r) => ({
-    id: r.id,
-    label: `${r.id} (${DESERTS[r.desert].name})`,
-  })),
-  ...CITIES.map((c) => ({ id: c.id, label: c.name })),
-];
 
 export function MapPanel({
   gameId,
@@ -67,10 +41,7 @@ export function MapPanel({
 }: Props) {
   const [view, setView] = useState<'reseau' | 'illustree'>('reseau');
   const map = doc.map;
-  const [selected, setSelected] = useState<string | null>(map.sector || null);
   const [editing, setEditing] = useState<Marker | null>(null);
-  // Carte 3D des lieux-dits de la zone où l'on est (clic sur sa position).
-  const [zoneMap, setZoneMap] = useState(false);
   const can = rights.map;
   // Voyage en cours : on attend l'arrivée avant de repartir.
   const travel = useTravel(map.travel);
@@ -81,57 +52,8 @@ export function MapPanel({
   const save = (next: MapState, log?: string) =>
     update('map', next, { log, immediate: !!log });
 
-  // Départ vers une position voisine (voyage animé), ou placement direct par le MJ.
-  const moveTo = (id: string, voyage = true) => {
-    const name = nodeName(id, map.sectorNames);
-    // Depuis la position inconnue, le navire surgit toujours d'un portail.
-    const fromUnknown = !map.sector;
-    const go = (voyage && !!map.sector && map.sector !== id) || fromUnknown;
-    save(
-      {
-        ...map,
-        sector: id,
-        destination: map.destination === id ? '' : map.destination,
-        trail: [...map.trail, { sector: id, at: new Date().toISOString() }],
-        spot: '',
-        hop: null,
-        travel: go
-          ? {
-              from: map.sector || UNKNOWN,
-              to: id,
-              startedAt: new Date().toISOString(),
-              duration: TRAVEL_SECONDS,
-            }
-          : null,
-      },
-      `${fromUnknown ? "L'arpenteur surgit d'un portail d'Aether :" : go ? 'En route vers' : 'Arrivée :'} ${name}${regionById(id) && name !== id ? ` (${id})` : ''}`
-    );
-  };
-  // Le MJ renvoie le navire à la position inconnue, par un portail.
-  const toUnknown = () =>
-    save(
-      {
-        ...map,
-        sector: '',
-        destination: '',
-        spot: '',
-        hop: null,
-        travel: {
-          from: map.sector,
-          to: UNKNOWN,
-          startedAt: new Date().toISOString(),
-          duration: TRAVEL_SECONDS,
-        },
-      },
-      "L'arpenteur franchit un portail d'Aether vers l'inconnu"
-    );
-
-  const sel = selected
-    ? { id: selected, region: regionById(selected), city: cityById(selected) }
-    : null;
-  const selMarkers = selected
-    ? map.markers.filter((m) => m.sector.toUpperCase() === selected)
-    : [];
+  // Maquette 3D des déserts (plein écran), et entrée directe dans la zone.
+  const [world, setWorld] = useState<null | 'world' | 'zone'>(null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -191,7 +113,7 @@ export function MapPanel({
         {!travel && spotsOf(map.sector || UNKNOWN).length > 0 && (
           <Btn
             className="!h-8 !px-3 text-sm"
-            onClick={() => setZoneMap(true)}
+            onClick={() => setWorld('zone')}
             title="Maquette 3D de la zone et de ses lieux-dits (ou cliquez sur votre position)"
           >
             🗺 Lieux-dits
@@ -200,7 +122,10 @@ export function MapPanel({
         {isGM && can && map.sector && !travel && (
           <Btn
             className="!h-8 !px-3 text-sm"
-            onClick={toUnknown}
+            onClick={() => {
+              const { next, log } = toUnknown(map);
+              save(next, log);
+            }}
             title="Le navire franchit un portail d'Aether et disparaît vers la mer de brume"
           >
             ✦ Envoyer en position inconnue
@@ -208,252 +133,49 @@ export function MapPanel({
         )}
       </div>
 
-      {zoneMap && (
-        <ZoneMap3D
-          map={map}
+      {world && (
+        <WorldMap3D
+          doc={doc}
           can={can}
+          isGM={isGM}
           save={save}
-          onClose={() => setZoneMap(false)}
+          startInZone={world === 'zone'}
+          onClose={() => setWorld(null)}
         />
       )}
 
       {view === 'reseau' ? (
         <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+          {/* Aperçu : la carte se consulte et se manie en 3D, en plein écran. */}
           <Card className="!p-2 sm:!p-3 overflow-hidden">
-            <KeldMap
-              current={map.sector}
-              destination={map.destination}
-              names={map.sectorNames}
-              trail={map.trail}
-              markers={map.markers}
-              selected={selected}
-              reachable={reachable}
-              travel={travel}
-              hangar={map.hangar}
-              onSelect={(id) => {
-                setSelected(id);
-                // Clic sur la position actuelle : carte 3D de ses lieux-dits.
-                const at = map.sector || UNKNOWN;
-                if (id === at && !travel && spotsOf(at).length)
-                  setZoneMap(true);
-              }}
-            />
-            <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pt-2 text-xs text-fantasy-muted">
-              {Object.values(DESERTS).map((d) => (
-                <span key={d.name} className="flex items-center gap-1.5">
-                  <span
-                    className="w-3 h-3 rounded-sm"
-                    style={{ background: d.color }}
-                  />
-                  {d.name}
+            <button
+              type="button"
+              className="relative block w-full text-left group"
+              onClick={() => setWorld('world')}
+              title="Ouvrir la carte"
+            >
+              <div className="pointer-events-none">
+                <KeldMap
+                  current={map.sector}
+                  destination={map.destination}
+                  names={map.sectorNames}
+                  trail={map.trail}
+                  markers={map.markers}
+                  selected={null}
+                  reachable={reachable}
+                  travel={travel}
+                  hangar={map.hangar}
+                  onSelect={() => {}}
+                />
+              </div>
+              <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/35 transition-colors">
+                <span className="arp-plate rounded-xl px-5 py-2.5 font-heading text-base sm:text-lg opacity-90 group-hover:opacity-100">
+                  🗺 Ouvrir la carte
                 </span>
-              ))}
-              <span>⇢ traversée possible</span>
-              <span>□ trajet ville ↔ désert</span>
-            </div>
+              </span>
+            </button>
           </Card>
           <div className="flex flex-col gap-4">
-            <Card
-              title={sel ? nodeName(sel.id, map.sectorNames) : 'Sélection'}
-              subtitle={
-                sel?.id === UNKNOWN
-                  ? "Mer de brume d'Aether, hors de la carte"
-                  : sel?.region
-                    ? `${sel.id} · désert de ${DESERTS[sel.region.desert].name}`
-                    : sel?.city
-                      ? sel.city.capital
-                        ? 'Capitale'
-                        : 'Cité'
-                      : 'Cliquez sur une sous-région ou une ville'
-              }
-            >
-              {!can && <ReadOnlyHint doc={doc} section="map" />}
-              {sel?.id === UNKNOWN && (
-                <div className="flex flex-col gap-3 text-sm text-fantasy-text-soft">
-                  <p>
-                    Un lieu hors des cartes : une mer de brume d'Aether, des
-                    îlots suspendus et des ruines oubliées. On n'y entre et on
-                    n'en sort que par un portail.
-                  </p>
-                  {!map.sector ? (
-                    <span className="text-fantasy-accent">
-                      ⚓ L'arpenteur est ici.
-                      {isGM &&
-                        " Choisissez une zone sur la carte pour l'y faire surgir."}
-                    </span>
-                  ) : isGM && can ? (
-                    <Btn
-                      variant="primary"
-                      onClick={toUnknown}
-                      disabled={!!travel}
-                      title={travel ? 'Attendez la fin du voyage' : undefined}
-                    >
-                      ✦ Envoyer l'arpenteur ici
-                    </Btn>
-                  ) : null}
-                </div>
-              )}
-              {sel && sel.id !== UNKNOWN && (
-                <div className="flex flex-col gap-3">
-                  {can && (
-                    <TextField
-                      label={
-                        sel.region ? 'Nom de la sous-région' : 'Nom de la cité'
-                      }
-                      value={map.sectorNames[sel.id] ?? ''}
-                      placeholder={sel.city?.name ?? 'Le Désert du phare vert…'}
-                      onCommit={(v) =>
-                        save({
-                          ...map,
-                          sectorNames: { ...map.sectorNames, [sel.id]: v },
-                        })
-                      }
-                    />
-                  )}
-                  <div className="text-xs text-fantasy-muted">
-                    <p className="mb-1">Accès direct :</p>
-                    <ul className="flex flex-wrap gap-1.5">
-                      {neighbors(sel.id).map((n) => (
-                        <li key={n.id}>
-                          <button
-                            type="button"
-                            onClick={() => setSelected(n.id)}
-                            className="px-2 py-0.5 rounded-md bg-black/25 hover:bg-black/40 text-fantasy-text-soft"
-                          >
-                            {n.via === 'traversee' ? '⇢' : '□'}{' '}
-                            {nodeName(n.id, map.sectorNames)}
-                          </button>
-                        </li>
-                      ))}
-                      {neighbors(sel.id).length === 0 && (
-                        <li>aucun trajet tracé</li>
-                      )}
-                    </ul>
-                  </div>
-                  {can && (
-                    <div className="flex flex-wrap gap-2">
-                      {map.sector === sel.id ? (
-                        <span className="text-sm text-fantasy-accent">
-                          ⚓ L'arpenteur est ici.
-                        </span>
-                      ) : (
-                        <>
-                          {reachable.has(sel.id) && (
-                            <>
-                              {map.destination !== sel.id ? (
-                                <Btn
-                                  onClick={() =>
-                                    save(
-                                      { ...map, destination: sel.id },
-                                      `Cap sur ${nodeName(sel.id, map.sectorNames)}`
-                                    )
-                                  }
-                                >
-                                  Mettre le cap
-                                </Btn>
-                              ) : (
-                                <Btn
-                                  variant="ghost"
-                                  onClick={() =>
-                                    save({ ...map, destination: '' })
-                                  }
-                                >
-                                  Annuler le cap
-                                </Btn>
-                              )}
-                              <Btn
-                                variant="primary"
-                                onClick={() => moveTo(sel.id)}
-                              >
-                                Partir
-                              </Btn>
-                            </>
-                          )}
-                          {isGM && !reachable.has(sel.id) && (
-                            <Btn onClick={() => moveTo(sel.id, false)}>
-                              {map.sector
-                                ? "Placer l'arpenteur ici"
-                                : "Faire surgir l'arpenteur ici"}
-                            </Btn>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                  {sel.city && (map.hangar === sel.id || (isGM && can)) && (
-                    <div className="flex flex-col gap-1.5 rounded-lg bg-black/25 p-2.5">
-                      <span className="text-sm text-fantasy-text">
-                        {map.hangar === sel.id
-                          ? "🏗 Hangar de l'équipage : l'arpenteur s'y amarre et l'atelier y travaille."
-                          : 'Pas de hangar dans cette ville.'}
-                      </span>
-                      {isGM && can && (
-                        <div className="flex flex-wrap gap-2">
-                          {map.hangar === sel.id ? (
-                            <Btn
-                              variant="ghost"
-                              onClick={() =>
-                                save(
-                                  { ...map, hangar: '' },
-                                  `Hangar de ${nodeName(sel.id, map.sectorNames)} cédé`
-                                )
-                              }
-                            >
-                              Retirer le hangar
-                            </Btn>
-                          ) : (
-                            <Btn
-                              onClick={() =>
-                                save(
-                                  { ...map, hangar: sel.id },
-                                  `Hangar acquis à ${nodeName(sel.id, map.sectorNames)}`
-                                )
-                              }
-                            >
-                              {map.hangar
-                                ? `Déplacer le hangar ici (remplace ${nodeName(map.hangar, map.sectorNames)})`
-                                : 'Attribuer un hangar ici'}
-                            </Btn>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs text-fantasy-muted">
-                        Repères
-                      </span>
-                      {can && (
-                        <Btn
-                          variant="ghost"
-                          className="!h-7 !px-2 text-xs"
-                          onClick={() =>
-                            setEditing({
-                              id: newId(),
-                              label: '',
-                              kind: 'mission',
-                              sector: sel.id,
-                              note: '',
-                              x: null,
-                              y: null,
-                              hidden: false,
-                            })
-                          }
-                        >
-                          + Ajouter
-                        </Btn>
-                      )}
-                    </div>
-                    <MarkerList
-                      markers={selMarkers}
-                      can={can}
-                      onEdit={setEditing}
-                    />
-                  </div>
-                </div>
-              )}
-            </Card>
             <Card title="Sillage" subtitle="Derniers déplacements">
               {map.trail.length === 0 ? (
                 <p className="text-xs text-fantasy-muted">
@@ -530,56 +252,6 @@ export function MapPanel({
         />
       )}
     </div>
-  );
-}
-
-function MarkerList({
-  markers,
-  can,
-  onEdit,
-}: {
-  markers: Marker[];
-  can: boolean;
-  onEdit: (m: Marker) => void;
-}) {
-  if (!markers.length)
-    return <p className="text-xs text-fantasy-muted">Aucun repère.</p>;
-  return (
-    <ul className="flex flex-col gap-1.5">
-      {markers.map((m) => {
-        const k = MARKER_KINDS.find((x) => x.id === m.kind);
-        return (
-          <li key={m.id}>
-            <button
-              type="button"
-              disabled={!can}
-              onClick={() => onEdit(m)}
-              className="w-full text-left flex items-start gap-2 rounded-lg px-2 py-1.5 bg-black/20 hover:bg-black/30 disabled:hover:bg-black/20"
-            >
-              <span
-                className="mt-1 w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ background: k?.color }}
-              />
-              <span className="min-w-0">
-                <span className="text-sm text-fantasy-text">
-                  {m.label || k?.label}
-                </span>
-                {m.hidden && (
-                  <span className="ml-1.5 text-[10px] uppercase text-fantasy-muted">
-                    caché
-                  </span>
-                )}
-                {m.note && (
-                  <span className="block text-xs text-fantasy-muted">
-                    {m.note}
-                  </span>
-                )}
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 
@@ -822,100 +494,5 @@ function IllustratedMap({
         </label>
       )}
     </Card>
-  );
-}
-
-function MarkerEditor({
-  marker,
-  isGM,
-  isNew,
-  onClose,
-  onSave,
-  onDelete,
-}: {
-  marker: Marker;
-  isGM: boolean;
-  isNew: boolean;
-  onClose: () => void;
-  onSave: (m: Marker) => void;
-  onDelete: () => void;
-}) {
-  const [m, setM] = useState<Marker>(marker);
-  const set = (p: Partial<Marker>) => setM((x) => ({ ...x, ...p }));
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={isNew ? 'Nouveau repère' : m.label || 'Repère'}
-      footer={
-        <>
-          {!isNew && (
-            <Btn
-              variant="ghost"
-              className="mr-auto text-red-300"
-              onClick={onDelete}
-            >
-              Supprimer
-            </Btn>
-          )}
-          <Btn onClick={onClose}>Annuler</Btn>
-          <Btn
-            variant="primary"
-            onClick={() =>
-              onSave({
-                ...m,
-                label:
-                  m.label.trim() ||
-                  (MARKER_KINDS.find((k) => k.id === m.kind)?.label ??
-                    'Repère'),
-              })
-            }
-          >
-            Enregistrer
-          </Btn>
-        </>
-      }
-    >
-      <div className="grid grid-cols-2 gap-3">
-        <LiveField
-          label="Nom"
-          value={m.label}
-          onChange={(v) => set({ label: v })}
-          className="col-span-2"
-          placeholder="Nid de Draals, oasis…"
-        />
-        <SelectField
-          label="Type"
-          value={m.kind}
-          options={MARKER_KINDS.map((k) => ({ id: k.id, label: k.label }))}
-          onChange={(v) => set({ kind: v })}
-        />
-        <SelectField
-          label="Sous-région / ville"
-          value={
-            isKnownNode(m.sector.toUpperCase()) ? m.sector.toUpperCase() : ''
-          }
-          options={NODE_OPTIONS}
-          onChange={(v) => set({ sector: v })}
-        />
-        <LiveField
-          label="Note"
-          value={m.note}
-          multiline
-          onChange={(v) => set({ note: v })}
-          className="col-span-2"
-        />
-        {isGM && (
-          <label className="col-span-2 flex items-center gap-2 text-sm text-fantasy-text-soft">
-            <input
-              type="checkbox"
-              checked={m.hidden}
-              onChange={(e) => set({ hidden: e.target.checked })}
-            />
-            Caché aux joueurs
-          </label>
-        )}
-      </div>
-    </Dialog>
   );
 }
