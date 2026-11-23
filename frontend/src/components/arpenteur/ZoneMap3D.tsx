@@ -11,8 +11,10 @@ import {
   type Spot,
 } from '../../arpenteur/spots';
 import type { MapState } from '../../arpenteur/types';
-import { createMapView } from '../../scene3d/mapView';
-import { ZoneMapScene, type ZoneMapKit } from '../../scene3d/zoneMap';
+import { createMapView, warmScene } from '../../scene3d/mapView';
+import { cachedZoneMap, type ZoneMapKit } from '../../scene3d/zoneMap';
+import { UNKNOWN } from '../../arpenteur/keld';
+import { SceneLoader } from './SceneLoader';
 import { useTravel } from './useTravel';
 
 // Carte 3D d'une zone (plein écran) : la maquette en bois de la zone avec ses
@@ -34,8 +36,8 @@ export function ZoneMap3D({
   onBack?: () => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState<'wait' | 'ok' | 'none'>('wait');
+  const [prog, setProg] = useState({ f: 0, label: 'Ouverture de la carte' });
   const [hover, setHover] = useState<{
     spot: Spot;
     x: number;
@@ -66,11 +68,12 @@ export function ZoneMap3D({
   }, [onClose]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
     const wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
+    if (!wrap) return;
     let disposed = false;
     let cleanup: (() => void) | null = null;
+    let timer = 0;
+    live.mapOpen = true;
     // Les modèles viennent de la scène du navire (rendu réaliste) : on attend
     // qu'elle soit prête.
     const tryStart = () => {
@@ -81,18 +84,44 @@ export function ZoneMap3D({
         timer = window.setTimeout(tryStart, 400);
         return;
       }
-      setReady('ok');
-      cleanup = start(kit, canvas, wrap);
+      void start(kit, wrap);
     };
-    let timer = window.setTimeout(tryStart, 0);
-    const start = (
-      kit: ZoneMapKit,
-      canvas: HTMLCanvasElement,
-      wrap: HTMLDivElement
-    ) => {
-      const zm = new ZoneMapScene(kit, spots, ZONE_PERIOD);
+    const start = async (kit: ZoneMapKit, wrap: HTMLDivElement) => {
+      setReady('wait');
+      // Maquette gardée d'une ouverture à l'autre ; la première fois, modelée
+      // peu à peu, puis préparée sur la carte graphique, sans gel.
+      const { scene: zm, fresh } = cachedZoneMap(
+        zone || UNKNOWN,
+        kit,
+        spots,
+        ZONE_PERIOD
+      );
+      const r = wrap.getBoundingClientRect();
+      const cam = new THREE.PerspectiveCamera(
+        34,
+        r.width / Math.max(1, r.height),
+        0.5,
+        900
+      );
+      cam.position.set(0, 56, 36);
+      cam.lookAt(0, 0, 1);
+      // (Aussi quand une ouverture précédente a été fermée en plein modelage.)
+      void fresh;
+      await zm.populate(
+        (f) =>
+          !disposed && setProg({ f: f * 0.5, label: 'Modelage de la maquette' })
+      );
+      if (disposed) return;
       const first = live.stage?.mapInfo();
       if (first) zm.update(first, 0, state.current);
+      await warmScene(
+        zm.scene,
+        cam,
+        (f) =>
+          !disposed &&
+          setProg({ f: 0.5 + f * 0.5, label: 'Préparation des matériaux' })
+      );
+      if (disposed) return;
       const hitOf = (e: PointerEvent) => {
         const p = view.pick(e, zm.hits);
         return {
@@ -102,11 +131,12 @@ export function ZoneMap3D({
         };
       };
       // Vue d'ensemble de la carte, posée sur le bureau.
-      const view = createMapView(canvas, wrap, {
+      const view = createMapView(wrap, {
         scene: zm.scene,
+        camera: cam,
         bounds: { x: zm.width / 2 + 14, z: zm.depth / 2 + 13 },
         start: {
-          pos: new THREE.Vector3(0, 56, 36),
+          pos: cam.position.clone(),
           target: new THREE.Vector3(0, 0, 1),
         },
         frame: (time) =>
@@ -114,9 +144,9 @@ export function ZoneMap3D({
         onHover: (e) => {
           const h = hitOf(e);
           setHover(h.spot ? { spot: h.spot, x: h.x, y: h.y } : null);
-          if (h.spot) canvas.style.cursor = 'pointer';
-          else if (canvas.style.cursor === 'pointer')
-            canvas.style.cursor = 'grab';
+          if (h.spot) view.canvas.style.cursor = 'pointer';
+          else if (view.canvas.style.cursor === 'pointer')
+            view.canvas.style.cursor = 'grab';
         },
         onClick: (e) => {
           const h = hitOf(e);
@@ -124,17 +154,17 @@ export function ZoneMap3D({
         },
         onLeave: () => setHover(null),
       });
-      return () => {
-        view.dispose();
-        zm.dispose();
-      };
+      setReady('ok');
+      cleanup = () => view.dispose();
     };
+    timer = window.setTimeout(tryStart, 0);
     return () => {
       disposed = true;
+      live.mapOpen = false;
       clearTimeout(timer);
       cleanup?.();
     };
-    // La maquette est construite une fois par ouverture (et par zone).
+    // Maquette ouverte une fois par zone.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone]);
 
@@ -200,18 +230,16 @@ export function ZoneMap3D({
         </div>
       </div>
       <div ref={wrapRef} className="relative flex-1 min-h-0">
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
-          style={{ touchAction: 'none', cursor: 'grab' }}
+        <SceneLoader
+          visible={ready === 'wait'}
+          f={prog.f}
+          label={prog.label}
+          title="Préparation de la carte…"
+          note=""
         />
-        {ready !== 'ok' && (
+        {ready === 'none' && (
           <div className="absolute inset-0 flex items-center justify-center text-center p-6 text-[#e9dcc0]">
-            {ready === 'wait' ? (
-              <p className="font-heading tracking-wide">
-                Préparation de la maquette…
-              </p>
-            ) : (
+            {
               <div className="max-w-md flex flex-col gap-3">
                 <p>
                   La maquette 3D a besoin de la vue « Profil » du navire en
@@ -232,7 +260,7 @@ export function ZoneMap3D({
                   ))}
                 </div>
               </div>
-            )}
+            }
           </div>
         )}
         {hover && (

@@ -182,6 +182,7 @@ export function ShipScene3D(props: ShipSceneProps) {
       let t0 = performance.now();
       let paused = -1;
       let dbgTick = 0;
+      let mapSkip = 0;
       const offDbg = dbg.subscribe(() => {
         dirty = true;
       });
@@ -305,6 +306,9 @@ export function ShipScene3D(props: ShipSceneProps) {
           paused = -1;
         }
         if (dbg.on && ++dbgTick % 15 === 0) dbg.scene = stage.debugInfo();
+        // Carte 3D ouverte par-dessus : la scène continue (le navire avance)
+        // mais à cadence réduite, pour laisser la carte fluide.
+        if (live.mapOpen && ++mapSkip % 4 !== 0) return;
         stage.render(time, {
           yaw: cur.yaw,
           elevation: cur.elevation,
@@ -619,6 +623,7 @@ export function ShipScene3D(props: ShipSceneProps) {
           visible={!nativeReady || resuming}
           f={nativeReady ? 1 : nativeProg.f}
           label={nativeReady ? 'Retour à bord' : nativeProg.label}
+          fullPage
         />
       )}
       <DebugPanel3D />

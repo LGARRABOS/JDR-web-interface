@@ -160,6 +160,8 @@ export class ZoneMapScene {
   private cz: number;
   private beamU = { uTime: { value: 0 } };
   private cabin: Cabin;
+  /** Modelage restant (îlots, repères), fait peu à peu par populate. */
+  private jobs: (() => void)[] = [];
 
   constructor(
     kit: ZoneMapKit,
@@ -243,23 +245,29 @@ export class ZoneMapScene {
       const x = (r() - 0.5) * (W - 5),
         z = (r() - 0.5) * (D - 4);
       if (this.pinsNear(x, z, 5.5) || Math.abs(z - this.mz(0)) < 1.6) continue;
-      const isle = aether.isle(300 + i * 7, 10 + r() * 16, {
-        ruins: i % 4 === 0,
-        crystals: i % 3 === 0,
-        tree: i % 5 === 1,
-        falls: 0,
-      });
-      isle.scale.setScalar(DECO);
-      isle.position.set(x, 0.7 + r() * 1.3, z);
-      isle.rotation.y = r() * 6;
-      aether.adopt(isle);
-      sc.add(isle);
-      this.own.push({
-        dispose: () =>
-          isle.traverse(
-            (o) =>
-              (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.dispose()
-          ),
+      const ry = r(),
+        rs = r(),
+        rh = r();
+      // Modelé plus tard, peu à peu (voir populate) : pas de gel à l'ouverture.
+      this.jobs.push(() => {
+        const isle = aether.isle(300 + i * 7, 10 + rs * 16, {
+          ruins: i % 4 === 0,
+          crystals: i % 3 === 0,
+          tree: i % 5 === 1,
+          falls: 0,
+        });
+        isle.scale.setScalar(DECO);
+        isle.position.set(x, 0.7 + rh * 1.3, z);
+        isle.rotation.y = ry * 6;
+        aether.adopt(isle);
+        sc.add(isle);
+        this.own.push({
+          dispose: () =>
+            isle.traverse(
+              (o) =>
+                (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.dispose()
+            ),
+        });
       });
     }
 
@@ -288,17 +296,20 @@ void main(){ float a = pow(1. - vUv.y, 1.4) * (.32 + .1 * sin(uTime * 2. + vUv.y
     for (const s of spots) {
       const root = new THREE.Group();
       root.position.set(this.mx(s.x), 0, this.mz(s.z));
-      const model = lms.make(s.look);
-      model.scale.setScalar(LM);
-      model.position.y = 0.3;
-      model.rotation.y = 0.5;
-      root.add(model);
-      this.own.push({
-        dispose: () =>
-          model.traverse(
-            (o) =>
-              (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.dispose()
-          ),
+      // Le repère d'abord (il compte plus que les îlots).
+      this.jobs.unshift(() => {
+        const model = lms.make(s.look);
+        model.scale.setScalar(LM);
+        model.position.y = 0.3;
+        model.rotation.y = 0.5;
+        root.add(model);
+        this.own.push({
+          dispose: () =>
+            model.traverse(
+              (o) =>
+                (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.dispose()
+            ),
+        });
       });
       const ringM = keep(
         new THREE.MeshBasicMaterial({
@@ -384,6 +395,20 @@ void main(){ float m = texture2D(uMap, gl_PointCoord).a; float a = smoothstep(.1
     this.shipGlow.position.y = -0.4;
     this.ship.add(this.shipGlow);
     sc.add(this.ship);
+  }
+
+  /** Modèle les îlots et repères en laissant la page respirer. */
+  async populate(progress?: (f: number) => void) {
+    const n = this.jobs.length;
+    let t0 = performance.now();
+    while (this.jobs.length) {
+      this.jobs.shift()!();
+      progress?.(1 - this.jobs.length / Math.max(1, n));
+      if (performance.now() - t0 > 12) {
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        t0 = performance.now();
+      }
+    }
   }
 
   /** Centre de la zone (x) : la maquette montre [cx - période/2, cx + période/2[. */
@@ -497,4 +522,24 @@ void main(){ float m = texture2D(uMap, gl_PointCoord).a; float a = smoothstep(.1
     this.own.forEach((x) => x.dispose());
     this.own = [];
   }
+}
+
+/** Maquettes déjà construites (par zone), gardées d'une ouverture à l'autre. */
+const cache = new Map<string, { ship: THREE.Object3D; scene: ZoneMapScene }>();
+export function cachedZoneMap(
+  key: string,
+  kit: ZoneMapKit,
+  spots: Spot[],
+  period: number
+) {
+  const c = cache.get(key);
+  if (c && c.ship === kit.ship) return { scene: c.scene, fresh: false };
+  // Navire changé (nouvelle construction) : maquettes refaites.
+  if (c) {
+    c.scene.dispose();
+    cache.delete(key);
+  }
+  const scene = new ZoneMapScene(kit, spots, period);
+  cache.set(key, { ship: kit.ship, scene });
+  return { scene, fresh: true };
 }

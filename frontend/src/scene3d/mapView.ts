@@ -7,6 +7,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 export interface MapView {
   renderer: THREE.WebGLRenderer;
+  canvas: HTMLCanvasElement;
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   /** Objet visé sous le pointeur (parmi `targets`), et position dans le cadre. */
@@ -24,30 +25,86 @@ export interface MapView {
   dispose(): void;
 }
 
+/**
+ * Rendu partagé par toutes les maquettes, gardé d'une ouverture à l'autre :
+ * programmes et textures déjà prêts sur la carte graphique (pas de gel).
+ */
+let shared: THREE.WebGLRenderer | null = null;
+export function mapRenderer() {
+  if (!shared) {
+    shared = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+    });
+    shared.shadowMap.enabled = true;
+    shared.shadowMap.type = THREE.PCFSoftShadowMap;
+    shared.toneMapping = THREE.ACESFilmicToneMapping;
+    shared.toneMappingExposure = 1.05;
+    shared.domElement.style.cssText =
+      'position:absolute;inset:0;width:100%;height:100%;touch-action:none';
+  }
+  return shared;
+}
+
+/** Une image sur deux à l'écran : laisse respirer la page entre deux étapes. */
+export const nextFrame = () =>
+  new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+/**
+ * Prépare une maquette sans gel : programmes compilés en parallèle, puis
+ * textures envoyées à la carte graphique une par image.
+ */
+export async function warmScene(
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  progress?: (f: number) => void
+) {
+  const r = mapRenderer();
+  try {
+    await Promise.race([
+      r.compileAsync(scene, camera),
+      new Promise((ok) => setTimeout(ok, 6000)),
+    ]);
+  } catch {
+    // sans importance : le premier rendu compilera
+  }
+  const tex = new Set<THREE.Texture>();
+  scene.traverse((o) => {
+    const m = (o as THREE.Mesh).material as
+      | THREE.Material
+      | THREE.Material[]
+      | undefined;
+    for (const mm of Array.isArray(m) ? m : m ? [m] : [])
+      for (const v of Object.values(mm as unknown as Record<string, unknown>))
+        if (v instanceof THREE.Texture) tex.add(v);
+  });
+  let i = 0;
+  for (const t of tex) {
+    r.initTexture(t);
+    progress?.(++i / Math.max(1, tex.size));
+    if (i % 2 === 0) await nextFrame();
+  }
+}
+
 export function createMapView(
-  canvas: HTMLCanvasElement,
   wrap: HTMLElement,
   opts: {
     scene: THREE.Scene;
     /** Limites du point visé (x, z). */
     bounds: { x: number; z: number };
     start: { pos: THREE.Vector3; target: THREE.Vector3 };
+    /** Caméra déjà utilisée pour préparer la maquette (facultatif). */
+    camera?: THREE.PerspectiveCamera;
     frame: (time: number) => void;
     onHover?: (e: PointerEvent) => void;
     onClick?: (e: PointerEvent) => void;
     onLeave?: () => void;
   }
 ): MapView {
-  const renderer = new THREE.WebGLRenderer({
-    canvas,
-    antialias: true,
-    powerPreference: 'high-performance',
-  });
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-  const camera = new THREE.PerspectiveCamera(34, 1, 0.5, 900);
+  const renderer = mapRenderer();
+  const canvas = renderer.domElement;
+  wrap.prepend(canvas);
+  const camera = opts.camera ?? new THREE.PerspectiveCamera(34, 1, 0.5, 900);
   camera.position.copy(opts.start.pos);
   const controls = new OrbitControls(camera, canvas);
   controls.target.copy(opts.start.target);
@@ -175,6 +232,7 @@ export function createMapView(
 
   return {
     renderer,
+    canvas,
     camera,
     controls,
     pick,
@@ -187,7 +245,8 @@ export function createMapView(
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointerleave', onLeave);
       controls.dispose();
-      renderer.dispose();
+      // Le rendu est gardé pour la prochaine ouverture ; on le décroche.
+      canvas.remove();
     },
   };
 }

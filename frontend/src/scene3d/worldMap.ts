@@ -871,3 +871,13 @@ void main(){ float dash = step(.45, fract(vUv.x * uLen * .9 - uTime * (.6 + uOn)
     this.own = [];
   }
 }
+
+/** Carte gardée d'une ouverture à l'autre (refaite si le navire change). */
+let cached: { ship: THREE.Object3D; scene: WorldMapScene } | null = null;
+export function cachedWorldMap(kit: WorldMapKit) {
+  if (cached && cached.ship === kit.ship)
+    return { scene: cached.scene, fresh: false };
+  cached?.scene.dispose();
+  cached = { ship: kit.ship, scene: new WorldMapScene(kit) };
+  return { scene: cached.scene, fresh: true };
+}

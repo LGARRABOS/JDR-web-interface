@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArpenteurAPI } from '../../api/client';
 import { MARKER_KINDS } from '../../arpenteur/catalog';
-import { neighbors, nodeName, UNKNOWN, regionById } from '../../arpenteur/keld';
+import { nodeName, UNKNOWN, regionById } from '../../arpenteur/keld';
 import { newId, shortDateTime, type Rights } from '../../arpenteur/logic';
 import type { UpdateFn } from '../../arpenteur/useArpenteur';
 import type {
@@ -12,7 +12,6 @@ import type {
 } from '../../arpenteur/types';
 import type { GameStore } from '../../realtime/gameStore';
 import { getErrorMessage } from '../../utils/errorMessage';
-import { KeldMap } from './KeldMap';
 import { WorldMap3D } from './WorldMap3D';
 import { MarkerEditor } from './MapMarkers';
 import { toUnknown } from '../../arpenteur/mapActions';
@@ -45,9 +44,6 @@ export function MapPanel({
   const can = rights.map;
   // Voyage en cours : on attend l'arrivée avant de repartir.
   const travel = useTravel(map.travel);
-  const reachable = new Set(
-    can && map.sector && !travel ? neighbors(map.sector).map((n) => n.id) : []
-  );
 
   const save = (next: MapState, log?: string) =>
     update('map', next, { log, immediate: !!log });
@@ -65,7 +61,7 @@ export function MapPanel({
           onClick={() => setView('reseau')}
           className="arp-tab"
         >
-          Réseau des déserts
+          Carte des déserts
         </button>
         <button
           type="button"
@@ -146,31 +142,38 @@ export function MapPanel({
 
       {view === 'reseau' ? (
         <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-          {/* Aperçu : la carte se consulte et se manie en 3D, en plein écran. */}
-          <Card className="!p-2 sm:!p-3 overflow-hidden">
+          {/* La carte se consulte et se manie en 3D, en plein écran. */}
+          <Card className="!p-0 overflow-hidden">
             <button
               type="button"
-              className="relative block w-full text-left group"
+              className="relative block w-full min-h-[260px] sm:min-h-[340px] text-left group overflow-hidden"
               onClick={() => setWorld('world')}
-              title="Ouvrir la carte"
+              title="Ouvrir la carte des déserts"
+              style={{
+                background:
+                  'radial-gradient(ellipse at 50% 45%, #5a3a1e 0%, #2a1a0e 60%, #120b06 100%)',
+              }}
             >
-              <div className="pointer-events-none">
-                <KeldMap
-                  current={map.sector}
-                  destination={map.destination}
-                  names={map.sectorNames}
-                  trail={map.trail}
-                  markers={map.markers}
-                  selected={null}
-                  reachable={reachable}
-                  travel={travel}
-                  hangar={map.hangar}
-                  onSelect={() => {}}
-                />
-              </div>
-              <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/35 transition-colors">
-                <span className="arp-plate rounded-xl px-5 py-2.5 font-heading text-base sm:text-lg opacity-90 group-hover:opacity-100">
-                  🗺 Ouvrir la carte
+              <span className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+                <span className="text-5xl drop-shadow" aria-hidden>
+                  🗺
+                </span>
+                <span className="font-heading text-xl sm:text-2xl text-[#f3dfb4] tracking-wide">
+                  Carte des déserts de Keld
+                </span>
+                <span className="text-sm text-[#e9dcc0]/85">
+                  {travel
+                    ? `En route vers ${nodeName(travel.to, map.sectorNames)}`
+                    : `L'arpenteur est à ${nodeName(map.sector, map.sectorNames)}`}
+                  {map.destination && !travel
+                    ? ` · cap sur ${nodeName(map.destination, map.sectorNames)}`
+                    : ''}
+                </span>
+                <span className="mt-2 arp-plate rounded-xl px-5 py-2.5 font-heading text-base sm:text-lg group-hover:brightness-125 transition">
+                  Ouvrir la carte
+                </span>
+                <span className="text-xs text-[#cdb68c]/70">
+                  Voyages, fiches des secteurs, repères et lieux-dits
                 </span>
               </span>
             </button>

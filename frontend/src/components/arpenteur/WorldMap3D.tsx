@@ -11,10 +11,21 @@ import {
   regionById,
   UNKNOWN,
 } from '../../arpenteur/keld';
-import { spotsOf } from '../../arpenteur/spots';
+import { spotsOf, ZONE_PERIOD } from '../../arpenteur/spots';
 import type { ArpenteurDoc, MapState, Marker } from '../../arpenteur/types';
-import { createMapView, type MapView } from '../../scene3d/mapView';
-import { WorldMapScene, type WorldMapKit } from '../../scene3d/worldMap';
+import {
+  createMapView,
+  nextFrame,
+  warmScene,
+  type MapView,
+} from '../../scene3d/mapView';
+import {
+  cachedWorldMap,
+  type WorldMapScene,
+  type WorldMapKit,
+} from '../../scene3d/worldMap';
+import { cachedZoneMap, type ZoneMapKit } from '../../scene3d/zoneMap';
+import { SceneLoader } from './SceneLoader';
 import { MarkerEditor } from './MapMarkers';
 import { SectorPanel } from './SectorPanel';
 import { useTravel } from './useTravel';
@@ -53,13 +64,13 @@ export function WorldMap3D({
   } | null>(null);
   const [editing, setEditing] = useState<Marker | null>(null);
   const [ready, setReady] = useState<'wait' | 'ok' | 'none'>('wait');
+  const [prog, setProg] = useState({ f: 0, label: 'Ouverture de la carte' });
   const [panel, setPanel] = useState(true);
   const travel = useTravel(map.travel);
   const reachable = new Set(
     can && map.sector && !travel ? neighbors(map.sector).map((n) => n.id) : []
   );
   const wrapRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<WorldMapScene | null>(null);
   const viewRef = useRef<MapView | null>(null);
   // État lu par la boucle de rendu.
@@ -107,12 +118,12 @@ export function WorldMap3D({
 
   useEffect(() => {
     if (mode !== 'world') return;
-    const canvas = canvasRef.current;
     const wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
+    if (!wrap) return;
     let disposed = false;
     let cleanup: (() => void) | null = null;
     let timer = 0;
+    live.mapOpen = true;
     const tryStart = () => {
       if (disposed) return;
       const kit = live.stage?.mapInfo().native as
@@ -124,9 +135,17 @@ export function WorldMap3D({
         timer = window.setTimeout(tryStart, 400);
         return;
       }
-      setReady('ok');
-      const wm = new WorldMapScene(kit);
-      sceneRef.current = wm;
+      void start(kit, wrap);
+    };
+    const start = async (kit: WorldMapKit, wrap: HTMLDivElement) => {
+      setReady('wait');
+      setProg({ f: 0.05, label: 'Dépliage de la carte' });
+      // Laisse l'écran d'attente s'afficher avant le travail.
+      await nextFrame();
+      await nextFrame();
+      if (disposed) return;
+      // Carte gardée d'une ouverture à l'autre (et au retour des lieux-dits).
+      const { scene: wm } = cachedWorldMap(kit);
       wm.setNames(map.sectorNames);
       wm.setMarkers(map.markers);
       for (const id of [
@@ -135,22 +154,44 @@ export function WorldMap3D({
         ...CITIES.map((c) => c.id),
       ])
         if (spotsOf(id).length) state.current.withSpots.add(id);
+      const r = wrap.getBoundingClientRect();
+      const cam = new THREE.PerspectiveCamera(
+        34,
+        r.width / Math.max(1, r.height),
+        0.5,
+        900
+      );
+      cam.position.set(0, 62, 42);
+      cam.lookAt(0, 0, 1);
+      wm.update(0, state.current);
+      await warmScene(
+        wm.scene,
+        cam,
+        (f) =>
+          !disposed &&
+          setProg({ f: 0.1 + f * 0.9, label: 'Préparation des matériaux' })
+      );
+      if (disposed) return;
+      sceneRef.current = wm;
       const nodeOf = (o: THREE.Object3D | null) =>
         o ? (o.userData.node as string) : '';
       // Vue d'ensemble de toute la carte.
-      const target = new THREE.Vector3(0, 0, 1);
-      const view = createMapView(canvas, wrap, {
+      const view = createMapView(wrap, {
         scene: wm.scene,
+        camera: cam,
         bounds: { x: wm.width / 2 + 14, z: wm.depth / 2 + 13 },
-        start: { pos: new THREE.Vector3(0, 62, 42), target },
+        start: {
+          pos: cam.position.clone(),
+          target: new THREE.Vector3(0, 0, 1),
+        },
         frame: (time) => wm.update(time, state.current),
         onHover: (e) => {
           const p = view.pick(e, wm.hits);
           const id = nodeOf(p.obj);
           setHover(id ? { id, x: p.x, y: p.y } : null);
-          if (id) canvas.style.cursor = 'pointer';
-          else if (canvas.style.cursor === 'pointer')
-            canvas.style.cursor = 'grab';
+          if (id) view.canvas.style.cursor = 'pointer';
+          else if (view.canvas.style.cursor === 'pointer')
+            view.canvas.style.cursor = 'grab';
         },
         onClick: (e) => {
           const id = nodeOf(view.pick(e, wm.hits).obj);
@@ -159,16 +200,33 @@ export function WorldMap3D({
         onLeave: () => setHover(null),
       });
       viewRef.current = view;
+      setReady('ok');
       cleanup = () => {
         view.dispose();
-        wm.dispose();
         sceneRef.current = null;
         viewRef.current = null;
       };
+      // Pendant qu'on regarde la carte, la maquette des lieux-dits de la zone
+      // du navire se prépare en arrière-plan : la plongée sera immédiate.
+      const at = map.sector || UNKNOWN;
+      const zkit = live.stage?.mapInfo().native as
+        | ZoneMapKit
+        | null
+        | undefined;
+      if (spotsOf(at).length && zkit) {
+        const { scene: zm } = cachedZoneMap(at, zkit, spotsOf(at), ZONE_PERIOD);
+        await zm.populate();
+        if (disposed) return;
+        const zc = new THREE.PerspectiveCamera(34, cam.aspect, 0.5, 900);
+        zc.position.set(0, 56, 36);
+        zc.lookAt(0, 0, 1);
+        await warmScene(zm.scene, zc);
+      }
     };
     timer = window.setTimeout(tryStart, 0);
     return () => {
       disposed = true;
+      live.mapOpen = false;
       clearTimeout(timer);
       cleanup?.();
     };
@@ -249,24 +307,22 @@ export function WorldMap3D({
       </div>
       <div className="relative flex-1 min-h-0 flex">
         <div ref={wrapRef} className="relative flex-1 min-w-0">
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full"
-            style={{ touchAction: 'none' }}
+          <SceneLoader
+            visible={ready === 'wait'}
+            f={prog.f}
+            label={prog.label}
+            title="Préparation de la carte…"
+            note=""
           />
-          {ready !== 'ok' && (
+          {ready === 'none' && (
             <div className="absolute inset-0 flex items-center justify-center text-center p-6 text-[#e9dcc0]">
-              {ready === 'wait' ? (
-                <p className="font-heading tracking-wide">
-                  Préparation de la carte…
-                </p>
-              ) : (
+              {
                 <p className="max-w-md">
                   La carte 3D a besoin de la vue « Profil » du navire en rendu
                   réaliste (en haut de la page). La fiche à droite reste
                   utilisable.
                 </p>
-              )}
+              }
             </div>
           )}
           {hover && hv && (

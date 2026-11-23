@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+
 /** Écran d'attente : engrenages, jauge de laiton, étape en cours. */
 function Gear({
   size,
@@ -68,16 +70,28 @@ export function SceneLoader({
   visible,
   f,
   label,
+  title = 'L’arpenteur se prépare…',
+  note = 'Les matériaux (bois, cuivre, laiton, toile, roche) sont fabriqués sur votre machine : la première ouverture prend quelques secondes.',
+  fullPage = false,
 }: {
   visible: boolean;
   f: number;
   label: string;
+  title?: string;
+  note?: string;
+  /**
+   * Sur toute la page (pendant ce travail, la page entière est occupée) ;
+   * sinon, dans le cadre de la scène.
+   */
+  fullPage?: boolean;
 }) {
-  return (
+  const box = (
     <div
-      className={`absolute inset-0 flex flex-col items-center justify-center gap-6 ${
+      className={`${fullPage ? 'fixed z-[80]' : 'absolute'} inset-0 flex flex-col items-center justify-center gap-6 ${
         visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
+      aria-hidden={!visible}
+      role={visible ? 'status' : undefined}
       style={{
         // Apparition immédiate (avant un éventuel gel), disparition en fondu.
         transition: visible ? 'none' : 'opacity .7s',
@@ -114,22 +128,23 @@ export function SceneLoader({
             }}
           />
         ))}
+        {/* Animations de transformation : elles tournent même quand la page est occupée. */}
         <Gear
           size={110}
           teeth={12}
-          className="absolute left-0 top-4 [animation:lab-spin_6s_linear_infinite]"
+          className="absolute left-0 top-4 will-change-transform [animation:lab-spin_6s_linear_infinite]"
         />
         <Gear
           size={70}
           teeth={8}
-          className="absolute left-[100px] top-[52px] [animation:lab-spin-r_3.8s_linear_infinite]"
+          className="absolute left-[100px] top-[52px] will-change-transform [animation:lab-spin-r_3.8s_linear_infinite]"
         />
       </div>
       <div
         className="text-amber-100 text-xl tracking-wide"
         style={{ fontFamily: 'serif' }}
       >
-        L’arpenteur se prépare…
+        {title}
       </div>
       <div className="w-72 h-3 rounded-full border border-amber-700/80 bg-black/50 p-[2px] shadow-[0_0_12px_rgba(255,170,80,.25)]">
         <div
@@ -141,10 +156,14 @@ export function SceneLoader({
         />
       </div>
       <div className="text-sm text-amber-200/80 h-5">{label}</div>
-      <div className="text-xs text-amber-200/40 max-w-sm text-center">
-        Les matériaux (bois, cuivre, laiton, toile, roche) sont fabriqués sur
-        votre machine : la première ouverture prend quelques secondes.
-      </div>
+      {note && (
+        <div className="text-xs text-amber-200/40 max-w-sm text-center">
+          {note}
+        </div>
+      )}
     </div>
   );
+  return fullPage && typeof document !== 'undefined'
+    ? createPortal(box, document.body)
+    : box;
 }
