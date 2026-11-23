@@ -160,6 +160,8 @@ export class ZoneMapScene {
   private cz: number;
   private beamU = { uTime: { value: 0 } };
   private cabin: Cabin;
+  private lastRoute: Route | null = null;
+  private trailTick = 0;
   /** Modelage restant (îlots, repères), fait peu à peu par populate. */
   private jobs: (() => void)[] = [];
 
@@ -489,6 +491,10 @@ void main(){ float m = texture2D(uMap, gl_PointCoord).a; float a = smoothstep(.1
       g.setDrawRange(0, 0);
       return;
     }
+    // Route restante recalculée une image sur trois (les tirets défilent
+    // d'eux-mêmes sur la carte graphique).
+    if (r === this.lastRoute && ++this.trailTick % 3 !== 0) return;
+    this.lastRoute = r;
     // Point de la route le plus proche du navire.
     let best = 0,
       bd = Infinity;

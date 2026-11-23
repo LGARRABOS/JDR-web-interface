@@ -311,9 +311,8 @@ export function buildCabin(
   );
   const lantern = new THREE.PointLight('#ffb46a', 900, 220, 1.6);
   lantern.position.set(-W * 0.25, lanternY - 2, -6);
-  lantern.castShadow = true;
-  lantern.shadow.mapSize.set(1024, 1024);
-  lantern.shadow.bias = -0.002;
+  // Pas d'ombres pour la lanterne : une lumière ponctuelle ombrée redessine
+  // la scène six fois par image.
   g.add(lantern);
 
   // --- Objets sur le bureau ---

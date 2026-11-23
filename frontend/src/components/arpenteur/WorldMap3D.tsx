@@ -62,6 +62,17 @@ export function WorldMap3D({
     x: number;
     y: number;
   } | null>(null);
+  const hoverId = useRef('');
+  const tipRef = useRef<HTMLDivElement>(null);
+  const tipPos = useRef({ x: 0, y: 0 });
+  const placeTip = (x: number, y: number) => {
+    tipPos.current = { x, y };
+    const el = tipRef.current;
+    if (el) {
+      el.style.left = `${Math.min(x + 16, (wrapRef.current?.clientWidth ?? 9999) - 270)}px`;
+      el.style.top = `${y + 16}px`;
+    }
+  };
   const [editing, setEditing] = useState<Marker | null>(null);
   const [ready, setReady] = useState<'wait' | 'ok' | 'none'>('wait');
   const [prog, setProg] = useState({ f: 0, label: 'Ouverture de la carte' });
@@ -188,7 +199,13 @@ export function WorldMap3D({
         onHover: (e) => {
           const p = view.pick(e, wm.hits);
           const id = nodeOf(p.obj);
-          setHover(id ? { id, x: p.x, y: p.y } : null);
+          // React seulement quand le secteur survolé change ; la bulle suit
+          // la souris directement.
+          placeTip(p.x, p.y);
+          if (id !== hoverId.current) {
+            hoverId.current = id;
+            setHover(id ? { id, x: p.x, y: p.y } : null);
+          }
           if (id) view.canvas.style.cursor = 'pointer';
           else if (view.canvas.style.cursor === 'pointer')
             view.canvas.style.cursor = 'grab';
@@ -197,7 +214,10 @@ export function WorldMap3D({
           const id = nodeOf(view.pick(e, wm.hits).obj);
           if (id) clickRef.current(id);
         },
-        onLeave: () => setHover(null),
+        onLeave: () => {
+          hoverId.current = '';
+          setHover(null);
+        },
       });
       viewRef.current = view;
       setReady('ok');
@@ -327,13 +347,14 @@ export function WorldMap3D({
           )}
           {hover && hv && (
             <div
+              ref={tipRef}
               className="pointer-events-none absolute z-10 max-w-[260px] rounded-lg bg-[#1a120b]/92 border border-[#d9a441]/50 px-3 py-2 text-[#f3dfb4] shadow-lg"
               style={{
                 left: Math.min(
-                  hover.x + 16,
+                  tipPos.current.x + 16,
                   (wrapRef.current?.clientWidth ?? 9999) - 270
                 ),
-                top: hover.y + 16,
+                top: tipPos.current.y + 16,
               }}
             >
               <p className="font-heading text-sm">

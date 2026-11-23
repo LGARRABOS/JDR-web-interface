@@ -43,6 +43,17 @@ export function ZoneMap3D({
     x: number;
     y: number;
   } | null>(null);
+  const hoverId = useRef('');
+  const tipRef = useRef<HTMLDivElement>(null);
+  const tipPos = useRef({ x: 0, y: 0 });
+  const placeTip = (x: number, y: number) => {
+    tipPos.current = { x, y };
+    const el = tipRef.current;
+    if (el) {
+      el.style.left = `${Math.min(x + 16, (wrapRef.current?.clientWidth ?? 9999) - 270)}px`;
+      el.style.top = `${y + 16}px`;
+    }
+  };
   const zone = map.sector;
   const spots = spotsOf(zone);
   const here = map.spot ?? '';
@@ -143,7 +154,13 @@ export function ZoneMap3D({
           zm.update(live.stage?.mapInfo() ?? null, time, state.current),
         onHover: (e) => {
           const h = hitOf(e);
-          setHover(h.spot ? { spot: h.spot, x: h.x, y: h.y } : null);
+          // React seulement quand le lieu survolé change ; la bulle suit la
+          // souris directement (pas de rendu de la page à chaque mouvement).
+          placeTip(h.x, h.y);
+          if ((h.spot?.id ?? '') !== hoverId.current) {
+            hoverId.current = h.spot?.id ?? '';
+            setHover(h.spot ? { spot: h.spot, x: h.x, y: h.y } : null);
+          }
           if (h.spot) view.canvas.style.cursor = 'pointer';
           else if (view.canvas.style.cursor === 'pointer')
             view.canvas.style.cursor = 'grab';
@@ -152,7 +169,10 @@ export function ZoneMap3D({
           const h = hitOf(e);
           if (h.spot) pickRef.current(h.spot.id);
         },
-        onLeave: () => setHover(null),
+        onLeave: () => {
+          hoverId.current = '';
+          setHover(null);
+        },
       });
       setReady('ok');
       cleanup = () => view.dispose();
@@ -265,13 +285,14 @@ export function ZoneMap3D({
         )}
         {hover && (
           <div
+            ref={tipRef}
             className="pointer-events-none absolute z-10 max-w-[260px] rounded-lg bg-[#0b1a24]/90 border border-[#7ff3ff]/50 px-3 py-2 text-[#d8fbff] shadow-lg"
             style={{
               left: Math.min(
-                hover.x + 16,
+                tipPos.current.x + 16,
                 (wrapRef.current?.clientWidth ?? 9999) - 270
               ),
-              top: hover.y + 16,
+              top: tipPos.current.y + 16,
             }}
           >
             <p className="font-heading text-sm">{hover.spot.name}</p>

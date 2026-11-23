@@ -40,6 +40,9 @@ export function mapRenderer() {
     shared.shadowMap.type = THREE.PCFSoftShadowMap;
     shared.toneMapping = THREE.ACESFilmicToneMapping;
     shared.toneMappingExposure = 1.05;
+    // Maquettes presque immobiles : ombres recalculées à cadence réduite
+    // (voir la boucle), pas à chaque image.
+    shared.shadowMap.autoUpdate = false;
     shared.domElement.style.cssText =
       'position:absolute;inset:0;width:100%;height:100%;touch-action:none';
   }
@@ -128,7 +131,8 @@ export function createMapView(
 
   const resize = () => {
     const r = wrap.getBoundingClientRect();
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    // Netteté plafonnée : au-delà, le coût explose pour un gain invisible.
+    renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
     renderer.setSize(r.width, r.height, false);
     camera.aspect = r.width / Math.max(1, r.height);
     camera.updateProjectionMatrix();
@@ -197,6 +201,7 @@ export function createMapView(
 
   const t0 = performance.now();
   let raf = 0;
+  let frameN = 0;
   const loop = () => {
     raf = requestAnimationFrame(loop);
     if (document.hidden) return;
@@ -226,6 +231,8 @@ export function createMapView(
     camera.position.z += t.z - oz;
     controls.update();
     opts.frame((now - t0) / 1000);
+    // Ombres : à l'ouverture, puis 12 fois par seconde (le navire bouge peu).
+    if (frameN++ < 3 || frameN % 5 === 0) renderer.shadowMap.needsUpdate = true;
     renderer.render(opts.scene, camera);
   };
   raf = requestAnimationFrame(loop);

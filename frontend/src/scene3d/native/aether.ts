@@ -687,6 +687,12 @@ void main(){
 
   private add(i: Isle) {
     this.adopt(i.obj);
+    // Îles lointaines : trop loin pour porter ou recevoir une ombre visible.
+    if (!i.loop)
+      i.obj.traverse((o) => {
+        o.castShadow = false;
+        o.receiveShadow = false;
+      });
     this.root.add(i.obj);
     this.isles.push(i);
   }

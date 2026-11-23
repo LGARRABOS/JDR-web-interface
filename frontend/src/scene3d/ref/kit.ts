@@ -68,7 +68,9 @@ export class Kit {
       const geo = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
       const im = new THREE.InstancedMesh(geo, ropeMat, this.ropes.length);
       this.ropes.forEach((m, i) => im.setMatrixAt(i, m));
-      im.castShadow = true;
+      // Cordages : ombres trop fines pour se voir, mais coûteuses (milliers
+      // d'instances redessinées dans la carte d'ombres).
+      im.castShadow = false;
       g.add(im);
     }
     return g;
