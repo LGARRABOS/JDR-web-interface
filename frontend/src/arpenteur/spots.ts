@@ -31,7 +31,7 @@ export interface Spot {
 /** Le large : hors de tout lieu-dit. */
 export const OPEN = '~';
 /** Longueur d'une zone (m) : en croisière, on repasse devant ses lieux-dits. */
-export const ZONE_PERIOD = 2400;
+export const ZONE_PERIOD = 6000;
 
 export const SPOTS: Spot[] = [
   {
@@ -39,8 +39,8 @@ export const SPOTS: Spot[] = [
     name: "L'Arche brisée",
     zone: '?',
     look: 'arche',
-    x: 200,
-    z: -520,
+    x: 0,
+    z: -900,
     blurb: 'Une arche de pierre colossale, coupée en deux au-dessus du vide.',
   },
   {
@@ -48,8 +48,8 @@ export const SPOTS: Spot[] = [
     name: 'Épave du Veilleur',
     zone: '?',
     look: 'epave',
-    x: 800,
-    z: -700,
+    x: 1500,
+    z: -1250,
     blurb:
       'Un vieil arpenteur échoué sur un îlot, ses mâts brisés dans la brume.',
   },
@@ -58,8 +58,8 @@ export const SPOTS: Spot[] = [
     name: 'Aiguille de cristal',
     zone: '?',
     look: 'aiguille',
-    x: 1400,
-    z: -460,
+    x: 3000,
+    z: -800,
     blurb: "Une gerbe de cristaux d'Aether qui flotte et luit dans la brume.",
   },
   {
@@ -67,8 +67,8 @@ export const SPOTS: Spot[] = [
     name: 'Sanctuaire suspendu',
     zone: '?',
     look: 'sanctuaire',
-    x: 1950,
-    z: -760,
+    x: 4500,
+    z: -1400,
     blurb: 'Un temple en ruine sur une île dont la brume coule en cascades.',
   },
 ];
@@ -105,8 +105,12 @@ export function hopSeconds(from: string, to: string) {
       { ...sa, h: 0 },
       { x: sa.x + wrapC(sb.x - sa.x, ZONE_PERIOD), z: sb.z }
     );
-  } else if (b) len = Math.hypot(700, stop(b).z) * 1.15;
-  else if (a) len = 700 + Math.abs(stop(a).z) * 1.4;
-  else len = 700;
-  return Math.round(Math.min(90, Math.max(10, 6 + len / 40)));
+  } else if (b) len = Math.hypot(1500, stop(b).z) * 1.2;
+  else if (a)
+    len = routeLength(
+      { ...stop(a), h: 0 },
+      { x: stop(a).x + Math.max(1200, Math.abs(stop(a).z) * 1.6), z: 0 }
+    );
+  else len = 1200;
+  return Math.round(Math.min(90, Math.max(12, 8 + len / 70)));
 }

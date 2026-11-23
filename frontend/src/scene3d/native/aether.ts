@@ -742,7 +742,7 @@ void main(){
       );
       // Place libre autour des repères des lieux-dits.
       i.obj.visible =
-        !i.loop || clear.every(([lx, lz]) => Math.hypot(x - lx, z - lz) > 170);
+        !i.loop || clear.every(([lx, lz]) => Math.hypot(x - lx, z - lz) > 240);
       i.obj.rotation.y = Math.sin(f.time * 0.03 + i.phase) * 0.05 + nav.h;
     }
   }

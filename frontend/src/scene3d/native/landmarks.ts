@@ -10,9 +10,9 @@ import type { AetherRealm } from './aether';
 
 /** Hauteur du plateau, et taille des repères (on doit les voir de loin). */
 const Y = 2;
-const SCALE = 1.7;
+const SCALE = 2.2;
 /** Au-delà, le repère n'est plus dessiné. */
-const FAR = 2600;
+const FAR = 4000;
 
 function rnd(seed: number) {
   let h = (seed * 2654435761) >>> 0 || 7;
@@ -251,6 +251,8 @@ export class Landmarks {
     }
     g.add(k.build(this.lib.rope));
     g.position.y = 10;
+    // Pas d'île dessous : l'aiguille seule est déjà très haute.
+    g.scale.setScalar(0.7);
     const w = new THREE.Group();
     w.add(g);
     return w;

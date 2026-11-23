@@ -35,7 +35,7 @@ import {
   hangarRoom,
   type HangarDims,
 } from './hangar';
-import { CameraRig, hopShotAt, shotAt, type Shot } from './cinema';
+import { CameraRig, shotAt, type Shot } from './cinema';
 import type { SceneInfo } from './debug';
 import {
   along,
@@ -395,7 +395,7 @@ export class Stage {
     // (cap vers +x, loin des repères).
     const to = spot
       ? this.stopOf(spot)
-      : { x: this.nav.x + 700 + Math.abs(this.nav.z) * 0.6, z: 0 };
+      : { x: this.nav.x + Math.max(1200, Math.abs(this.nav.z) * 1.6), z: 0 };
     const r = route({ ...this.nav }, to);
     // Départ arrêté (lieu-dit) ou en croisière lente ; arrivée arrêtée ou
     // reprise de la croisière.
@@ -921,7 +921,8 @@ export class Stage {
         const n = along(h.route, Math.max(0, k) * h.route.length);
         this.scrollPos += Math.hypot(n.x - this.nav.x, n.z - this.nav.z);
         this.nav = n;
-        cine = hopShotAt(p, h.start / 997);
+        // Caméra : la vue du joueur, sans plans de cinéma (le navire vire
+        // déjà, le monde tourne autour de lui : on reste simple).
         if (p >= 1) {
           this.hop = null;
           this.nav.h = 0;
@@ -1141,12 +1142,7 @@ export class Stage {
         : (view.shift ?? 0),
     ];
     // Hors voyage la vue suit le joueur sans retard (il l'amortit déjà).
-    const cam = this.camRig.follow(
-      want,
-      dt,
-      j || this.hop ? 1.3 : 0.12,
-      dt === 0
-    );
+    const cam = this.camRig.follow(want, dt, j ? 1.3 : 0.12, dt === 0);
     void chase;
     const yawFree = cam[0];
     const yaw = yawFree + (-1.49 - yawFree) * axis;
