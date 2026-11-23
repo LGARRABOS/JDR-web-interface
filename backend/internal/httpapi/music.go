@@ -14,7 +14,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const maxMusicSize = 20 << 20 // 20 Mo
+const maxMusicSize = 100 << 20 // 100 Mo
+
+// maxMusicMemory : part de l'envoi gardée en mémoire, le reste passe par un fichier temporaire.
+const maxMusicMemory = 16 << 20
 const uploadsMusicBase = "uploads/music"
 
 var allowedMusicExtensions = map[string]string{
@@ -52,10 +55,11 @@ func (s *Server) handleUploadMusic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(maxMusicSize); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Fichier trop volumineux (max 20 Mo)"})
+	if err := r.ParseMultipartForm(maxMusicMemory); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Fichier trop volumineux (max 100 Mo)"})
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -63,6 +67,10 @@ func (s *Server) handleUploadMusic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+	if header.Size > maxMusicSize {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Fichier trop volumineux (max 100 Mo)"})
+		return
+	}
 
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	if _, ok := allowedMusicExtensions[ext]; !ok {

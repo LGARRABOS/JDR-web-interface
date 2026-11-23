@@ -83,6 +83,34 @@ func TestLimitBodyRejectsOversized(t *testing.T) {
 	}
 }
 
+// Les musiques acceptent jusqu'à 100 Mo, les autres envois restent à 25 Mo.
+func TestLimitBodyMusicUpload(t *testing.T) {
+	h := limitBody(okHandler())
+	big := int64(60 << 20)
+	music := httptest.NewRequest(http.MethodPost, "/api/games/1/music/upload", nil)
+	music.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+	music.ContentLength = big
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, music)
+	if rr.Code == http.StatusRequestEntityTooLarge {
+		t.Fatalf("musique de 60 Mo refusée")
+	}
+	other := httptest.NewRequest(http.MethodPost, "/api/games/1/maps/upload", nil)
+	other.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+	other.ContentLength = big
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, other)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("envoi de 60 Mo accepté hors musique : %d", rr.Code)
+	}
+	music.ContentLength = maxMusicBody + 1
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, music)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("musique > 100 Mo acceptée : %d", rr.Code)
+	}
+}
+
 func TestSecurityHeaders(t *testing.T) {
 	h := securityHeaders(okHandler())
 	rr := httptest.NewRecorder()

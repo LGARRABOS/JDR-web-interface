@@ -450,7 +450,9 @@ Les PV et le mana des ennemis ne sont jamais envoyés aux joueurs.`,
     summary: 'Pistes d’ambiance synchronisées.',
     audience: 'mj',
     keywords: ['musique', 'ambiance', 'piste'],
-    body: `Ajoutez vos pistes dans Ressources (MP3, OGG, WAV, M4A). À la table, l'onglet « Musique » permet de choisir une piste, lecture/pause, avancer ou reculer, et régler le volume général.
+    body: `Ajoutez vos pistes dans Ressources (MP3, OGG, WAV, M4A, 100 Mo maximum). À la table, l'onglet « Musique » permet de choisir une piste, lecture/pause, avancer ou reculer, et régler le volume général.
+
+Pour changer le moment joué, glissez la barre de position (dans l'onglet Musique ou dans le lecteur en bas à gauche), ou tapez un temps dans « Aller à » : \`1:30\`, \`90\` (secondes) ou \`2m15\`.
 
 Tous les joueurs entendent la même chose au même moment, même s'ils arrivent en cours de morceau.`,
   },

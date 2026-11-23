@@ -19,7 +19,14 @@ import (
 const (
 	maxJSONBody      = 4 << 20  // requêtes JSON (le plus gros : fiche d'arpenteur, 2 Mo)
 	maxMultipartBody = 25 << 20 // envois de fichiers (le plus gros : 20 Mo)
+	// Les musiques ont leur propre plafond (100 Mo + marge pour l'enveloppe multipart).
+	maxMusicBody = maxMusicSize + 1<<20
 )
+
+// isMusicUpload : POST /api/games/{id}/music/upload.
+func isMusicUpload(path string) bool {
+	return strings.HasPrefix(path, "/api/games/") && strings.HasSuffix(strings.TrimSuffix(path, "/"), "/music/upload")
+}
 
 // securityHeaders ajoute les en-têtes de sécurité à toutes les réponses.
 func securityHeaders(next http.Handler) http.Handler {
@@ -66,6 +73,9 @@ func limitBody(next http.Handler) http.Handler {
 			limit := int64(maxJSONBody)
 			if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
 				limit = maxMultipartBody
+				if isMusicUpload(r.URL.Path) {
+					limit = maxMusicBody
+				}
 			}
 			if r.ContentLength > limit {
 				writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"message": "Requête trop volumineuse"})

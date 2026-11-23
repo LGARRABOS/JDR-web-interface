@@ -490,6 +490,10 @@ export function ResourcesPage({ libraryGameId }: ResourcesPageProps = {}) {
         );
         return;
       }
+      if (file.size > 100 * 1024 * 1024) {
+        setPageError('Fichier trop volumineux : 100 Mo maximum par musique.');
+        return;
+      }
       setMusicUploading(true);
       try {
         await MusicAPI.upload(gameId, file);
@@ -1222,7 +1226,8 @@ export function ResourcesPage({ libraryGameId }: ResourcesPageProps = {}) {
                     </h2>
                     <p className="text-sm text-fantasy-muted">
                       Lancez-la depuis la table (onglet Musique) : tous les
-                      joueurs l&apos;entendent en même temps.
+                      joueurs l&apos;entendent en même temps. MP3, OGG, WAV ou
+                      M4A, 100 Mo maximum.
                     </p>
                   </div>
                   <div>

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { formatTime } from '../../hooks/useSyncedAudio';
+import { formatTime, parseTime } from '../../hooks/useSyncedAudio';
 import { trackTitle, type AmbientMusic } from '../../hooks/useAmbientMusic';
 import {
   Music,
@@ -22,6 +22,106 @@ function UnlockButton({ m }: { m: AmbientMusic }) {
     >
       Activer le son
     </button>
+  );
+}
+
+/** Barre de position du morceau (MJ) : glisser pour changer le moment joué. */
+function SeekBar({
+  m,
+  compact = false,
+}: {
+  m: AmbientMusic;
+  compact?: boolean;
+}) {
+  const [drag, setDrag] = useState<number | null>(null);
+  const shown = drag ?? m.position;
+  const max = m.duration > 0 ? m.duration : Math.max(shown, 1);
+  const commit = () => {
+    if (drag != null) m.seek(drag);
+    setDrag(null);
+  };
+  return (
+    <div
+      className={`flex items-center gap-2 text-xs text-fantasy-muted-soft tabular-nums ${
+        compact ? '' : 'w-full'
+      }`}
+    >
+      {!compact && <span className="min-w-9">{formatTime(shown)}</span>}
+      <input
+        type="range"
+        aria-label="Position dans le morceau"
+        min={0}
+        max={max}
+        step={0.5}
+        disabled={m.duration <= 0}
+        value={Math.min(shown, max)}
+        onChange={(e) => setDrag(parseFloat(e.target.value))}
+        onPointerUp={commit}
+        onMouseUp={commit}
+        onTouchEnd={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+        className={`flex-1 accent-fantasy-accent ${compact ? 'h-1' : ''} disabled:opacity-40`}
+      />
+      {!compact && (
+        <span className="min-w-9 text-right">
+          {m.duration > 0 ? formatTime(m.duration) : '--:--'}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Saisie d'un temps précis (« 1:30 », « 90 », « 2m15 »). */
+function GoToTime({ m }: { m: AmbientMusic }) {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState(false);
+  const submit = () => {
+    const t = parseTime(value);
+    if (t == null || (m.duration > 0 && t > m.duration)) {
+      setError(true);
+      return;
+    }
+    m.seek(t);
+    setValue('');
+    setError(false);
+  };
+  return (
+    <form
+      className="flex items-center gap-2 text-xs text-fantasy-muted-soft"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <label htmlFor="music-goto">Aller à</label>
+      <input
+        id="music-goto"
+        type="text"
+        inputMode="numeric"
+        placeholder={formatTime(m.position)}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setError(false);
+        }}
+        aria-invalid={error}
+        title="Exemples : 1:30, 90, 2m15"
+        className={`w-20 h-8 px-2 rounded-lg bg-fantasy-input-soft text-fantasy-text tabular-nums outline-none border ${
+          error
+            ? 'border-red-500'
+            : 'border-transparent focus:border-fantasy-accent'
+        }`}
+      />
+      <button
+        type="submit"
+        disabled={!value.trim()}
+        className="h-8 px-3 rounded-lg bg-fantasy-input-soft text-fantasy-text-soft hover:bg-fantasy-input-hover-soft disabled:opacity-40"
+      >
+        OK
+      </button>
+      {error && <span className="text-red-400">Temps invalide</span>}
+    </form>
   );
 }
 
@@ -55,12 +155,18 @@ export function MiniPlayer({ m }: { m: AmbientMusic }) {
               (m.music.trackId == null ? 'Aucune musique' : 'Musique')}
           </div>
           {m.isGM ? (
-            <div className="mt-1.5 h-1 rounded bg-fantasy-input-soft overflow-hidden">
-              <div
-                className="h-full bg-fantasy-accent"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+            m.music.trackId != null && m.duration > 0 ? (
+              <div className="mt-1">
+                <SeekBar m={m} compact />
+              </div>
+            ) : (
+              <div className="mt-1.5 h-1 rounded bg-fantasy-input-soft overflow-hidden">
+                <div
+                  className="h-full bg-fantasy-accent"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            )
           ) : (
             <label className="mt-0.5 flex items-center gap-1.5 text-xs text-fantasy-muted-soft">
               <Volume size={12} />
@@ -97,7 +203,6 @@ export function MusicTab({
   onOpenResources?: () => void;
 }) {
   const [dragVolume, setDragVolume] = useState<number | null>(null);
-  const [dragPosition, setDragPosition] = useState<number | null>(null);
   const lastSent = useRef(0);
 
   if (!m.isGM) {
@@ -135,14 +240,9 @@ export function MusicTab({
   }
 
   const shownVolume = dragVolume ?? m.music.volume;
-  const shownPosition = dragPosition ?? m.position;
   const commitVolume = () => {
     if (dragVolume != null) m.setVolume(dragVolume);
     setDragVolume(null);
-  };
-  const commitSeek = () => {
-    if (dragPosition != null) m.seek(dragPosition);
-    setDragPosition(null);
   };
 
   if (m.loading)
@@ -209,25 +309,10 @@ export function MusicTab({
             </button>
           )}
         </div>
-        {m.music.trackId != null && m.duration > 0 && (
-          <div className="flex items-center gap-2 text-xs text-fantasy-muted-soft tabular-nums">
-            <span className="w-9">{formatTime(shownPosition)}</span>
-            <input
-              type="range"
-              aria-label="Position dans le morceau"
-              min={0}
-              max={m.duration}
-              step={0.5}
-              value={Math.min(shownPosition, m.duration)}
-              onChange={(e) => setDragPosition(parseFloat(e.target.value))}
-              onPointerUp={commitSeek}
-              onMouseUp={commitSeek}
-              onTouchEnd={commitSeek}
-              onKeyUp={commitSeek}
-              onBlur={commitSeek}
-              className="flex-1 accent-fantasy-accent"
-            />
-            <span className="w-9 text-right">{formatTime(m.duration)}</span>
+        {m.music.trackId != null && (
+          <div className="flex flex-col gap-2">
+            <SeekBar m={m} />
+            <GoToTime m={m} />
           </div>
         )}
         <label className="flex items-center gap-2 text-xs text-fantasy-muted-soft">
