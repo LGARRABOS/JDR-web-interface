@@ -97,25 +97,33 @@ export function ZoneMap3D({
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.05;
       const zm = new ZoneMapScene(kit, spots, ZONE_PERIOD);
-      const cam = new THREE.PerspectiveCamera(34, 1, 0.5, 600);
+      const cam = new THREE.PerspectiveCamera(34, 1, 0.5, 900);
       // Vue d'ensemble, légèrement inclinée, centrée sur le navire.
       const first = live.stage?.mapInfo();
       if (first) zm.update(first, 0, state.current);
-      const sp = zm.shipPosition();
-      const tx = Math.max(
-        -zm.width / 2 + 12,
-        Math.min(zm.width / 2 - 12, sp.x)
-      );
-      cam.position.set(tx + 8, 40, 34);
+      // Vue d'ensemble de la carte, posée sur le bureau.
+      cam.position.set(0, 56, 36);
       const controls = new OrbitControls(cam, canvas);
-      controls.target.set(tx, 0, 0);
+      controls.target.set(0, 0, 1);
       controls.enableDamping = true;
       controls.dampingFactor = 0.08;
-      controls.minDistance = 14;
-      controls.maxDistance = 85;
-      controls.minPolarAngle = 0.25;
-      controls.maxPolarAngle = 1.2;
+      controls.minDistance = 12;
+      controls.maxDistance = 120;
+      controls.minPolarAngle = 0.12;
+      controls.maxPolarAngle = 1.25;
       controls.screenSpacePanning = false;
+      // Clic gauche maintenu : on fait glisser la carte ; clic droit : on
+      // tourne autour ; molette : zoom. Au doigt : glisser, pincer.
+      controls.mouseButtons = {
+        LEFT: THREE.MOUSE.PAN,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.ROTATE,
+      };
+      controls.touches = {
+        ONE: THREE.TOUCH.PAN,
+        TWO: THREE.TOUCH.DOLLY_ROTATE,
+      };
+      controls.panSpeed = 1.1;
       controls.update();
       const resize = () => {
         const r = wrap.getBoundingClientRect();
@@ -146,7 +154,7 @@ export function ZoneMap3D({
         const p = pickAt(e);
         const s = spotById(p.id);
         setHover(s ? { spot: s, x: p.x, y: p.y } : null);
-        canvas.style.cursor = s ? 'pointer' : 'grab';
+        canvas.style.cursor = s ? 'pointer' : down ? 'grabbing' : 'grab';
       };
       const onDown = (e: PointerEvent) =>
         (down = { x: e.clientX, y: e.clientY });
@@ -171,10 +179,15 @@ export function ZoneMap3D({
         const info = live.stage?.mapInfo() ?? null;
         zm.update(info, (performance.now() - t0) / 1000, state.current);
         // La vue reste au-dessus de la maquette.
+        // La vue reste au-dessus du bureau (la carte et ses abords).
         const t = controls.target;
-        t.x = Math.max(-zm.width / 2, Math.min(zm.width / 2, t.x));
-        t.z = Math.max(-zm.depth / 2, Math.min(zm.depth / 2, t.z));
+        const ox = t.x,
+          oz = t.z;
+        t.x = Math.max(-zm.width / 2 - 14, Math.min(zm.width / 2 + 14, t.x));
+        t.z = Math.max(-zm.depth / 2 - 12, Math.min(zm.depth / 2 + 14, t.z));
         t.y = 0;
+        cam.position.x += t.x - ox;
+        cam.position.z += t.z - oz;
         controls.update();
         renderer.render(zm.scene, cam);
       };
@@ -315,7 +328,8 @@ export function ZoneMap3D({
           </div>
         )}
         <p className="pointer-events-none absolute left-3 bottom-2 text-[11px] text-[#cdb68c] opacity-70">
-          Glisser pour tourner · clic droit pour déplacer · molette pour zoomer
+          Clic gauche maintenu pour déplacer la carte · clic droit pour tourner
+          · molette pour zoomer
         </p>
       </div>
     </div>

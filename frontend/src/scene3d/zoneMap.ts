@@ -9,6 +9,7 @@ import {
   type Route,
 } from '../arpenteur3d/nav';
 import type { AetherRealm } from './native/aether';
+import { buildCabin, type Cabin } from './cabin';
 import { Landmarks } from './native/landmarks';
 import type { RefMaterials } from './ref/materials';
 
@@ -158,6 +159,7 @@ export class ZoneMapScene {
   private cx: number;
   private cz: number;
   private beamU = { uTime: { value: 0 } };
+  private cabin: Cabin;
 
   constructor(
     kit: ZoneMapKit,
@@ -178,23 +180,17 @@ export class ZoneMapScene {
     const W = this.width,
       D = this.depth;
     const sc = this.scene;
-    sc.background = new THREE.Color('#15100b');
-    sc.fog = new THREE.Fog('#15100b', 110, 230);
+    sc.background = new THREE.Color('#0c0806');
 
     const keep = <T extends { dispose(): void }>(x: T) => {
       this.own.push(x);
       return x;
     };
-    // --- Table et cadre ---
-    const tableG = keep(new THREE.PlaneGeometry(260, 260));
-    const tuv = tableG.attributes.uv as THREE.BufferAttribute;
-    for (let i = 0; i < tuv.count; i++)
-      tuv.setXY(i, tuv.getX(i) * 60, tuv.getY(i) * 60);
-    const table = new THREE.Mesh(tableG, lib.darkWood);
-    table.rotation.x = -Math.PI / 2;
-    table.position.y = -1.8;
-    table.receiveShadow = true;
-    sc.add(table);
+    // --- Cabine du capitaine : bureau, objets, lambris, hublots ---
+    this.cabin = buildCabin(lib, W, D, -1.8);
+    sc.add(this.cabin.group);
+    this.own.push(this.cabin);
+    // --- Cadre de la maquette ---
     const t = 1.3;
     const frame = (w: number, d: number, x: number, z: number) => {
       const b = new THREE.Mesh(keep(woodBox(w, 2, d)), lib.hullWood);
@@ -227,8 +223,8 @@ export class ZoneMapScene {
     sea.receiveShadow = true;
     sc.add(sea);
     // --- Lumières : lampe chaude au-dessus de la table ---
-    sc.add(new THREE.HemisphereLight('#fff0d8', '#3a2a1c', 1.25));
-    const sun = new THREE.DirectionalLight('#ffd9a8', 3);
+    sc.add(new THREE.HemisphereLight('#ffe9cc', '#2a1c12', 0.7));
+    const sun = new THREE.DirectionalLight('#ffd9a8', 2.2);
     sun.position.set(-25, 45, 22);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -240,9 +236,6 @@ export class ZoneMapScene {
     cam.far = 140;
     sun.shadow.bias = -0.0005;
     sc.add(sun);
-    const lamp = new THREE.PointLight('#ffb36b', 70, 70);
-    lamp.position.set(W * 0.4, 12, D * 0.6);
-    sc.add(lamp);
 
     // --- Îlots décoratifs (fixes, hors des repères et de la route) ---
     const r = rnd(4242);
@@ -433,6 +426,7 @@ void main(){ float m = texture2D(uMap, gl_PointCoord).a; float a = smoothstep(.1
     time: number,
     o: { here: string; target: string; hover: string }
   ) {
+    this.cabin.update(time);
     this.beamU.uTime.value = time;
     this.trailU.uTime.value = time;
     for (const p of this.pins) {

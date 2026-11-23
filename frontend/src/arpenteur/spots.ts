@@ -32,7 +32,7 @@ export interface Spot {
 /** Le large : hors de tout lieu-dit. */
 export const OPEN = '~';
 /** Longueur d'une zone (m) : en croisière, on repasse devant ses lieux-dits. */
-export const ZONE_PERIOD = 6000;
+export const ZONE_PERIOD = 4400;
 
 export const SPOTS: Spot[] = [
   {
@@ -49,8 +49,8 @@ export const SPOTS: Spot[] = [
     name: 'Épave du Veilleur',
     zone: '?',
     look: 'epave',
-    x: 1500,
-    z: -1250,
+    x: 1300,
+    z: -2300,
     blurb:
       'Un vieil arpenteur échoué sur un îlot, ses mâts brisés dans la brume.',
   },
@@ -59,8 +59,8 @@ export const SPOTS: Spot[] = [
     name: 'Aiguille de cristal',
     zone: '?',
     look: 'aiguille',
-    x: 3000,
-    z: -800,
+    x: 2500,
+    z: -1100,
     blurb: "Une gerbe de cristaux d'Aether qui flotte et luit dans la brume.",
   },
   {
@@ -68,8 +68,8 @@ export const SPOTS: Spot[] = [
     name: 'Sanctuaire suspendu',
     zone: '?',
     look: 'sanctuaire',
-    x: 4500,
-    z: -1400,
+    x: 3500,
+    z: -2600,
     blurb: 'Un temple en ruine sur une île dont la brume coule en cascades.',
   },
 ];
