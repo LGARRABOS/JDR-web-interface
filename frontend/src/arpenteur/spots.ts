@@ -1,4 +1,5 @@
 import { isUnknown } from './keld';
+import type { MapState } from './types';
 import { routeLength, STOP_DX, STOP_DZ, wrapC } from '../arpenteur3d/nav';
 
 // Lieux-dits : endroits nommés d'une zone où l'arpenteur peut se rendre sans
@@ -113,4 +114,31 @@ export function hopSeconds(from: string, to: string) {
     );
   else len = 1200;
   return Math.round(Math.min(90, Math.max(12, 8 + len / 70)));
+}
+
+/**
+ * Départ vers un lieu-dit (ou vers le large avec OPEN) : nouvel état de la
+ * carte (trajet horodaté par le serveur) et ligne du journal.
+ */
+export function hopTo(
+  map: MapState,
+  to: string
+): { next: MapState; log: string } {
+  const here = map.spot ?? '';
+  const s = spotById(to);
+  return {
+    next: {
+      ...map,
+      spot: s ? s.id : '',
+      hop: {
+        from: here || OPEN,
+        to: s ? s.id : OPEN,
+        startedAt: new Date().toISOString(),
+        duration: hopSeconds(here, s ? s.id : OPEN),
+      },
+    },
+    log: s
+      ? `L'arpenteur fait route vers ${s.name}`
+      : "L'arpenteur reprend le large",
+  };
 }

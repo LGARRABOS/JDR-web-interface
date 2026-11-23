@@ -16,6 +16,7 @@ import {
 import { SceneLoader } from './SceneLoader';
 import { DebugPanel3D } from './DebugPanel3D';
 import { dbg } from '../../arpenteur3d/debug';
+import { live } from '../../arpenteur3d/live';
 import { desertOf, ShipScene, type ShipSceneProps } from './ShipScene';
 
 // Scène 3D de l'arpenteur (WebGL2). La vue en coupe reste le plan 2D ; sans
@@ -171,6 +172,7 @@ export function ShipScene3D(props: ShipSceneProps) {
     let cleanup: (() => void) | null = null;
     const run = (stage: Stage): (() => void) => {
       stageRef.current = stage;
+      live.stage = stage;
       const still =
         !animate ||
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -400,6 +402,7 @@ export function ShipScene3D(props: ShipSceneProps) {
       return () => {
         cancelAnimationFrame(raf);
         offDbg();
+        if (live.stage === stage) live.stage = null;
         ro.disconnect();
         io?.disconnect();
         canvas.removeEventListener('arp-ship', onShip);

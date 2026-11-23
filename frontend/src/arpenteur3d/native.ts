@@ -61,4 +61,9 @@ export interface NativeHost {
   readonly ready: boolean;
   setShip(build: Build, opts: NativeShipOptions): void;
   frame(f: NativeFrame): void;
+  /**
+   * Modèles prêts à réutiliser (matériaux, îles et repères d'Aether, navire
+   * du joueur), pour la carte 3D des lieux-dits. Types opaques ici.
+   */
+  mapKit?(): { lib: unknown; aether: unknown; ship: unknown } | null;
 }

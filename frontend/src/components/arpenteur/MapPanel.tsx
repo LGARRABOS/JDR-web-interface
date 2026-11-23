@@ -23,7 +23,8 @@ import type {
 import type { GameStore } from '../../realtime/gameStore';
 import { getErrorMessage } from '../../utils/errorMessage';
 import { KeldMap } from './KeldMap';
-import { SpotsCard } from './SpotsCard';
+import { ZoneMap3D } from './ZoneMap3D';
+import { spotsOf } from '../../arpenteur/spots';
 import { useTravel } from './useTravel';
 import { TRAVEL_SECONDS } from '../../arpenteur/travel';
 import {
@@ -68,6 +69,8 @@ export function MapPanel({
   const map = doc.map;
   const [selected, setSelected] = useState<string | null>(map.sector || null);
   const [editing, setEditing] = useState<Marker | null>(null);
+  // Carte 3D des lieux-dits de la zone où l'on est (clic sur sa position).
+  const [zoneMap, setZoneMap] = useState(false);
   const can = rights.map;
   // Voyage en cours : on attend l'arrivée avant de repartir.
   const travel = useTravel(map.travel);
@@ -185,6 +188,15 @@ export function MapPanel({
             </>
           )}
         </span>
+        {!travel && spotsOf(map.sector || UNKNOWN).length > 0 && (
+          <Btn
+            className="!h-8 !px-3 text-sm"
+            onClick={() => setZoneMap(true)}
+            title="Maquette 3D de la zone et de ses lieux-dits (ou cliquez sur votre position)"
+          >
+            🗺 Lieux-dits
+          </Btn>
+        )}
         {isGM && can && map.sector && !travel && (
           <Btn
             className="!h-8 !px-3 text-sm"
@@ -196,7 +208,14 @@ export function MapPanel({
         )}
       </div>
 
-      <SpotsCard map={map} can={can} save={save} />
+      {zoneMap && (
+        <ZoneMap3D
+          map={map}
+          can={can}
+          save={save}
+          onClose={() => setZoneMap(false)}
+        />
+      )}
 
       {view === 'reseau' ? (
         <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
@@ -211,7 +230,13 @@ export function MapPanel({
               reachable={reachable}
               travel={travel}
               hangar={map.hangar}
-              onSelect={setSelected}
+              onSelect={(id) => {
+                setSelected(id);
+                // Clic sur la position actuelle : carte 3D de ses lieux-dits.
+                const at = map.sector || UNKNOWN;
+                if (id === at && !travel && spotsOf(at).length)
+                  setZoneMap(true);
+              }}
             />
             <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pt-2 text-xs text-fantasy-muted">
               {Object.values(DESERTS).map((d) => (

@@ -230,6 +230,8 @@ export class Stage {
   /** Lieux-dits de la zone (repères visibles de loin) et période de la zone. */
   private zoneSpots: SpotView[] = [];
   private period = 2400;
+  /** Centre de la zone : la carte des lieux-dits montre une période autour. */
+  private zoneCx = 0;
   /** Position et cap du navire dans la zone (voir nav.ts). */
   private nav: Nav = { x: 0, z: 0, h: 0 };
   /** Lieu-dit où le navire est arrêté (ou vers lequel il fait route). */
@@ -355,15 +357,20 @@ export class Stage {
   setSpots(list: SpotView[], period: number) {
     this.zoneSpots = list;
     this.period = period;
+    const xs = list.map((v) => v.x);
+    this.zoneCx = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0;
   }
 
-  /** Point d'arrêt d'un lieu-dit (l'exemplaire le plus proche du navire). */
+  /**
+   * Point d'arrêt d'un lieu-dit : l'exemplaire du même tour de zone que le
+   * navire (comme sur la carte des lieux-dits, la route ne passe jamais par
+   * le bord de la carte).
+   */
   private stopOf(sp: SpotView) {
-    const x = sp.x + STOP_DX;
-    return {
-      x: this.nav.x + wrapC(x - this.nav.x, this.period),
-      z: sp.z + STOP_DZ,
-    };
+    const P = this.period;
+    const lap = Math.floor((this.nav.x - this.zoneCx + P / 2) / P);
+    const x0 = this.zoneCx + wrapC(sp.x + STOP_DX - this.zoneCx, P);
+    return { x: x0 + lap * P, z: sp.z + STOP_DZ };
   }
 
   /**
@@ -419,6 +426,23 @@ export class Stage {
       route: r,
       table,
       f0,
+    };
+  }
+
+  /**
+   * Pour la carte des lieux-dits : position et cap du navire dans la zone,
+   * route en cours et période de la zone.
+   */
+  mapInfo() {
+    const h = this.hop;
+    return {
+      nav: { ...this.nav },
+      route: h ? h.route : null,
+      hop: h
+        ? Math.min(1, Math.max(0, (Date.now() - h.start) / h.duration))
+        : null,
+      period: this.period,
+      native: this.r.native?.mapKit?.() ?? null,
     };
   }
 

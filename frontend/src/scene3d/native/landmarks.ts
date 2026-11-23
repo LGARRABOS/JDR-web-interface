@@ -331,7 +331,8 @@ export class Landmarks {
     return g;
   }
 
-  private build(look: string, id: string) {
+  /** Modèle d'un repère, à taille réelle (sans le placer dans la scène). */
+  make(look: string): THREE.Object3D {
     const obj =
       look === 'arche'
         ? this.arche()
@@ -347,8 +348,13 @@ export class Landmarks {
         mesh.receiveShadow = true;
       }
     });
-    obj.scale.setScalar(SCALE);
     this.aether.adopt(obj);
+    return obj;
+  }
+
+  private build(look: string, id: string) {
+    const obj = this.make(look);
+    obj.scale.setScalar(SCALE);
     this.root.add(obj);
     const b = { obj, phase: id.length * 1.3 };
     this.built.set(id, b);

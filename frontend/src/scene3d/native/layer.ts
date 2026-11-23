@@ -257,6 +257,11 @@ export class NativeLayer implements NativeHost {
       });
   }
 
+  mapKit() {
+    if (!this.lib || !this.aether || !this.player) return null;
+    return { lib: this.lib, aether: this.aether, ship: this.player.root };
+  }
+
   /** Brume du jeu (même formule que le moteur maison) sur un matériau natif. */
   patch(m: THREE.Material, fog = true) {
     const mm = m as THREE.Material & { __arpFog?: boolean };
