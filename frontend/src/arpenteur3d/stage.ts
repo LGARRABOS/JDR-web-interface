@@ -36,6 +36,7 @@ import {
   type HangarDims,
 } from './hangar';
 import { CameraRig, hopShotAt, shotAt, type Shot } from './cinema';
+import type { SceneInfo } from './debug';
 import { NATIVE_BEAM } from './native';
 import {
   BIOMES,
@@ -225,6 +226,7 @@ export class Stage {
     base: number;
   } | null = null;
   private spotKey = '';
+  private lastEye: readonly number[] = [0, 0, 0];
 
   /**
    * `backend` : moteur de rendu à utiliser (Three.js…) ; par défaut, le
@@ -379,6 +381,33 @@ export class Stage {
       duration: hop.durationMs,
       table,
       base,
+    };
+  }
+
+  /** État de la scène, pour le panneau de débogage. */
+  debugInfo(): SceneInfo {
+    const now = Date.now();
+    const prog = (start: number, duration: number) =>
+      Math.min(1, Math.max(0, (now - start) / duration));
+    const pl = this.place;
+    const e = this.lastEye;
+    return {
+      desert: this.desert,
+      biome: this.biome.id,
+      place: pl.void
+        ? 'position inconnue'
+        : pl.city
+          ? `ville ${pl.city.id}${pl.city.hangar ? ' (hangar)' : ''}`
+          : 'désert',
+      mood: this.mood,
+      inVoid: !!pl.void,
+      spot: this.spot?.id ?? '',
+      hop: this.hop ? prog(this.hop.start, this.hop.duration) : null,
+      journey: this.journey
+        ? prog(this.journey.start, this.journey.duration)
+        : null,
+      scroll: this.scrollPos,
+      camera: `œil ${e.map((v) => Math.round(v)).join(', ')}`,
     };
   }
 
@@ -1163,6 +1192,7 @@ export class Stage {
       crowd: this.crowd,
       crew: parts.crew,
     });
+    this.lastEye = eye;
     this.r.render(items, glows, { eye, target, fov: fovR }, light, {
       time,
       scroll: this.scrollPos,

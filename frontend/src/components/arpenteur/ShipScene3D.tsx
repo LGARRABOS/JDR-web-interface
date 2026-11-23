@@ -14,6 +14,8 @@ import {
   ROUTES,
 } from '../../arpenteur/keld';
 import { SceneLoader } from './SceneLoader';
+import { DebugPanel3D } from './DebugPanel3D';
+import { dbg } from '../../arpenteur3d/debug';
 import { desertOf, ShipScene, type ShipSceneProps } from './ShipScene';
 
 // Scène 3D de l'arpenteur (WebGL2). La vue en coupe reste le plan 2D ; sans
@@ -174,7 +176,13 @@ export function ShipScene3D(props: ShipSceneProps) {
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       let raf = 0;
       let dirty = true;
-      const t0 = performance.now();
+      dbg.engine = engine === 'three' ? 'réaliste (Three.js)' : 'classique';
+      let t0 = performance.now();
+      let paused = -1;
+      let dbgTick = 0;
+      const offDbg = dbg.subscribe(() => {
+        dirty = true;
+      });
       const cur: Cam = { ...camRef.current };
       // Résolution adaptative : on baisse la définition si la machine peine,
       // puis on la remonte quand elle tient la cadence.
@@ -193,6 +201,17 @@ export function ShipScene3D(props: ShipSceneProps) {
         const dt = last ? now - last : 16.7;
         last = now;
         if (dt > 250) return; // onglet repris, mesure sans valeur
+        dbg.frame(dt);
+        dbg.scale = scale;
+        // Allègement automatique coupé depuis le panneau de débogage.
+        if (!dbg.flags.adaptive) {
+          if (load > 0) stage.setLoad((load = 0));
+          if (scale < 1) {
+            scale = 1;
+            resize();
+          }
+          return;
+        }
         avg = avg * 0.92 + dt * 0.08;
         // On allège d'abord les effets (occlusion, halo, ombres), et la
         // définition seulement en dernier recours : l'image reste nette.
@@ -273,7 +292,18 @@ export function ShipScene3D(props: ShipSceneProps) {
           Math.abs(cur.zoom - 1) * 2 +
             Math.abs(cur.elevation - DEFAULT_CAM.elevation) * 3
         );
-        stage.render(still ? 2 : (performance.now() - t0) / 1000, {
+        // Animation figée depuis le panneau de débogage.
+        let time = still ? 2 : (performance.now() - t0) / 1000;
+        if (dbg.flags.pause) {
+          if (paused < 0) paused = time;
+          time = paused;
+        } else if (paused >= 0) {
+          t0 += (time - paused) * 1000;
+          time = paused;
+          paused = -1;
+        }
+        if (dbg.on && ++dbgTick % 15 === 0) dbg.scene = stage.debugInfo();
+        stage.render(time, {
           yaw: cur.yaw,
           elevation: cur.elevation,
           margin: (wide ? 1.2 : 1.05) * cur.zoom,
@@ -369,6 +399,7 @@ export function ShipScene3D(props: ShipSceneProps) {
       canvas.addEventListener('wheel', onWheel, { passive: false });
       return () => {
         cancelAnimationFrame(raf);
+        offDbg();
         ro.disconnect();
         io?.disconnect();
         canvas.removeEventListener('arp-ship', onShip);
@@ -583,6 +614,7 @@ export function ShipScene3D(props: ShipSceneProps) {
           label={nativeReady ? 'Retour à bord' : nativeProg.label}
         />
       )}
+      <DebugPanel3D />
       {hop && !travel && (
         <div
           className="pointer-events-none absolute left-1/2 bottom-3 sm:bottom-24 -translate-x-1/2 arp-plate rounded-xl px-4 py-2 text-center min-w-[220px]"

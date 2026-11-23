@@ -39,6 +39,7 @@ import {
   placeholderPbr,
 } from './pbrTextures';
 import { detectQuality, type Quality } from './quality';
+import { dbg } from '../arpenteur3d/debug';
 
 // Moteur de rendu Three.js de l'arpenteur. Il reçoit exactement ce que la scène
 // donnait au moteur WebGL2 maison (maillages, matrices, lumière, effets), et le
@@ -391,6 +392,8 @@ export class ThreeBackend implements RenderBackend {
   private bloom: UnrealBloomPass;
   private gtao: GTAOPass | null = null;
   private fx: ShaderPass;
+  private guard: ShaderPass;
+  private gpuName = '';
   private layer: NativeLayer | null = null;
   private load = 0;
   private frameN = 0;
@@ -536,20 +539,19 @@ export class ThreeBackend implements RenderBackend {
     // murs blancs au soleil (sinon l'image paraît floue et voilée).
     // Garde-fou : un pixel invalide (NaN, infini) serait étalé par le flou
     // lumineux en grands aplats noirs ; on le neutralise avant.
-    this.composer.addPass(
-      new ShaderPass({
-        uniforms: { tDiffuse: { value: null } },
-        vertexShader:
-          'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
-        fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    this.guard = new ShaderPass({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader:
+        'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+      fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
 void main(){
   vec4 c = texture2D(tDiffuse, vUv);
   bvec4 bad = bvec4(c.r != c.r || !(abs(c.r) < 1e4), c.g != c.g || !(abs(c.g) < 1e4), c.b != c.b || !(abs(c.b) < 1e4), c.a != c.a || !(abs(c.a) < 1e4));
   if (any(bad)) c = vec4(0., 0., 0., 1.);
   gl_FragColor = vec4(min(c.rgb, vec3(64.)), c.a);
 }`,
-      })
-    );
+    });
+    this.composer.addPass(this.guard);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.4, 2.2);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
@@ -793,7 +795,67 @@ void main(){
     // Ombres une image sur deux quand la machine est chargée.
     if (!this.renderer.shadowMap.autoUpdate)
       this.renderer.shadowMap.needsUpdate = (this.frameN++ & 1) === 0;
+    // Réglages du panneau de débogage (Ctrl+Maj+D).
+    const F = dbg.flags;
+    if (this.gtao) this.gtao.enabled = F.gtao && this.load < 1;
+    this.bloom.enabled = F.bloom && this.load < 2;
+    this.guard.enabled = F.guard;
+    if (this.sun.castShadow !== F.shadows) this.sun.castShadow = F.shadows;
+    if (!F.fog) u.uFogDensity.value = 0;
+    const info = this.renderer.info;
+    info.autoReset = !dbg.on;
+    if (dbg.on) info.reset();
     this.composer.render();
+    if (dbg.on) this.debugAfter();
+  }
+
+  /** Mesures et analyses demandées par le panneau de débogage. */
+  private debugAfter() {
+    const r = this.renderer;
+    const gl = r.getContext();
+    if (!this.gpuName) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      this.gpuName = String(
+        ext
+          ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)
+          : gl.getParameter(gl.RENDERER)
+      );
+    }
+    const info = r.info;
+    dbg.stats = {
+      calls: info.render.calls,
+      triangles: info.render.triangles,
+      programs: info.programs?.length ?? 0,
+      geometries: info.memory.geometries,
+      textures: info.memory.textures,
+      width: this.width,
+      height: this.height,
+      load: this.load,
+      tier: this.quality.tier,
+      gpu: this.gpuName,
+      webgl: String(gl.getParameter(gl.VERSION)),
+    };
+    if (dbg.wantProbe) {
+      dbg.wantProbe = false;
+      r.setRenderTarget(null);
+      const w = gl.drawingBufferWidth,
+        h = gl.drawingBufferHeight;
+      const px = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      let black = 0,
+        n = 0;
+      for (let i = 0; i < px.length; i += 16) {
+        n++;
+        if (px[i] + px[i + 1] + px[i + 2] < 6) black++;
+      }
+      dbg.probed(black / Math.max(1, n));
+      dbg.emit();
+    }
+    if (dbg.wantShot) {
+      dbg.wantShot = false;
+      dbg.shot = (r.domElement as HTMLCanvasElement).toDataURL('image/png');
+      dbg.emit();
+    }
   }
 
   dispose() {

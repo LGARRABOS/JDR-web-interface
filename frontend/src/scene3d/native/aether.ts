@@ -725,6 +725,13 @@ void main(){
     }
   }
 
+  /** Panneau de débogage : montrer ou cacher chaque partie. */
+  debugShow(sea: boolean, puffs: boolean, isles: boolean) {
+    this.sea.visible = sea;
+    this.puffs.visible = puffs;
+    if (!isles) for (const i of this.isles) i.obj.visible = false;
+  }
+
   dispose() {
     this.root.traverse((o) => {
       const mesh = o as THREE.Mesh;

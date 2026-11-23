@@ -27,6 +27,7 @@ import { Crowd } from './crew';
 import { AetherRealm } from './aether';
 import { Herds } from './fauna';
 import { Landmarks } from './landmarks';
+import { dbg } from '../../arpenteur3d/debug';
 import { grassField } from './flora';
 import { sandHeight, type GroundParams } from './ground';
 import { BiomeScenery } from './scenery';
@@ -698,6 +699,23 @@ vArpW = (modelMatrix * arpW).xyz;`
       0
     );
     this.dust.points.visible = !f.inVoid;
+
+    // Éléments coupés depuis le panneau de débogage (Ctrl+Maj+D). Ceux que
+    // rien d'autre ne cache suivent directement le réglage ; les autres ne
+    // sont que cachés en plus.
+    const F = dbg.flags;
+    if (pr) pr.root.visible = F.ship;
+    this.crowd.root.visible = F.crew;
+    if (this.scenery) this.scenery.root.visible = F.scenery;
+    if (this.landmarks) this.landmarks.root.visible = F.landmarks;
+    this.smoke.points.visible = this.steam.points.visible = F.particles;
+    if (!F.particles) this.dust.points.visible = false;
+    if (!F.npc) for (const rt of this.npcs.values()) rt.root.visible = false;
+    if (!F.grass) {
+      this.grass.visible = false;
+      this.herds.root.visible = false;
+    }
+    this.aether?.debugShow(F.aetherSea, F.aetherPuffs, F.aetherIsles);
   }
 
   /** Appelé par le moteur une fois la caméra placée. */
