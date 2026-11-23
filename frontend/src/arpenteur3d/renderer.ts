@@ -116,6 +116,8 @@ export interface RenderBackend {
   readonly native?: import('./native').NativeHost;
   /** Allègement des effets (0 : complet … 3 : minimal) quand la machine peine. */
   setLoad?(level: number): void;
+  /** Prépare les programmes de rendu sans bloquer (retour après une absence). */
+  warm?(): Promise<void>;
   upload(mesh: MeshData): MeshHandle;
   release(mesh: MeshHandle): void;
   setSize(w: number, h: number): void;

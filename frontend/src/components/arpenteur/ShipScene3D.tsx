@@ -110,6 +110,9 @@ export function ShipScene3D(props: ShipSceneProps) {
     f: 0,
     label: 'Ouverture des soutes',
   });
+  // Retour après une longue absence (ou carte graphique réinitialisée) :
+  // l'écran d'attente couvre la remise en route au lieu d'une image figée.
+  const [resuming, setResuming] = useState(false);
   const stageRef = useRef<Stage | null>(null);
   // Point de vue visé (les entrées le modifient, l'image le rejoint en douceur).
   const camRef = useRef<Cam>({ ...DEFAULT_CAM });
@@ -218,8 +221,24 @@ export function ShipScene3D(props: ShipSceneProps) {
       io?.observe(canvas);
       const frame = () => {
         raf = requestAnimationFrame(frame);
+        if (document.hidden) {
+          if (!hiddenAt) hiddenAt = performance.now();
+          last = 0;
+          return;
+        }
+        if (hiddenAt) {
+          const away = performance.now() - hiddenAt;
+          hiddenAt = 0;
+          if (away > 20000) resume();
+        }
+        if (resumeWait > 0) {
+          // On laisse l'écran d'attente s'afficher avant le travail lourd.
+          resumeWait--;
+          return;
+        }
+        if (warming) return;
         if (still && !dirty && !stage.traveling) return;
-        if (document.hidden || !onScreen) {
+        if (!onScreen) {
           last = 0;
           return;
         }
@@ -253,6 +272,37 @@ export function ShipScene3D(props: ShipSceneProps) {
           lift: wide ? -0.07 * (1 - off) : 0,
         });
       };
+      let hiddenAt = 0;
+      let resumeWait = 0;
+      let warming = false;
+      let resumeT = 0;
+      const resume = () => {
+        if (still) return;
+        setResuming(true);
+        resumeWait = 2;
+        warming = true;
+        const id = ++resumeT;
+        // Programmes recompilés en parallèle, puis une image complète derrière
+        // l'écran d'attente, puis on le lève.
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            void stage.warm().then(() => {
+              if (id !== resumeT) return;
+              warming = false;
+              dirty = true;
+              last = 0;
+              requestAnimationFrame(() =>
+                requestAnimationFrame(
+                  () => id === resumeT && setResuming(false)
+                )
+              );
+            });
+          })
+        );
+      };
+      const onLost = () => setResuming(true);
+      canvas.addEventListener('webglcontextlost', onLost);
+      canvas.addEventListener('webglcontextrestored', resume);
       raf = requestAnimationFrame(frame);
       const onShip = () => {
         dirty = true;
@@ -314,6 +364,9 @@ export function ShipScene3D(props: ShipSceneProps) {
         ro.disconnect();
         io?.disconnect();
         canvas.removeEventListener('arp-ship', onShip);
+        canvas.removeEventListener('webglcontextlost', onLost);
+        canvas.removeEventListener('webglcontextrestored', resume);
+        resumeT++;
         canvas.removeEventListener('arp-cam', onShip);
         canvas.removeEventListener('pointerdown', onDown);
         canvas.removeEventListener('pointermove', onMove);
@@ -470,9 +523,9 @@ export function ShipScene3D(props: ShipSceneProps) {
       />
       {engine === 'three' && (
         <SceneLoader
-          visible={!nativeReady}
-          f={nativeProg.f}
-          label={nativeProg.label}
+          visible={!nativeReady || resuming}
+          f={nativeReady ? 1 : nativeProg.f}
+          label={nativeReady ? 'Retour à bord' : nativeProg.label}
         />
       )}
       {travel && (

@@ -401,6 +401,18 @@ export class ThreeBackend implements RenderBackend {
    * 1 : sans occlusion ambiante ; 2 : ombres recalculées une image sur deux,
    * sans halo ; 3 : carte d'ombres deux fois plus petite.
    */
+  async warm() {
+    try {
+      // Compilation parallèle quand le navigateur la permet (pas de gel).
+      await Promise.race([
+        this.renderer.compileAsync(this.scene, this.camera),
+        new Promise((r) => setTimeout(r, 5000)),
+      ]);
+    } catch {
+      // sans importance : le premier rendu compilera
+    }
+  }
+
   setLoad(level: number) {
     const l = Math.max(0, Math.min(3, Math.round(level)));
     if (l === this.load) return;

@@ -649,6 +649,11 @@ export class Stage {
   }
 
   /** Allège les effets coûteux avant de baisser la définition. */
+  /** Recompile en tâche de fond ce qu'il faut pour dessiner (après une absence). */
+  warm(): Promise<void> {
+    return this.r.warm?.() ?? Promise.resolve();
+  }
+
   setLoad(level: number) {
     this.r.setLoad?.(level);
   }
