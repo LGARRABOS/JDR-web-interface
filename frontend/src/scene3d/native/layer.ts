@@ -24,6 +24,7 @@ import {
 } from '../ref/ship';
 import { cyl, Kit, lathe, M, tess, torus } from '../ref/kit';
 import { Crowd } from './crew';
+import { AetherRealm } from './aether';
 import { Herds } from './fauna';
 import { grassField } from './flora';
 import { sandHeight, type GroundParams } from './ground';
@@ -190,6 +191,7 @@ export class NativeLayer implements NativeHost {
   private crowd: Crowd;
   private grass: THREE.Mesh;
   private herds: Herds;
+  private aether: AetherRealm | null = null;
   private scenery: BiomeScenery | null = null;
   private smoke = new Puffs(900, new THREE.Color('#8a8580'), 0.12);
   private steam = new Puffs(260, new THREE.Color('#f2efe9'), 0.25);
@@ -233,6 +235,13 @@ export class NativeLayer implements NativeHost {
         this.lib = lib;
         this.scenery = new BiomeScenery(lib, (m) => this.patch(m), quality);
         this.root.add(this.scenery.root);
+        this.aether = new AetherRealm(
+          lib,
+          this.scenery.flora,
+          (m) => this.patch(m),
+          shared as unknown as Record<string, { value: unknown }>
+        );
+        this.root.add(this.aether.root);
         if (this.pending) this.setShip(this.pending.build, this.pending.opts);
         this.ready = true;
         this.onReady();
@@ -574,6 +583,11 @@ vArpW = (modelMatrix * arpW).xyz;`
     this.grass.visible = savanna;
     this.herds.frame(f.time, this.gp, savanna);
     this.scenery?.preload(f.nextBiome);
+    // Mer de brume d'Aether (position inconnue), préparée pendant le voyage.
+    if (this.aether) {
+      this.aether.frame(f, f.scroll, f.inVoid && f.ground, this.pointScale);
+      if (f.nextVoid && !f.inVoid) this.aether.work(2);
+    }
 
     // Navire de la partie.
     const shipM = new THREE.Matrix4().fromArray(f.shipM);
@@ -756,5 +770,6 @@ vArpW = (modelMatrix * arpW).xyz;`
     for (const rt of this.npcs.values()) this.dropShip(rt);
     this.npcs.clear();
     this.scenery?.dispose();
+    this.aether?.dispose();
   }
 }

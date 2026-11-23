@@ -33,6 +33,8 @@ export interface NativeFrame {
   biome: string;
   /** Paysage d'arrivée d'un voyage (préparé en arrière-plan). */
   nextBiome?: string;
+  /** Voyage vers la mer de brume d'Aether (préparée en arrière-plan). */
+  nextVoid?: boolean;
   duneAmp: number;
   /** Relief propre au paysage (voir Biome.terrain). */
   terrain: number;

@@ -387,6 +387,7 @@ export class Stage {
   private voidRt: {
     sea: GpuMesh;
     far: GpuMesh;
+    rocks: GpuMesh;
     islands: { mesh: GpuMesh; phase: number; amp: number; x: number }[];
     motes: GpuMesh;
     frame: GpuMesh;
@@ -400,6 +401,7 @@ export class Stage {
       this.voidRt = {
         sea: this.r.upload(v.sea),
         far: this.r.upload(v.far),
+        rocks: this.r.upload(v.rocks),
         islands: v.islands.map((i) => ({
           mesh: this.r.upload(i.mesh),
           phase: i.phase,
@@ -418,6 +420,7 @@ export class Stage {
     if (!v) return;
     this.r.release(v.sea);
     this.r.release(v.far);
+    this.r.release(v.rocks);
     v.islands.forEach((i) => this.r.release(i.mesh));
     this.r.release(v.motes);
     this.r.release(v.frame);
@@ -845,22 +848,28 @@ export class Stage {
     if (view.ground !== false && inVoid) {
       // Mer de brume d'Aether : îlots qui dérivent et défilent, poussières.
       const v = this.voidOf();
-      items.push({ mesh: v.sea, model: identity() });
+      // En rendu réaliste, mer de nuages et îles sont natives ; restent le
+      // ciel lointain (aurores, astre, anneau brisé) et les poussières.
       items.push({ mesh: v.far, model: identity() });
-      const LOOP = 1300;
-      for (const isl of v.islands) {
-        let x = isl.x - this.scrollPos;
-        x = ((((x + LOOP / 2) % LOOP) + LOOP) % LOOP) - LOOP / 2;
-        items.push({
-          mesh: isl.mesh,
-          model: translation(
-            x - isl.x,
-            Math.sin(time * 0.25 + isl.phase) * isl.amp,
-            0
-          ),
-          shadow: Math.abs(x) < 200,
-        });
+      if (!nat) {
+        items.push({ mesh: v.sea, model: identity() });
+        items.push({ mesh: v.rocks, model: identity() });
       }
+      const LOOP = 1300;
+      if (!nat)
+        for (const isl of v.islands) {
+          let x = isl.x - this.scrollPos;
+          x = ((((x + LOOP / 2) % LOOP) + LOOP) % LOOP) - LOOP / 2;
+          items.push({
+            mesh: isl.mesh,
+            model: translation(
+              x - isl.x,
+              Math.sin(time * 0.25 + isl.phase) * isl.amp,
+              0
+            ),
+            shadow: Math.abs(x) < 200,
+          });
+        }
       items.push({
         mesh: v.motes,
         model: chain(
@@ -1038,6 +1047,7 @@ export class Stage {
       calmX,
       biome: biome.id,
       nextBiome: j ? j.toBiome.id : undefined,
+      nextVoid: j ? !!j.to.place.void : undefined,
       duneAmp: biome.dune,
       terrain: biome.terrain ?? 0,
       inVoid,

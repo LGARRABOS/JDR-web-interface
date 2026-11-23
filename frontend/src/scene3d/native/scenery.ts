@@ -121,7 +121,7 @@ export class BiomeScenery {
     wetSand?: THREE.MeshStandardMaterial;
     mud?: THREE.MeshStandardMaterial;
   };
-  private flora!: FloraMats;
+  flora!: FloraMats;
   private cliffs = new Map<string, THREE.MeshStandardMaterial>();
   /** Couleur de base de chaque matériau du paysage (assombri la nuit). */
   private bases = new Map<THREE.MeshStandardMaterial, THREE.Color>();

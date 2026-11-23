@@ -73,8 +73,10 @@ const mat = (
 export interface VoidMeshes {
   /** Mer de brume (grand disque). */
   sea: MeshData;
-  /** Lointains : aurores, astre, anneau colossal, grands îlots. */
+  /** Lointains : aurores, astre, anneau colossal. */
   far: MeshData;
+  /** Grands îlots lointains et pitons (moteur maison seulement). */
+  rocks: MeshData;
   /** Îlots proches, chacun avec sa dérive (phase, amplitude). */
   /** Îlots proches : x (m) de leur centre, pour les faire défiler en boucle. */
   islands: { mesh: MeshData; phase: number; amp: number; x: number }[];
@@ -310,12 +312,13 @@ export function voidMeshes(night: boolean): VoidMeshes {
     }
     far.pop();
   }
+  const rocks = new MeshBuilder();
   // Grands îlots lointains (silhouettes).
   for (let k = 0; k < 12; k++) {
     const a = r() * Math.PI * 2;
     const d = 700 + r() * 900;
     island(
-      far,
+      rocks,
       r,
       Math.cos(a) * d,
       20 + r() * 220,
@@ -358,8 +361,8 @@ export function voidMeshes(night: boolean): VoidMeshes {
     const z = Math.sin(a) * d * (Math.sin(a) > 0 ? 1.6 : 1);
     const h = 20 + r() * 60;
     const w = 6 + r() * 12;
-    far.push(translation(x, MIST_Y - 10, z));
-    far.lathe(
+    rocks.push(translation(x, MIST_Y - 10, z));
+    rocks.lathe(
       [
         [w * 1.6, 0],
         [w, h * 0.5],
@@ -370,8 +373,8 @@ export function voidMeshes(night: boolean): VoidMeshes {
       7,
       mat('#4a4058', P.ROCK, 0.9)
     );
-    far.pop();
-    island(far, r, x, MIST_Y - 10 + h, z, w * 0.95, night, r() < 0.5);
+    rocks.pop();
+    island(rocks, r, x, MIST_Y - 10 + h, z, w * 0.95, night, r() < 0.5);
   }
 
   // --- Poussières lumineuses -----------------------------------------------
@@ -386,7 +389,13 @@ export function voidMeshes(night: boolean): VoidMeshes {
     motes.pop();
   }
 
-  return { sea: sea.build(), far: far.build(), islands, motes: motes.build() };
+  return {
+    sea: sea.build(),
+    far: far.build(),
+    rocks: rocks.build(),
+    islands,
+    motes: motes.build(),
+  };
 }
 
 /** Portail d'Aether : anneau de pierres runiques, arcs de lumière, cercles. */
