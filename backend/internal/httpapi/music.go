@@ -59,7 +59,8 @@ func (s *Server) handleUploadMusic(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Fichier trop volumineux (max 100 Mo)"})
 		return
 	}
-	defer r.MultipartForm.RemoveAll()
+	// Fichiers temporaires du formulaire : un échec de nettoyage est sans conséquence.
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
