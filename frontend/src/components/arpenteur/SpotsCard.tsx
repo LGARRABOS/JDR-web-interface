@@ -1,4 +1,4 @@
-import { HOP_SECONDS, OPEN, spotById, spotsOf } from '../../arpenteur/spots';
+import { hopSeconds, OPEN, spotById, spotsOf } from '../../arpenteur/spots';
 import type { MapState } from '../../arpenteur/types';
 import { Btn, Card } from './ui';
 import { useTravel } from './useTravel';
@@ -32,7 +32,7 @@ export function SpotsCard({
           from: here || OPEN,
           to: s ? s.id : OPEN,
           startedAt: new Date().toISOString(),
-          duration: HOP_SECONDS,
+          duration: hopSeconds(here, s ? s.id : OPEN),
         },
       },
       s
@@ -46,7 +46,7 @@ export function SpotsCard({
       title="Lieux-dits de la zone"
       subtitle={
         hop
-          ? `En route vers ${spotById(hop.to)?.name ?? 'le large'} · arrivée dans ${hop.remaining} s`
+          ? `En route vers ${spotById(hop.to)?.name ?? 'le large'}`
           : here
             ? `Arrêté devant ${spotById(here)?.name ?? here}`
             : 'Au large'

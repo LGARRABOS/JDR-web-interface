@@ -1,4 +1,5 @@
 import { isUnknown } from './keld';
+import { routeLength, STOP_DX, STOP_DZ, wrapC } from '../arpenteur3d/nav';
 
 // Lieux-dits : endroits nommés d'une zone où l'arpenteur peut se rendre sans
 // changer de zone. Il quitte le large (ou un autre lieu-dit), navigue, puis
@@ -16,14 +17,21 @@ export interface Spot {
   /** Zone (sous-région) du lieu ; '?' : la position inconnue. */
   zone: string;
   look: SpotLook;
+  /**
+   * Position du repère dans la zone (m) : x le long de la zone (qui se
+   * répète tous les ZONE_PERIOD m), z vers bâbord (< 0, côté opposé à la
+   * caméra) pour qu'on le voie de loin par-delà le navire.
+   */
+  x: number;
+  z: number;
   /** Une ligne d'ambiance, affichée sur la carte et à l'arrivée. */
   blurb: string;
 }
 
 /** Le large : hors de tout lieu-dit. */
 export const OPEN = '~';
-/** Durée d'un trajet vers un lieu-dit (secondes). */
-export const HOP_SECONDS = 18;
+/** Longueur d'une zone (m) : en croisière, on repasse devant ses lieux-dits. */
+export const ZONE_PERIOD = 2400;
 
 export const SPOTS: Spot[] = [
   {
@@ -31,6 +39,8 @@ export const SPOTS: Spot[] = [
     name: "L'Arche brisée",
     zone: '?',
     look: 'arche',
+    x: 200,
+    z: -520,
     blurb: 'Une arche de pierre colossale, coupée en deux au-dessus du vide.',
   },
   {
@@ -38,6 +48,8 @@ export const SPOTS: Spot[] = [
     name: 'Épave du Veilleur',
     zone: '?',
     look: 'epave',
+    x: 800,
+    z: -700,
     blurb:
       'Un vieil arpenteur échoué sur un îlot, ses mâts brisés dans la brume.',
   },
@@ -46,6 +58,8 @@ export const SPOTS: Spot[] = [
     name: 'Aiguille de cristal',
     zone: '?',
     look: 'aiguille',
+    x: 1400,
+    z: -460,
     blurb: "Une gerbe de cristaux d'Aether qui flotte et luit dans la brume.",
   },
   {
@@ -53,6 +67,8 @@ export const SPOTS: Spot[] = [
     name: 'Sanctuaire suspendu',
     zone: '?',
     look: 'sanctuaire',
+    x: 1950,
+    z: -760,
     blurb: 'Un temple en ruine sur une île dont la brume coule en cascades.',
   },
 ];
@@ -71,3 +87,26 @@ export const spotById = (id: string | undefined | null) =>
 /** Nom à afficher (« Au large » hors lieu-dit). */
 export const spotName = (id: string | undefined | null) =>
   spotById(id)?.name ?? 'Au large';
+
+/**
+ * Durée d'un trajet (secondes) : selon la longueur de la route, pas toujours
+ * la même. Depuis le large, la position exacte du navire n'est pas connue :
+ * on compte une distance d'approche moyenne.
+ */
+export function hopSeconds(from: string, to: string) {
+  const a = spotById(from),
+    b = spotById(to);
+  const stop = (s: Spot) => ({ x: s.x + STOP_DX, z: s.z + STOP_DZ });
+  let len: number;
+  if (a && b) {
+    const sa = stop(a),
+      sb = stop(b);
+    len = routeLength(
+      { ...sa, h: 0 },
+      { x: sa.x + wrapC(sb.x - sa.x, ZONE_PERIOD), z: sb.z }
+    );
+  } else if (b) len = Math.hypot(700, stop(b).z) * 1.15;
+  else if (a) len = 700 + Math.abs(stop(a).z) * 1.4;
+  else len = 700;
+  return Math.round(Math.min(90, Math.max(10, 6 + len / 40)));
+}

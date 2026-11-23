@@ -17,6 +17,15 @@ import { acacia, type FloraMats } from './flora';
 const LOOP = 1300;
 const SEA_Y = MIST_Y - 8;
 
+function wrapC(v: number, p: number) {
+  return ((((v + p / 2) % p) + p) % p) - p / 2;
+}
+
+function smoothstep(a: number, b: number, x: number) {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
 function rnd(seed: number) {
   let h = (seed * 2654435761) >>> 0 || 3;
   return () => {
@@ -60,6 +69,8 @@ interface Isle {
 export class AetherRealm {
   readonly root = new THREE.Group();
   private sea: THREE.Mesh;
+  /** Position et cap du navire dans la zone (x, z, cap). */
+  private navU = { value: new THREE.Vector3() };
   private seaU = {
     uLow: { value: new THREE.Color() },
     uHigh: { value: new THREE.Color() },
@@ -178,9 +189,10 @@ export class AetherRealm {
       metalness: 0,
     });
     mat.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, this.shared, this.seaU);
+      Object.assign(sh.uniforms, this.shared, this.seaU, { uNav: this.navU });
       const fn = /* glsl */ `
-uniform float uScroll, uTime;
+uniform float uTime;
+uniform vec3 uNav;
 varying float vCloud;
 ${COMMON}
 float cloudH(vec2 p){
@@ -196,10 +208,13 @@ float cloudH(vec2 p){
         .replace('#include <common>', '#include <common>\n' + fn)
         .replace(
           '#include <beginnormal_vertex>',
-          `vec2 cp = position.xz + vec2(uScroll, 0.);
+          `// Nuages fixés dans la zone : la mer suit le navire, qui la traverse et y vire.
+float nc = cos(uNav.z), ns = sin(uNav.z);
+vec2 cp = uNav.xy + vec2(position.x*nc - position.z*ns, position.x*ns + position.z*nc);
 float ch = cloudH(cp);
 float ce = 2. + length(position.xz) * .01;
-vec3 objectNormal = normalize(vec3(ch - cloudH(cp + vec2(ce, 0.)), ce, ch - cloudH(cp + vec2(0., ce))));
+vec3 nW = normalize(vec3(ch - cloudH(cp + vec2(ce, 0.)), ce, ch - cloudH(cp + vec2(0., ce))));
+vec3 objectNormal = vec3(nW.x*nc + nW.z*ns, nW.y, -nW.x*ns + nW.z*nc);
 vCloud = clamp(ch / 20., 0., 1.);`
         )
         .replace(
@@ -248,25 +263,28 @@ totalEmissiveRadiance += uGlow * cg * cg * cg;`
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('size', new THREE.BufferAttribute(size, 1));
     const mat = new THREE.ShaderMaterial({
-      uniforms: {
-        ...this.puffU,
-        uScroll: this.shared.uScroll,
-        uTime: this.shared.uTime,
-      },
+      uniforms: { ...this.puffU, uNav: this.navU, uTime: this.shared.uTime },
       transparent: true,
       depthWrite: false,
       vertexShader: /* glsl */ `
-uniform float uScroll, uTime, uScale;
+uniform float uTime, uScale;
+uniform vec3 uNav;
 attribute float size;
 varying float vA;
 void main(){
-  float x = mod(position.x - uScroll + ${LOOP / 2}., ${LOOP}.) - ${LOOP / 2}.;
-  vec3 p = vec3(x, position.y + sin(uTime*.2 + position.z*.01)*2., position.z);
+  // Voiles fixés dans la zone, répétés autour du navire, vus depuis lui.
+  float x = mod(position.x - uNav.x + ${LOOP / 2}., ${LOOP}.) - ${LOOP / 2}.;
+  float z = mod(position.z - uNav.y + 500., 1000.) - 500.;
+  float nc = cos(uNav.z), ns = sin(uNav.z);
+  vec3 p = vec3(x*nc + z*ns, position.y + sin(uTime*.2 + position.z*.01)*2., -x*ns + z*nc);
   vec4 mv = modelViewMatrix * vec4(p, 1.);
   gl_Position = projectionMatrix * mv;
   gl_PointSize = size * uScale / max(1., -mv.z);
   float d = length(mv.xyz);
-  vA = (1. - smoothstep(900., 1500., d)) * smoothstep(${LOOP / 2}., ${LOOP / 2 - 120}., abs(x)) * smoothstep(8., 40., d);
+  vA = (1. - smoothstep(900., 1500., d)) * smoothstep(${LOOP / 2}., ${LOOP / 2 - 120}., abs(x)) * smoothstep(500., 400., abs(z)) * smoothstep(60., 200., d);
+  // Pas de voile entre la caméra et le navire (il le noierait).
+  float shipD = length(cameraPosition);
+  vA *= smoothstep(shipD * .9, shipD + 140., d);
 }`,
       fragmentShader: /* glsl */ `
 uniform vec3 uLit, uShade;
@@ -682,13 +700,14 @@ void main(){
 
   frame(
     f: NativeFrame,
-    scroll: number,
     visible: boolean,
     pointScale: number,
-    clear: number[] = []
+    clear: [number, number][] = []
   ) {
     this.root.visible = visible;
     if (!visible) return;
+    const nav = f.nav ?? { x: f.scroll, z: 0, h: 0 };
+    this.navU.value.set(nav.x, nav.z, nav.h);
     this.work(this.isles.length < 4 ? 14 : 5);
     const night = f.night;
     // Couleurs de la brume selon l'heure (violet de l'Aether).
@@ -704,24 +723,27 @@ void main(){
       .lerp(new THREE.Color(night ? '#6a5aa8' : '#f0e2ff'), 0.6);
     this.puffU.uShade.value.set(night ? '#2a2248' : '#a890cc');
     this.puffU.uScale.value = pointScale;
+    const c = Math.cos(nav.h),
+      s = Math.sin(nav.h);
     for (const i of this.isles) {
-      let x = i.x;
-      if (i.loop) {
-        x = i.x - scroll;
-        x = ((((x + LOOP / 2) % LOOP) + LOOP) % LOOP) - LOOP / 2;
-      }
+      // Îles fixées dans la zone (répétées autour du navire), vues depuis lui ;
+      // les îles lointaines ne font que tourner avec le ciel.
+      const dx = i.loop ? wrapC(i.x - nav.x, LOOP) : i.x;
+      const dz = i.loop ? wrapC(i.z - nav.z, 1300) : i.z;
+      const x = dx * c + dz * s,
+        z = -dx * s + dz * c;
+      // Une île sur la route du navire s'enfonce doucement dans les nuages pour le laisser passer.
+      const d = Math.hypot(x, z);
+      const lift = i.loop ? -130 * smoothstep(220, 90, d) : 0;
       i.obj.position.set(
         x,
-        i.y + Math.sin(f.time * 0.25 + i.phase) * i.amp,
-        i.z
+        i.y + lift + Math.sin(f.time * 0.25 + i.phase) * i.amp,
+        z
       );
       // Place libre autour des repères des lieux-dits.
       i.obj.visible =
-        !i.loop ||
-        i.z < -330 ||
-        i.z > 0 ||
-        clear.every((c) => Math.abs(x - c) > 110);
-      i.obj.rotation.y = Math.sin(f.time * 0.03 + i.phase) * 0.05;
+        !i.loop || clear.every(([lx, lz]) => Math.hypot(x - lx, z - lz) > 170);
+      i.obj.rotation.y = Math.sin(f.time * 0.03 + i.phase) * 0.05 + nav.h;
     }
   }
 

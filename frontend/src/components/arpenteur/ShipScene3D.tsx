@@ -3,7 +3,7 @@ import { installedGuns } from '../../arpenteur/logic';
 import type { Mood } from '../../arpenteur3d/environment';
 import { Stage, type Scene } from '../../arpenteur3d/stage';
 import { travelEase, travelNow } from '../../arpenteur/travel';
-import { OPEN, spotById } from '../../arpenteur/spots';
+import { OPEN, spotById, spotsOf, ZONE_PERIOD } from '../../arpenteur/spots';
 import { useTravel } from './useTravel';
 import {
   cityById,
@@ -506,16 +506,20 @@ export function ShipScene3D(props: ShipSceneProps) {
   useEffect(() => {
     const stage = stageRef.current;
     if (!use3D || !stage) return;
-    const s = spotById(spot);
     const view = (id: string) => {
       const x = spotById(id);
-      return x ? { id: x.id, look: x.look } : null;
+      return x ? { id: x.id, look: x.look, x: x.x, z: x.z } : null;
     };
+    // Tous les lieux-dits de la zone : visibles de loin depuis le navire.
+    stage.setSpots(
+      spotsOf(sector).map((x) => ({ id: x.id, look: x.look, x: x.x, z: x.z })),
+      ZONE_PERIOD
+    );
     const now = travelNow(mapHop);
     const reduced =
       !animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     stage.setSpot(
-      s ? { id: s.id, look: s.look } : null,
+      view(spot),
       now && !reduced && !travelNow(mapTravel)
         ? {
             from: now.from === OPEN ? null : view(now.from),
@@ -615,28 +619,6 @@ export function ShipScene3D(props: ShipSceneProps) {
         />
       )}
       <DebugPanel3D />
-      {hop && !travel && (
-        <div
-          className="pointer-events-none absolute left-1/2 bottom-3 sm:bottom-24 -translate-x-1/2 arp-plate rounded-xl px-4 py-2 text-center min-w-[220px]"
-          role="status"
-        >
-          <p className="font-heading text-[10px] uppercase tracking-[0.3em] opacity-80">
-            {hop.to === OPEN ? 'Reprend le large' : 'En route vers'}
-          </p>
-          <p className="font-heading text-base sm:text-lg leading-tight">
-            {spotById(hop.to)?.name ?? nodeName(sector, doc.map.sectorNames)}
-          </p>
-          <div className="mt-1.5 h-1.5 rounded-full bg-black/40 overflow-hidden">
-            <div
-              className="h-full bg-[#7ff3ff]"
-              style={{ width: `${Math.round(travelEase(hop.p) * 100)}%` }}
-            />
-          </div>
-          <p className="mt-1 text-[11px] opacity-80">
-            arrivée dans {hop.remaining} s
-          </p>
-        </div>
-      )}
       {travel && (
         <div
           className="pointer-events-none absolute left-1/2 bottom-3 sm:bottom-24 -translate-x-1/2 arp-plate rounded-xl px-4 py-2 text-center min-w-[220px]"

@@ -592,13 +592,7 @@ vArpW = (modelMatrix * arpW).xyz;`
     // Repères des lieux-dits (devant lesquels le navire s'arrête).
     const clear = this.landmarks ? this.landmarks.frame(f) : [];
     if (this.aether) {
-      this.aether.frame(
-        f,
-        f.scroll,
-        f.inVoid && f.ground,
-        this.pointScale,
-        clear
-      );
+      this.aether.frame(f, f.inVoid && f.ground, this.pointScale, clear);
       if (f.nextVoid && !f.inVoid) this.aether.work(2);
     }
 

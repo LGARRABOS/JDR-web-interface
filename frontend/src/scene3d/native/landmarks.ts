@@ -4,15 +4,15 @@ import { box, cyl, Kit, lathe, M, torus, tube } from '../ref/kit';
 import type { RefMaterials } from '../ref/materials';
 import type { AetherRealm } from './aether';
 
-// Repères des lieux-dits : un grand décor reconnaissable, posé à bâbord
-// (côté opposé à la caméra), devant lequel l'arpenteur s'arrête.
+// Repères des lieux-dits : un grand décor reconnaissable, visible de loin
+// depuis le navire, qui s'y rend et s'arrête à côté (voir arpenteur3d/nav.ts).
 // Pour l'instant : les lieux de test de la position inconnue.
 
-/** Distance du repère au navire (bâbord) et hauteur du plateau. */
-const Z = -140;
+/** Hauteur du plateau, et taille des repères (on doit les voir de loin). */
 const Y = 2;
-/** Décalage le long du navire : vu de la caméra par défaut (trois-quarts avant), le repère se dresse à côté du navire, côté poupe, dans le champ libre. */
-const AHEAD = -175;
+const SCALE = 1.7;
+/** Au-delà, le repère n'est plus dessiné. */
+const FAR = 2600;
 
 function rnd(seed: number) {
   let h = (seed * 2654435761) >>> 0 || 7;
@@ -345,7 +345,7 @@ export class Landmarks {
         mesh.receiveShadow = true;
       }
     });
-    obj.scale.setScalar(1.25);
+    obj.scale.setScalar(SCALE);
     this.aether.adopt(obj);
     this.root.add(obj);
     const b = { obj, phase: id.length * 1.3 };
@@ -353,25 +353,28 @@ export class Landmarks {
     return b;
   }
 
-  /** Positions x des repères affichés (pour dégager les alentours). */
-  frame(f: NativeFrame): number[] {
+  /** Positions (x, z) des repères affichés, pour dégager leurs alentours. */
+  frame(f: NativeFrame): [number, number][] {
     const want = (f.ground && f.spots) || [];
-    const xs: number[] = [];
+    const out: [number, number][] = [];
     for (const [id, b] of this.built)
       b.obj.visible = want.some((w) => w.id === id);
+    // Un seul repère modelé par image (pas d'à-coup à l'arrivée dans la zone).
+    let fresh = false;
     for (const w of want) {
-      if (Math.abs(w.x) > 2600) continue;
-      const b = this.built.get(w.id) ?? this.build(w.look, w.id);
+      const b0 = this.built.get(w.id);
+      if (Math.hypot(w.x, w.z) > FAR || (!b0 && fresh)) {
+        if (b0) b0.obj.visible = false;
+        continue;
+      }
+      if (!b0) fresh = true;
+      const b = b0 ?? this.build(w.look, w.id);
       b.obj.visible = true;
-      b.obj.position.set(
-        w.x + AHEAD,
-        Y + Math.sin(f.time * 0.2 + b.phase) * 1.2,
-        Z
-      );
-      b.obj.rotation.y = 0.35 + Math.sin(f.time * 0.025 + b.phase) * 0.04;
-      xs.push(w.x + AHEAD);
+      b.obj.position.set(w.x, Y + Math.sin(f.time * 0.2 + b.phase) * 1.2, w.z);
+      b.obj.rotation.y = 0.35 + b.phase + w.rot;
+      out.push([w.x, w.z]);
     }
-    return xs;
+    return out;
   }
 
   dispose() {

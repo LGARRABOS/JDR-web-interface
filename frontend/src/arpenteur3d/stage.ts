@@ -37,6 +37,16 @@ import {
 } from './hangar';
 import { CameraRig, hopShotAt, shotAt, type Shot } from './cinema';
 import type { SceneInfo } from './debug';
+import {
+  along,
+  route,
+  STOP_DX,
+  STOP_DZ,
+  toShip,
+  wrapC,
+  type Nav,
+  type Route,
+} from './nav';
 import { NATIVE_BEAM } from './native';
 import {
   BIOMES,
@@ -100,6 +110,9 @@ export interface Place {
 export interface SpotView {
   id: string;
   look: string;
+  /** Position du repère dans la zone (m). */
+  x: number;
+  z: number;
 }
 
 /** Décor d'une position : désert et ville éventuelle. */
@@ -214,17 +227,25 @@ export class Stage {
   private crowd: import('./native').NativeFrame['crowd'] = [];
   private scrollPos = 0;
   private lastT = -1;
+  /** Lieux-dits de la zone (repères visibles de loin) et période de la zone. */
+  private zoneSpots: SpotView[] = [];
+  private period = 2400;
+  /** Position et cap du navire dans la zone (voir nav.ts). */
+  private nav: Nav = { x: 0, z: 0, h: 0 };
   /** Lieu-dit où le navire est arrêté (ou vers lequel il fait route). */
-  private spot: { id: string; look: string; anchor: number } | null = null;
-  /** Lieu-dit qu'il vient de quitter (reste en place, derrière lui). */
-  private leftSpot: { id: string; look: string; anchor: number } | null = null;
+  private spot: SpotView | null = null;
   private hop: {
     key: string;
     start: number;
     duration: number;
+    route: Route;
+    /** Progression le long de la route (0..1) échantillonnée sur le temps. */
     table: Float32Array;
-    base: number;
+    f0: number;
   } | null = null;
+  /** Gîte dans les virages. */
+  private bank = 0;
+  private lastH = 0;
   private spotKey = '';
   private lastEye: readonly number[] = [0, 0, 0];
 
@@ -267,8 +288,9 @@ export class Stage {
     const key = `${startMs}|${scKey(from)}|${scKey(to)}`;
     if (this.journey?.key === key) return;
     this.endJourney();
-    this.spot = this.leftSpot = this.hop = null;
+    this.spot = this.hop = null;
     this.spotKey = '';
+    this.nav.h = 0;
     if (Date.now() >= startMs + durationMs) {
       this.applyEnv(to.desert, mood, to.place, to.biome);
       return;
@@ -329,11 +351,26 @@ export class Stage {
     };
   }
 
+  /** Lieux-dits de la zone : leurs repères sont visibles de loin. */
+  setSpots(list: SpotView[], period: number) {
+    this.zoneSpots = list;
+    this.period = period;
+  }
+
+  /** Point d'arrêt d'un lieu-dit (l'exemplaire le plus proche du navire). */
+  private stopOf(sp: SpotView) {
+    const x = sp.x + STOP_DX;
+    return {
+      x: this.nav.x + wrapC(x - this.nav.x, this.period),
+      z: sp.z + STOP_DZ,
+    };
+  }
+
   /**
    * Lieu-dit de la zone : le navire s'y rend sans changer de zone. Avec
-   * `hop`, il quitte le large (ou un autre lieu-dit) à `startMs`, navigue et
-   * s'arrête devant le repère au bout de `durationMs` ; sans, il est déjà sur
-   * place (ou au large si `spot` est null).
+   * `hop`, il part à `startMs` (d'un lieu-dit ou du large), vire et suit une
+   * route courbe jusqu'au repère, où il s'arrête au bout de `durationMs` ;
+   * sans, il est déjà sur place (ou au large si `spot` est null).
    */
   setSpot(
     spot: SpotView | null,
@@ -346,41 +383,42 @@ export class Stage {
     const live =
       hop && !this.journey && Date.now() < hop.startMs + hop.durationMs;
     if (!live) {
-      if (!spot) this.spot = null;
-      else if (this.spot?.id !== spot.id)
-        this.spot = { ...spot, anchor: this.scrollPos };
-      this.leftSpot = null;
+      if (spot && this.spot?.id !== spot.id) {
+        const t = this.stopOf(spot);
+        this.nav = { x: t.x, z: t.z, h: 0 };
+      }
+      if (!spot) this.nav.h = 0;
+      this.spot = spot;
       return;
     }
-    // Trajet : départ arrêté devant un lieu-dit, ou en croisière au large.
-    const v0 = hop.from ? 0 : 1;
-    const v1 = spot ? 0 : 1;
+    // Route depuis là où est le navire : vers le repère, ou retour au large
+    // (cap vers +x, loin des repères).
+    const to = spot
+      ? this.stopOf(spot)
+      : { x: this.nav.x + 700 + Math.abs(this.nav.z) * 0.6, z: 0 };
+    const r = route({ ...this.nav }, to);
+    // Départ arrêté (lieu-dit) ou en croisière lente ; arrivée arrêtée ou
+    // reprise de la croisière.
+    const v0 = hop.from ? 0 : 0.3;
+    const v1 = spot ? 0 : 0.3;
     const table = new Float32Array(SAMPLES + 1);
-    const dt = hop.durationMs / 1000 / SAMPLES;
-    for (let i = 1; i <= SAMPLES; i++) {
-      const p = (i - 0.5) / SAMPLES;
-      table[i] = table[i - 1] + CRUISE * journeySpeed(p, v0, v1) * dt;
-    }
-    // Trajet commencé avant l'ouverture de la page : on part de là où il en est.
+    for (let i = 1; i <= SAMPLES; i++)
+      table[i] = table[i - 1] + journeySpeed((i - 0.5) / SAMPLES, v0, v1);
+    for (let i = 1; i <= SAMPLES; i++) table[i] /= table[SAMPLES];
+    // Trajet commencé avant l'ouverture de la page : on part d'ici.
     const p0 = Math.min(
       1,
       Math.max(0, (Date.now() - hop.startMs) / hop.durationMs)
     );
-    const d0 = table[Math.floor(p0 * SAMPLES)];
-    const base = this.scrollPos - d0;
-    this.leftSpot = hop.from
-      ? {
-          ...hop.from,
-          anchor: this.spot?.id === hop.from.id ? this.spot.anchor : base,
-        }
-      : null;
-    this.spot = spot ? { ...spot, anchor: base + table[SAMPLES] } : null;
+    const f0 = table[Math.floor(p0 * SAMPLES)];
+    this.spot = spot;
     this.hop = {
       key,
       start: hop.startMs,
       duration: hop.durationMs,
+      route: r,
       table,
-      base,
+      f0,
     };
   }
 
@@ -873,21 +911,28 @@ export class Stage {
       inVoid = !!this.place.void;
       const h = this.hop;
       if (h) {
-        // En route vers un lieu-dit : il accélère, file, puis ralentit et
-        // s'arrête devant le repère ; la caméra accompagne le trajet.
+        // En route vers un lieu-dit : il accélère, vire, file, puis ralentit
+        // et s'arrête à côté du repère ; la caméra accompagne le trajet.
         const p = Math.min(1, Math.max(0, (Date.now() - h.start) / h.duration));
         const f = p * SAMPLES;
         const i0 = Math.min(SAMPLES - 1, Math.floor(f));
-        this.scrollPos =
-          h.base + h.table[i0] + (h.table[i0 + 1] - h.table[i0]) * (f - i0);
+        const q = h.table[i0] + (h.table[i0 + 1] - h.table[i0]) * (f - i0);
+        const k = h.f0 < 1 ? (q - h.f0) / (1 - h.f0) : 1;
+        const n = along(h.route, Math.max(0, k) * h.route.length);
+        this.scrollPos += Math.hypot(n.x - this.nav.x, n.z - this.nav.z);
+        this.nav = n;
         cine = hopShotAt(p, h.start / 997);
         if (p >= 1) {
           this.hop = null;
-          this.leftSpot = null;
+          this.nav.h = 0;
         }
-      } else if (!this.place.city && !this.spot)
-        // Dans la brume, le navire dérive lentement.
-        this.scrollPos += CRUISE * dt * (inVoid ? 0.35 : 1);
+      } else if (!this.place.city && !this.spot) {
+        // Croisière (lente dans la brume), droit devant.
+        const v = CRUISE * dt * (inVoid ? 0.35 : 1);
+        this.scrollPos += v;
+        this.nav.x += v * Math.cos(this.nav.h);
+        this.nav.z += v * Math.sin(this.nav.h);
+      }
       const c = this.place.city ? this.cityOf(this.place.city) : null;
       if (c) {
         cityDraw = { rt: c, x: 0, moored: true };
@@ -945,6 +990,26 @@ export class Stage {
         inHangar > 0.999 && this.doors[0] < 0.001 && this.doors[1] < 0.001;
     }
     const shipX = 0;
+    // Le navire vire : c'est le monde qui tourne autour de lui (soleil, lune,
+    // ciel, repères) ; il gîte dans les virages.
+    const hh = this.nav.h;
+    if (Math.abs(hh) > 1e-4) {
+      const rot = (d: Vec3): Vec3 => [
+        d[0] * Math.cos(hh) + d[2] * Math.sin(hh),
+        d[1],
+        -d[0] * Math.sin(hh) + d[2] * Math.cos(hh),
+      ];
+      light = {
+        ...light,
+        sunDir: rot(light.sunDir),
+        moonDir: rot(light.moonDir),
+      };
+    }
+    const turn = dt > 0 ? wrapC(hh - this.lastH, Math.PI * 2) / dt : 0;
+    this.lastH = hh;
+    this.bank +=
+      (Math.max(-0.14, Math.min(0.14, turn * 0.6)) - this.bank) *
+      Math.min(1, dt * 2);
     const hover = HOVER + (HOVER_DOCK - HOVER) * dock;
     const calmBob = 1 - dock * 0.8;
     const bob = Math.sin(time * 1.2) * 0.35 * calmBob;
@@ -952,7 +1017,7 @@ export class Stage {
     const pitchA = Math.sin(time * 0.7 + 1) * 0.008 * calmBob;
     const shipM = chain(
       translation(shipX, hover + bob, 0),
-      rotationX(roll),
+      rotationX(roll + this.bank),
       rotationZ(pitchA)
     );
     const items: DrawItem[] = [];
@@ -969,7 +1034,7 @@ export class Stage {
       const v = this.voidOf();
       // En rendu réaliste, mer de nuages et îles sont natives ; restent le
       // ciel lointain (aurores, astre, anneau brisé) et les poussières.
-      items.push({ mesh: v.far, model: identity() });
+      items.push({ mesh: v.far, model: rotationY(hh) });
       if (!nat) {
         items.push({ mesh: v.sea, model: identity() });
         items.push({ mesh: v.rocks, model: identity() });
@@ -1174,13 +1239,15 @@ export class Stage {
       nextVoid: j ? !!j.to.place.void : undefined,
       spots: j
         ? []
-        : [this.leftSpot, this.spot]
-            .filter((v): v is NonNullable<typeof v> => !!v)
-            .map((v) => ({
-              id: v.id,
-              look: v.look,
-              x: v.anchor - this.scrollPos,
-            })),
+        : this.zoneSpots.map((v) => {
+            const [x, z] = toShip(
+              this.nav,
+              wrapC(v.x - this.nav.x, this.period),
+              v.z - this.nav.z
+            );
+            return { id: v.id, look: v.look, x, z, rot: this.nav.h };
+          }),
+      nav: { ...this.nav },
       duneAmp: biome.dune,
       terrain: biome.terrain ?? 0,
       inVoid,
