@@ -114,9 +114,9 @@ export function ZoneMap3D({
         0.5,
         1200
       );
-      // Angle unique : la carte sur le bureau, l'équipage dans la cabine derrière.
-      cam.position.set(0, 60, 84);
-      cam.lookAt(0, 8, -22);
+      // Angle unique, plongeant (~60°) : la carte bien lisible, la cabine autour.
+      cam.position.set(0, 64, 38);
+      cam.lookAt(0, 0, 1);
       // (Aussi quand une ouverture précédente a été fermée en plein modelage.)
       void fresh;
       await zm.populate(
@@ -149,7 +149,7 @@ export function ZoneMap3D({
         bounds: { x: zm.width / 2 + 14, z: zm.depth / 2 + 13 },
         start: {
           pos: cam.position.clone(),
-          target: new THREE.Vector3(0, 8, -22),
+          target: new THREE.Vector3(0, 0, 1),
         },
         frame: (time) =>
           zm.update(live.stage?.mapInfo() ?? null, time, state.current),

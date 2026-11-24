@@ -111,7 +111,7 @@ export function WorldMap3D({
     if (id === at && !travel && spotsOf(at).length) {
       const p = sceneRef.current?.nodePoint(id);
       const v = viewRef.current;
-      if (p && v) v.flyTo(p.setY(8), 32, 750, () => setMode('zone'));
+      if (p && v) v.flyTo(p.setY(0), 32, 750, () => setMode('zone'));
       else setMode('zone');
       return;
     }
@@ -172,9 +172,9 @@ export function WorldMap3D({
         0.5,
         1200
       );
-      // Angle unique : la carte sur le bureau, l'équipage dans la cabine derrière.
-      cam.position.set(0, 62, 90);
-      cam.lookAt(0, 8, -22);
+      // Angle unique, plongeant (~60°) : la carte bien lisible, la cabine autour.
+      cam.position.set(0, 64, 38);
+      cam.lookAt(0, 0, 1);
       wm.update(0, state.current);
       await warmScene(
         wm.scene,
@@ -194,7 +194,7 @@ export function WorldMap3D({
         bounds: { x: wm.width / 2 + 14, z: wm.depth / 2 + 13 },
         start: {
           pos: cam.position.clone(),
-          target: new THREE.Vector3(0, 8, -22),
+          target: new THREE.Vector3(0, 0, 1),
         },
         frame: (time) => wm.update(time, state.current),
         onHover: (e) => {
@@ -239,8 +239,8 @@ export function WorldMap3D({
         await zm.populate();
         if (disposed) return;
         const zc = new THREE.PerspectiveCamera(40, cam.aspect, 0.5, 1200);
-        zc.position.set(0, 60, 84);
-        zc.lookAt(0, 8, -22);
+        zc.position.set(0, 64, 38);
+        zc.lookAt(0, 0, 1);
         await warmScene(zm.scene, zc);
       }
     };
