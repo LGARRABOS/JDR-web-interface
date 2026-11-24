@@ -2,8 +2,18 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 // Vue des maquettes 3D (carte des secteurs, carte des lieux-dits) : rendu,
-// caméra au-dessus du bureau, glisser au clic gauche, tourner au clic droit,
-// zoom à la molette ; survol et clic sur les objets désignés.
+// caméra fixe à la verticale de la carte (glisser au clic gauche, zoom à la
+// molette), précédée à l'ouverture d'un plan qui montre toute la cabine puis
+// descend au-dessus du bureau ; survol et clic sur les objets désignés.
+
+/** Plan d'ouverture : d'où part la caméra (vue de la pièce) et combien de temps. */
+export interface MapIntro {
+  pos: THREE.Vector3;
+  target: THREE.Vector3;
+  /** Point de passage de la courbe (mouvement en arc, pas en ligne droite). */
+  via: THREE.Vector3;
+  ms: number;
+}
 
 export interface MapView {
   renderer: THREE.WebGLRenderer;
@@ -98,6 +108,8 @@ export function createMapView(
     start: { pos: THREE.Vector3; target: THREE.Vector3 };
     /** Caméra déjà utilisée pour préparer la maquette (facultatif). */
     camera?: THREE.PerspectiveCamera;
+    /** Plan d'ouverture (vue de la cabine, puis descente sur la carte). */
+    intro?: MapIntro;
     frame: (time: number) => void;
     onHover?: (e: PointerEvent) => void;
     onClick?: (e: PointerEvent) => void;
@@ -115,20 +127,47 @@ export function createMapView(
   controls.dampingFactor = 0.08;
   controls.minDistance = 28;
   controls.maxDistance = 170;
-  controls.minPolarAngle = 0.12;
-  controls.maxPolarAngle = 1.25;
+  // Caméra fixe au-dessus de la carte : pas de rotation, l'angle reste
+  // celui du départ. Clic gauche maintenu : on fait glisser la carte ;
+  // molette : zoom. Au doigt : glisser, pincer.
+  const polar = Math.acos(
+    Math.min(
+      1,
+      Math.max(-1, opts.start.pos.clone().sub(opts.start.target).normalize().y)
+    )
+  );
+  controls.minPolarAngle = polar;
+  controls.maxPolarAngle = polar;
   controls.screenSpacePanning = false;
-  // Clic gauche maintenu : on fait glisser la carte ; clic droit : on tourne
-  // autour ; molette : zoom. Au doigt : glisser, pincer et tourner.
-  controls.enableRotate = true;
+  controls.enableRotate = false;
   controls.mouseButtons = {
     LEFT: THREE.MOUSE.PAN,
     MIDDLE: THREE.MOUSE.DOLLY,
-    RIGHT: THREE.MOUSE.ROTATE,
+    RIGHT: THREE.MOUSE.PAN,
   };
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
   controls.panSpeed = 1.1;
   controls.update();
+  // Plan d'ouverture : la caméra part de la vue de la pièce et descend en
+  // arc au-dessus de la carte ; un clic l'abrège.
+  let intro: { t0: number; a: MapIntro } | null = null;
+  if (opts.intro) {
+    intro = { t0: performance.now(), a: opts.intro };
+    controls.enabled = false;
+    camera.position.copy(opts.intro.pos);
+    camera.lookAt(opts.intro.target);
+  }
+  const endIntro = () => {
+    if (!intro) return;
+    intro = null;
+    camera.position.copy(opts.start.pos);
+    controls.target.copy(opts.start.target);
+    controls.enabled = true;
+    controls.update();
+  };
+  const skip = () => endIntro();
+  canvas.addEventListener('pointerdown', skip);
+  canvas.addEventListener('wheel', skip, { passive: true });
 
   const resize = () => {
     const r = wrap.getBoundingClientRect();
@@ -207,6 +246,26 @@ export function createMapView(
     raf = requestAnimationFrame(loop);
     if (document.hidden) return;
     const now = performance.now();
+    if (intro) {
+      const k = Math.min(1, (now - intro.t0) / intro.a.ms);
+      // Départ et arrivée en douceur.
+      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      const u = 1 - e;
+      const { pos, via, target } = intro.a;
+      camera.position.set(
+        u * u * pos.x + 2 * u * e * via.x + e * e * opts.start.pos.x,
+        u * u * pos.y + 2 * u * e * via.y + e * e * opts.start.pos.y,
+        u * u * pos.z + 2 * u * e * via.z + e * e * opts.start.pos.z
+      );
+      const look = target.clone().lerp(opts.start.target, e);
+      camera.lookAt(look);
+      opts.frame((now - t0) / 1000);
+      if (frameN++ < 3 || frameN % 5 === 0)
+        renderer.shadowMap.needsUpdate = true;
+      renderer.render(opts.scene, camera);
+      if (k >= 1) endIntro();
+      return;
+    }
     if (fly) {
       const k = Math.min(1, (now - fly.t0) / fly.ms);
       const e = k * k * (3 - 2 * k);
@@ -252,6 +311,8 @@ export function createMapView(
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointerleave', onLeave);
+      canvas.removeEventListener('pointerdown', skip);
+      canvas.removeEventListener('wheel', skip);
       controls.dispose();
       // Le rendu est gardé pour la prochaine ouverture ; on le décroche.
       canvas.remove();

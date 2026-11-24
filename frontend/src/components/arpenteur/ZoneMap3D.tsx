@@ -27,6 +27,8 @@ export function ZoneMap3D({
   save,
   onClose,
   onBack,
+  intro = true,
+  onIntroPlayed,
 }: {
   map: MapState;
   can: boolean;
@@ -34,6 +36,9 @@ export function ZoneMap3D({
   onClose: () => void;
   /** Retour à la carte des secteurs (quand on y est entré depuis elle). */
   onBack?: () => void;
+  /** Plan d'ouverture (vue de la cabine puis descente sur la carte). */
+  intro?: boolean;
+  onIntroPlayed?: () => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState<'wait' | 'ok' | 'none'>('wait');
@@ -114,8 +119,8 @@ export function ZoneMap3D({
         0.5,
         1200
       );
-      // Angle unique, plongeant (~60°) : la carte bien lisible, la cabine autour.
-      cam.position.set(0, 64, 38);
+      // Caméra fixe, à la verticale de la carte (le nord en haut).
+      cam.position.set(0, 66, 5);
       cam.lookAt(0, 0, 1);
       // (Aussi quand une ouverture précédente a été fermée en plein modelage.)
       void fresh;
@@ -142,6 +147,8 @@ export function ZoneMap3D({
           y: p.y,
         };
       };
+      const playIntro = intro;
+      if (intro) onIntroPlayed?.();
       // Vue d'ensemble de la carte, posée sur le bureau.
       const view = createMapView(wrap, {
         scene: zm.scene,
@@ -151,6 +158,16 @@ export function ZoneMap3D({
           pos: cam.position.clone(),
           target: new THREE.Vector3(0, 0, 1),
         },
+        // Ouverture : toute la cabine, puis la caméra vient se placer
+        // au-dessus de la carte.
+        intro: playIntro
+          ? {
+              pos: new THREE.Vector3(-70, 95, 175),
+              via: new THREE.Vector3(55, 120, 95),
+              target: new THREE.Vector3(0, 18, -70),
+              ms: 3600,
+            }
+          : undefined,
         frame: (time) =>
           zm.update(live.stage?.mapInfo() ?? null, time, state.current),
         onHover: (e) => {
@@ -312,8 +329,7 @@ export function ZoneMap3D({
           </div>
         )}
         <p className="pointer-events-none absolute left-3 bottom-2 text-[11px] text-[#cdb68c] opacity-70">
-          Clic gauche maintenu pour déplacer la carte · clic droit pour tourner
-          · molette pour zoomer
+          Clic gauche maintenu pour déplacer la carte · molette pour zoomer
         </p>
       </div>
     </div>

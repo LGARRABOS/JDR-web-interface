@@ -84,6 +84,7 @@ export function WorldMap3D({
   const wrapRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<WorldMapScene | null>(null);
   const viewRef = useRef<MapView | null>(null);
+  const introDone = useRef(false);
   // État lu par la boucle de rendu.
   const state = useRef({
     current: map.sector,
@@ -172,8 +173,8 @@ export function WorldMap3D({
         0.5,
         1200
       );
-      // Angle unique, plongeant (~60°) : la carte bien lisible, la cabine autour.
-      cam.position.set(0, 64, 38);
+      // Caméra fixe, à la verticale de la carte (le nord en haut).
+      cam.position.set(0, 66, 5);
       cam.lookAt(0, 0, 1);
       wm.update(0, state.current);
       await warmScene(
@@ -187,6 +188,10 @@ export function WorldMap3D({
       sceneRef.current = wm;
       const nodeOf = (o: THREE.Object3D | null) =>
         o ? (o.userData.node as string) : '';
+      // Plan d'ouverture une seule fois par ouverture de la carte (pas au
+      // retour des lieux-dits).
+      const playIntro = !introDone.current;
+      introDone.current = true;
       // Vue d'ensemble de toute la carte.
       const view = createMapView(wrap, {
         scene: wm.scene,
@@ -196,6 +201,16 @@ export function WorldMap3D({
           pos: cam.position.clone(),
           target: new THREE.Vector3(0, 0, 1),
         },
+        // Ouverture : toute la cabine, puis la caméra vient se placer
+        // au-dessus de la carte.
+        intro: playIntro
+          ? {
+              pos: new THREE.Vector3(-70, 95, 175),
+              via: new THREE.Vector3(55, 120, 95),
+              target: new THREE.Vector3(0, 18, -70),
+              ms: 3600,
+            }
+          : undefined,
         frame: (time) => wm.update(time, state.current),
         onHover: (e) => {
           const p = view.pick(e, wm.hits);
@@ -239,7 +254,7 @@ export function WorldMap3D({
         await zm.populate();
         if (disposed) return;
         const zc = new THREE.PerspectiveCamera(40, cam.aspect, 0.5, 1200);
-        zc.position.set(0, 64, 38);
+        zc.position.set(0, 66, 5);
         zc.lookAt(0, 0, 1);
         await warmScene(zm.scene, zc);
       }
@@ -266,6 +281,8 @@ export function WorldMap3D({
   if (mode === 'zone')
     return (
       <ZoneMap3D
+        intro={!introDone.current}
+        onIntroPlayed={() => (introDone.current = true)}
         map={map}
         can={can}
         save={save}
@@ -382,8 +399,7 @@ export function WorldMap3D({
             </div>
           )}
           <p className="pointer-events-none absolute left-3 bottom-2 text-[11px] text-[#cdb68c] opacity-70">
-            Clic gauche maintenu pour déplacer la carte · clic droit pour
-            tourner · molette pour zoomer
+            Clic gauche maintenu pour déplacer la carte · molette pour zoomer
           </p>
         </div>
         {panel && (

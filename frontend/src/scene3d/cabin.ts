@@ -719,10 +719,11 @@ void main(){ vec3 p = position; float s = fract(sin(dot(p.xz, vec2(12.9,78.2))) 
     swing.push({ g: piv, phase, amp: 0.05 });
     return { flame: fl, light };
   };
+  // Accrochée haut : la caméra, à la verticale de la carte, passe dessous.
   const { flame: lFlame, light: lantern } = lanternAt(
     -W * 0.25,
     -6,
-    top + 52,
+    top + 82,
     0
   );
 
