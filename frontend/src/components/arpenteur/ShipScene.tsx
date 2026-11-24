@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { installedGuns } from '../../arpenteur/logic';
 import { shipGeometry } from '../../arpenteur/shipGeometry';
 import type { ArpenteurDoc, Build } from '../../arpenteur/types';
@@ -77,6 +77,29 @@ const PALETTES: Record<
 const W = 1600;
 const H = 640;
 const GROUND = 560;
+
+/** Zoom et décalage de la coupe (unités de la scène). */
+interface CutView {
+  z: number;
+  x: number;
+  y: number;
+}
+const CUT_HOME: CutView = { z: 1, x: 0, y: 0 };
+const CUT_MAX = 4;
+/** Le plan ne sort pas du cadre : décalage limité selon le zoom. */
+function clampCut(c: CutView): CutView {
+  const lx = ((c.z - 1) * W) / 2;
+  const ly = ((c.z - 1) * H) / 2;
+  return {
+    z: c.z,
+    x: Math.min(lx, Math.max(-lx, c.x)),
+    y: Math.min(ly, Math.max(-ly, c.y)),
+  };
+}
+function toSvgOf(el: SVGSVGElement, cx: number, cy: number) {
+  const m = el.getScreenCTM();
+  return m ? new DOMPoint(cx, cy).matrixTransform(m.inverse()) : null;
+}
 
 const SCENE_STYLE = `
 .arp-scene .arp-far{animation:arp-scroll 150s linear infinite}
@@ -251,13 +274,103 @@ export function ShipScene({
   // Poussière soulevée par les propulseurs (au sol, sous chaque tuyère).
   const dust = g.props.map((pr) => ptx + pr.cx * profileScale);
 
-  return (
+  // Coupe : zoom (molette, pincement, boutons) et déplacement (glisser),
+  // pour lire les noms des salles. Un glissé n'ouvre pas la salle survolée.
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [cut, setCut] = useState<CutView>(CUT_HOME);
+  const coupe = view === 'coupe';
+  useEffect(() => setCut(CUT_HOME), [coupe]);
+  const toSvg = (cx: number, cy: number) => {
+    const m = svgRef.current?.getScreenCTM();
+    return m ? new DOMPoint(cx, cy).matrixTransform(m.inverse()) : null;
+  };
+  const zoomAt = (px: number, py: number, f: number) =>
+    setCut((c) => {
+      const z = Math.min(CUT_MAX, Math.max(1, c.z * f));
+      const qx = (px - W / 2 - c.x) / c.z + W / 2;
+      const qy = (py - H / 2 - c.y) / c.z + H / 2;
+      return clampCut({
+        z,
+        x: px - W / 2 - (qx - W / 2) * z,
+        y: py - H / 2 - (qy - H / 2) * z,
+      });
+    });
+  const zoomRef = useRef(zoomAt);
+  zoomRef.current = zoomAt;
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!coupe || !el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const p = toSvgOf(el, e.clientX, e.clientY);
+      if (p) zoomRef.current(p.x, p.y, Math.exp(-e.deltaY * 0.0015));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [coupe]);
+  const ptrs = useRef(new Map<number, { x: number; y: number }>());
+  const drag = useRef({ moved: false, d: 0 });
+  const onDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!coupe) return;
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.current.size === 1) drag.current = { moved: false, d: 0 };
+    if (ptrs.current.size === 2) {
+      const [a, b] = [...ptrs.current.values()];
+      drag.current.d = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  };
+  const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const prev = ptrs.current.get(e.pointerId);
+    if (!coupe || !prev) return;
+    const m = svgRef.current?.getScreenCTM();
+    if (!m) return;
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.current.size === 2) {
+      const [a, b] = [...ptrs.current.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const p = toSvg((a.x + b.x) / 2, (a.y + b.y) / 2);
+      if (p && drag.current.d > 0) zoomAt(p.x, p.y, d / drag.current.d);
+      drag.current.d = d;
+      drag.current.moved = true;
+      return;
+    }
+    const dx = e.clientX - prev.x;
+    const dy = e.clientY - prev.y;
+    if (!drag.current.moved && Math.hypot(dx, dy) < 2) return;
+    if (!drag.current.moved) svgRef.current?.setPointerCapture(e.pointerId);
+    drag.current.moved = true;
+    setCut((c) => clampCut({ ...c, x: c.x + dx / m.a, y: c.y + dy / m.d }));
+  };
+  const onUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    ptrs.current.delete(e.pointerId);
+  };
+
+  const svg = (
     <svg
+      ref={svgRef}
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="xMidYMid slice"
-      className={className}
+      className={coupe ? 'absolute inset-0 w-full h-full' : className}
       role="img"
       aria-label={`Arpenteur ${doc.name}`}
+      style={
+        coupe
+          ? {
+              touchAction: cut.z > 1 ? 'none' : 'pan-y',
+              cursor: cut.z > 1 ? 'grab' : undefined,
+            }
+          : undefined
+      }
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={onUp}
+      onClickCapture={(e) => {
+        if (drag.current.moved) {
+          e.stopPropagation();
+          drag.current.moved = false;
+        }
+      }}
     >
       <style>{SCENE_STYLE + SHIP_STYLE}</style>
       <defs>
@@ -387,8 +500,12 @@ export function ShipScene({
         ) : (
           <g key="coupe" className="arp-fade">
             <rect width={W} height={H} fill="#0b0705" opacity={0.55} />
-            <g transform={`translate(${ctx},${cty}) scale(${cutScale})`}>
-              <ShipCutaway doc={doc} build={build} onRoom={onRoom} />
+            <g
+              transform={`translate(${W / 2 + cut.x},${H / 2 + cut.y}) scale(${cut.z}) translate(${-W / 2},${-H / 2})`}
+            >
+              <g transform={`translate(${ctx},${cty}) scale(${cutScale})`}>
+                <ShipCutaway doc={doc} build={build} onRoom={onRoom} />
+              </g>
             </g>
           </g>
         )}
@@ -417,5 +534,45 @@ export function ShipScene({
         />
       </g>
     </svg>
+  );
+  if (!coupe) return svg;
+  const btn =
+    'h-8 w-8 rounded-full text-[#cdb68c] hover:bg-white/10 font-heading text-base leading-none flex items-center justify-center';
+  const center = (f: number) => zoomAt(W / 2, H / 2, f);
+  return (
+    <div className={className}>
+      {svg}
+      <div className="absolute top-14 right-3 sm:top-16 sm:right-5 arp-lever rounded-full p-1 flex flex-col gap-0.5">
+        <button
+          type="button"
+          className={btn}
+          onClick={() => center(1.35)}
+          title="Zoomer"
+          aria-label="Zoomer sur la coupe"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className={`${btn} ${cut.z > 1 ? '' : 'opacity-50'}`}
+          onClick={() => center(1 / 1.35)}
+          disabled={cut.z <= 1}
+          title="Dézoomer"
+          aria-label="Dézoomer la coupe"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className={`${btn} ${cut.z > 1 ? 'arp-lever-on' : 'opacity-50'}`}
+          onClick={() => setCut(CUT_HOME)}
+          disabled={cut.z <= 1}
+          title="Vue d'ensemble"
+          aria-label="Revenir à la vue d'ensemble de la coupe"
+        >
+          ⟲
+        </button>
+      </div>
+    </div>
   );
 }

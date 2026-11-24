@@ -161,7 +161,16 @@ export function ShipScene3D(props: ShipSceneProps) {
       (1 - doc.combat.constitution / Math.max(1, doc.combat.constitutionMax)) *
         8
     ) / 8;
-  const use3D = view === 'profil' && !failed;
+  // La scène 3D reste montée pendant la vue en coupe (plan 2D par-dessus) :
+  // elle ne dessine plus, et le retour au profil est immédiat, sans
+  // rechargement.
+  const use3D = !failed;
+  const coupe = view === 'coupe';
+  const coupeRef = useRef(coupe);
+  coupeRef.current = coupe;
+  useEffect(() => {
+    if (!coupe) canvasRef.current?.dispatchEvent(new Event('arp-cam'));
+  }, [coupe]);
 
   // Création du moteur, boucle d'animation et redimensionnement.
   useEffect(() => {
@@ -267,6 +276,11 @@ export function ShipScene3D(props: ShipSceneProps) {
           return;
         }
         if (warming) return;
+        if (coupeRef.current) {
+          last = 0;
+          dirty = true;
+          return;
+        }
         if (still && !dirty && !stage.traveling) return;
         if (!onScreen) {
           last = 0;
@@ -610,6 +624,12 @@ export function ShipScene3D(props: ShipSceneProps) {
     'h-8 w-8 rounded-full text-[#cdb68c] hover:bg-white/10 font-heading text-base leading-none flex items-center justify-center';
   return (
     <div className={className}>
+      {coupe && (
+        <ShipScene
+          {...props}
+          className="absolute inset-0 z-[3] w-full h-full"
+        />
+      )}
       <canvas
         key={engine}
         ref={canvasRef}
@@ -618,7 +638,7 @@ export function ShipScene3D(props: ShipSceneProps) {
         role="img"
         aria-label={`Arpenteur ${doc.name} — glisser pour pivoter, molette ou pincement pour zoomer`}
       />
-      {engine === 'three' && (
+      {engine === 'three' && !coupe && (
         <SceneLoader
           visible={!nativeReady || resuming}
           f={nativeReady ? 1 : nativeProg.f}
@@ -627,7 +647,7 @@ export function ShipScene3D(props: ShipSceneProps) {
         />
       )}
       <DebugPanel3D />
-      {travel && (
+      {travel && !coupe && (
         <div
           className="pointer-events-none absolute left-1/2 bottom-3 sm:bottom-24 -translate-x-1/2 arp-plate rounded-xl px-4 py-2 text-center min-w-[220px]"
           role="status"
@@ -649,7 +669,7 @@ export function ShipScene3D(props: ShipSceneProps) {
           </p>
         </div>
       )}
-      {banner && (
+      {banner && !coupe && (
         <div
           key={banner.title}
           className="arp-travel-banner pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 text-center"
@@ -663,7 +683,9 @@ export function ShipScene3D(props: ShipSceneProps) {
           </p>
         </div>
       )}
-      <div className="absolute top-14 right-3 sm:top-16 sm:right-5 arp-lever rounded-full p-1 flex flex-col gap-0.5">
+      <div
+        className={`absolute top-14 right-3 sm:top-16 sm:right-5 arp-lever rounded-full p-1 flex flex-col gap-0.5 ${coupe ? 'hidden' : ''}`}
+      >
         <button
           type="button"
           className={btn}
