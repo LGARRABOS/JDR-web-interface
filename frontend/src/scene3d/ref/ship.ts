@@ -261,15 +261,22 @@ function hull(k: Kit, m: RefMaterials) {
     keel.push(hullPt(1, (1.22 * j) / 12, 1).setZ(0));
   k.add(m.paint, tube(keel, 0.22, 160, 10));
 
-  // Pont : suit la tonture, entre les deux murailles.
+  // Pont : suit la tonture, entre les deux murailles. Faces tournées vers le
+  // haut (sinon, vu d'au-dessus, le pont disparaît et l'on voit l'intérieur
+  // de la coque).
   k.add(
     m.deck,
-    grid(NS, 16, (i, j) => {
-      const s = 0.004 + SS(i, NS) * 0.99;
-      const e = hullPt(s, 1, 1);
-      const z = -e.z + (2 * e.z * j) / 16;
-      return { p: V(e.x, e.y + 0.02, z), uv: [e.x, z] };
-    })
+    grid(
+      NS,
+      16,
+      (i, j) => {
+        const s = 0.004 + SS(i, NS) * 0.99;
+        const e = hullPt(s, 1, 1);
+        const z = -e.z + (2 * e.z * j) / 16;
+        return { p: V(e.x, e.y + 0.02, z), uv: [e.x, z] };
+      },
+      true
+    )
   );
 
   // Préceintes et lisse : bandes continues qui font le tour par la poupe.
