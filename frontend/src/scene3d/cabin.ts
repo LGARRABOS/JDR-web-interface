@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CrewCast } from './crewCast';
 import type { RefMaterials } from './ref/materials';
 
 // Cabine du capitaine autour de la maquette : grand bureau, objets de
@@ -1408,9 +1409,15 @@ void main(){ vec3 p = position; float s = fract(sin(dot(p.xz, vec2(12.9,78.2))) 
     }
   }
 
+  // --- Équipage : personnages réalistes chargés à part (1 m ≈ 44 unités) ---
+  const crew = new CrewCast({ deskW: BW, farZ, floorY, unit: 44 });
+  g.add(crew.group);
+  own.push(crew);
+
   return {
     group: g,
     update(time: number) {
+      crew.update(time);
       // Roulis : les lanternes et le balancier oscillent, le feu rougeoie,
       // la pipe fume, la poussière danse dans la lumière.
       for (const l of swing) {
