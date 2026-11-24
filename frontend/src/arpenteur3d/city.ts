@@ -150,6 +150,19 @@ const STYLES: Record<string, CityStyle> = {
     height: 0.85,
     palms: 0.2,
   },
+  // Fort insulaire de pierre grise : remparts, beffroi et phare sur la mer.
+  FORT_SEKKEL: {
+    layout: 'remparts',
+    walls: ['#8a8478', '#7a7468', '#9a9488', '#6a645a'],
+    dome: '#3a3a44',
+    domeMetal: false,
+    awnings: ['#2f3a5a', '#8a2f24', '#5a5a5a'],
+    roof: 'pignons',
+    tower: 'phare',
+    monument: 'phare',
+    height: 1,
+    palms: 0,
+  },
   // Ville d'os blanchi : colosse de pierre, arène.
   KARTOUM: {
     layout: 'huttes',

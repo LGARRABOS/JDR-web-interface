@@ -3,10 +3,15 @@ import { MARKER_KINDS } from '../arpenteur/catalog';
 import {
   CITIES,
   COAST,
+  CRATER,
   CROSSINGS,
   DESERTS,
-  MOUNTAINS,
+  DUNES,
+  ISLANDS,
+  LAKES,
   REGIONS,
+  RIDGES,
+  RIVERS,
   ROUTES,
   nodeName,
   nodePosition,
@@ -20,11 +25,13 @@ import type { RefMaterials } from './ref/materials';
 
 // Carte 3D des déserts de Keld : grande carte en relief posée sur le bureau
 // du capitaine. Terres peintes (déserts teintés, sous-régions à l'encre),
-// mer peinte avec rose des vents, montagnes et cités en miniature ;
+// mer peinte avec rose des vents ; géographie de la carte nationale (île de
+// Fort Sekkel, fleuves, lac, cratère, dunes), chaînes de montagnes et cités
+// en miniature ;
 // traversées et trajets lumineux, position inconnue en tourbillon d'Aether,
 // et le navire qui voyage dessus.
 
-/** Repère du croquis (2000 × 1420) → maquette. */
+/** Repère de la carte (2000 × 1420) → maquette. */
 const S = 0.028;
 const W = 2000 * S;
 const D = 1420 * S;
@@ -70,6 +77,11 @@ function inside(p: [number, number], poly: [number, number][]) {
   }
   return c;
 }
+
+/** Terres émergées : continent et îles. */
+const LANDS: [number, number][][] = [COAST, ...ISLANDS];
+const onLand = (p: [number, number]) =>
+  LANDS.some((l) => inside(p, l)) && !LAKES.some((l) => inside(p, l));
 
 /** Étiquette (plaque sombre, texte clair). */
 function label(text: string, size = 1, accent = '#f3dfb4') {
@@ -121,7 +133,7 @@ function paint() {
   for (let i = 0; i < 160; i++) {
     const x = r() * 2000,
       y = r() * 1420;
-    if (inside([x, y], COAST)) continue;
+    if (onLand([x, y])) continue;
     g.beginPath();
     g.arc(x, y, 9, Math.PI * 1.1, Math.PI * 1.9);
     g.arc(x + 16, y, 9, Math.PI * 1.1, Math.PI * 1.9);
@@ -185,21 +197,89 @@ function paint() {
     pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
     g.closePath();
   };
-  path(COAST);
+  const lands = () => {
+    g.beginPath();
+    for (const l of LANDS) {
+      l.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath();
+    }
+  };
+  const line = (pts: [number, number][]) => {
+    g.beginPath();
+    pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  };
+  // Ombre des côtes sur la mer, puis le sable.
+  g.save();
+  g.shadowColor = 'rgba(20,35,45,0.45)';
+  g.shadowBlur = 26;
+  lands();
   g.fillStyle = '#dcc493';
   g.fill();
+  g.restore();
   g.save();
-  path(COAST);
+  lands();
   g.clip();
   for (let i = 0; i < 14000; i++) {
     g.fillStyle = `rgba(${r() < 0.5 ? '255,245,220' : '120,90,50'},${0.04 + r() * 0.05})`;
     g.fillRect(r() * 2000, r() * 1420, 2 + r() * 5, 2 + r() * 5);
   }
+  // Piémonts plus sombres le long des crêtes.
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  for (const rg of RIDGES) {
+    line(rg);
+    g.strokeStyle = 'rgba(120,88,52,0.2)';
+    g.lineWidth = 130;
+    g.stroke();
+    g.strokeStyle = 'rgba(105,76,44,0.22)';
+    g.lineWidth = 64;
+    g.stroke();
+  }
   for (const reg of REGIONS) {
     path(reg.points);
     const c = new THREE.Color(DESERTS[reg.desert].color);
-    g.fillStyle = `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},0.32)`;
+    g.fillStyle = `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},0.3)`;
     g.fill();
+  }
+  // Dunes : petits arcs d'encre.
+  g.strokeStyle = 'rgba(110,78,40,0.55)';
+  g.lineWidth = 2.5;
+  for (const [dx, dy] of DUNES) {
+    for (let k = 0; k < 3; k++) {
+      const x = dx + (r() - 0.5) * 60,
+        y = dy + (r() - 0.5) * 34;
+      g.beginPath();
+      g.moveTo(x - 26, y + 6);
+      g.quadraticCurveTo(x - 6, y - 14, x + 10, y - 2);
+      g.quadraticCurveTo(x + 20, y + 4, x + 30, y + 6);
+      g.stroke();
+    }
+  }
+  // Cratère.
+  const cg = g.createRadialGradient(
+    CRATER.x,
+    CRATER.y,
+    4,
+    CRATER.x,
+    CRATER.y,
+    70
+  );
+  cg.addColorStop(0, 'rgba(40,24,14,0.85)');
+  cg.addColorStop(0.45, 'rgba(90,58,32,0.6)');
+  cg.addColorStop(1, 'rgba(90,58,32,0)');
+  g.fillStyle = cg;
+  g.beginPath();
+  g.ellipse(CRATER.x, CRATER.y, 72, 48, -0.15, 0, Math.PI * 2);
+  g.fill();
+  // Fleuves.
+  for (const rv of RIVERS) {
+    line(rv);
+    g.strokeStyle = '#3a2a18';
+    g.lineWidth = 10;
+    g.stroke();
+    g.strokeStyle = '#6f9cab';
+    g.lineWidth = 6;
+    g.stroke();
   }
   // Frontières des sous-régions, à l'encre.
   g.setLineDash([10, 8]);
@@ -211,11 +291,22 @@ function paint() {
   }
   g.setLineDash([]);
   g.restore();
-  // Côte.
-  path(COAST);
-  g.strokeStyle = '#3a2a18';
-  g.lineWidth = 5;
-  g.stroke();
+  // Lacs.
+  for (const l of LAKES) {
+    path(l);
+    g.fillStyle = '#6f9cab';
+    g.fill();
+    g.strokeStyle = '#3a2a18';
+    g.lineWidth = 4;
+    g.stroke();
+  }
+  // Côtes.
+  for (const l of LANDS) {
+    path(l);
+    g.strokeStyle = '#3a2a18';
+    g.lineWidth = 5;
+    g.stroke();
+  }
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
@@ -299,11 +390,16 @@ export class WorldMapScene {
     sea.position.y = -0.2;
     sea.receiveShadow = true;
     sc.add(sea);
-    const shape = new THREE.Shape(
-      COAST.map(([x, y]) => new THREE.Vector2(x, -y))
-    );
+    const v2 = (pts: [number, number][]) =>
+      pts.map(([x, y]) => new THREE.Vector2(x, -y));
+    const shapes = LANDS.map((l) => {
+      const sh = new THREE.Shape(v2(l));
+      for (const lk of LAKES)
+        if (inside(lk[0], l)) sh.holes.push(new THREE.Path(v2(lk)));
+      return sh;
+    });
     const landG = keep(
-      new THREE.ExtrudeGeometry(shape, {
+      new THREE.ExtrudeGeometry(shapes, {
         depth: (LAND + 0.2) / S,
         bevelEnabled: true,
         bevelThickness: 2,
@@ -357,33 +453,73 @@ export class WorldMapScene {
     const snow = keep(
       new THREE.MeshStandardMaterial({ color: '#efe8dc', roughness: 0.8 })
     );
-    for (const m of MOUNTAINS) {
-      const n = Math.round((m.w * m.h) / 4200);
-      for (let i = 0; i < n; i++) {
-        const x = m.x + r() * m.w,
-          y = m.y + r() * m.h;
-        if (!inside([x, y], COAST)) continue;
-        const h = 0.9 + r() * 1.6;
-        const cone = new THREE.Mesh(
-          keep(
-            new THREE.ConeGeometry(0.55 + r() * 0.5, h, 6 + Math.floor(r() * 3))
-          ),
-          rock
+    // Chaînes le long des crêtes de la carte nationale : sommets plus hauts
+    // au milieu de la chaîne, contreforts de part et d'autre.
+    const peak = (x: number, y: number, h: number) => {
+      if (!onLand([x, y])) return;
+      const cone = new THREE.Mesh(
+        keep(
+          new THREE.ConeGeometry(
+            0.32 + h * 0.2 + r() * 0.22,
+            h,
+            6 + Math.floor(r() * 3)
+          )
+        ),
+        rock
+      );
+      cone.position.set(X(x), LAND + h / 2 - 0.05, Z(y));
+      cone.rotation.y = r() * 3;
+      cone.castShadow = cone.receiveShadow = true;
+      sc.add(cone);
+      if (h > 1.75) {
+        const cap = new THREE.Mesh(
+          keep(new THREE.ConeGeometry(0.24, 0.42, 6)),
+          snow
         );
-        cone.position.set(X(x), LAND + h / 2 - 0.05, Z(y));
-        cone.rotation.y = r() * 3;
-        cone.castShadow = cone.receiveShadow = true;
-        sc.add(cone);
-        if (h > 1.8) {
-          const cap = new THREE.Mesh(
-            keep(new THREE.ConeGeometry(0.24, 0.42, 6)),
-            snow
-          );
-          cap.position.set(X(x), LAND + h - 0.25, Z(y));
-          sc.add(cap);
+        cap.position.set(X(x), LAND + h - 0.25, Z(y));
+        sc.add(cap);
+      }
+    };
+    for (const rg of RIDGES) {
+      const seg: number[] = [];
+      let total = 0;
+      for (let i = 1; i < rg.length; i++) {
+        const l = Math.hypot(rg[i][0] - rg[i - 1][0], rg[i][1] - rg[i - 1][1]);
+        seg.push(l);
+        total += l;
+      }
+      for (let d = 0; d <= total; d += 34) {
+        let i = 0,
+          t = d;
+        while (i < seg.length - 1 && t > seg[i]) t -= seg[i++];
+        const [ax, ay] = rg[i],
+          [bx, by] = rg[i + 1];
+        const u = Math.min(1, t / seg[i]);
+        const x = ax + (bx - ax) * u,
+          y = ay + (by - ay) * u;
+        const nx = -(by - ay) / seg[i],
+          ny = (bx - ax) / seg[i];
+        const mid = Math.sin((d / total) * Math.PI);
+        const off = (r() - 0.5) * 24;
+        peak(x + nx * off, y + ny * off, 1 + mid * 1.1 + r() * 0.5);
+        for (const side of [-1, 1]) {
+          if (r() < 0.55) {
+            const o = side * (30 + r() * 26);
+            peak(x + nx * o, y + ny * o, 0.5 + mid * 0.4 + r() * 0.4);
+          }
         }
       }
     }
+    // Cratère : rebord en anneau.
+    const rim = new THREE.Mesh(
+      keep(new THREE.TorusGeometry(1.55, 0.32, 8, 28)),
+      rock
+    );
+    rim.rotation.x = -Math.PI / 2;
+    rim.scale.set(1, 0.68, 1);
+    rim.position.set(X(CRATER.x), LAND + 0.08, Z(CRATER.y));
+    rim.castShadow = rim.receiveShadow = true;
+    sc.add(rim);
 
     // Sous-régions : zones cliquables (surbrillance), contours lumineux.
     const overlayG = (pts: [number, number][]) => {
