@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { spotById } from '../../arpenteur/spots';
+import { spotById, spotsOf } from '../../arpenteur/spots';
 import { ArpenteurAPI } from '../../api/client';
-import { nodeName, regionById } from '../../arpenteur/keld';
+import { nodeName, regionById, UNKNOWN } from '../../arpenteur/keld';
 import { crewPlaces, postsOf } from '../../arpenteur/logic';
 import { useArpenteur } from '../../arpenteur/useArpenteur';
 import type { ArpenteurPayload, Build } from '../../arpenteur/types';
@@ -17,6 +17,8 @@ import { SettingsPanel } from './SettingsPanel';
 import type { CutawayTarget } from './ShipCutaway';
 import { ShipScene3D } from './ShipScene3D';
 import { Cog, healthColor } from './ui';
+import { useTravel } from './useTravel';
+import { WorldMap3D } from './WorldMap3D';
 
 type Tab =
   | 'navire'
@@ -67,6 +69,45 @@ export function ArpenteurView({
     label: string;
   } | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
+  // Plein écran : la scène occupe tout l'écran, avec des raccourcis en bas
+  // (carte des déserts, lieux-dits, coupe). La carte s'ouvre après un fondu.
+  const [full, setFull] = useState(false);
+  const [world, setWorld] = useState<null | 'world' | 'zone'>(null);
+  const [fade, setFade] = useState(false);
+  const travelNow = useTravel(doc?.map.travel ?? null);
+  useEffect(() => {
+    const onChange = () => {
+      if (!document.fullscreenElement) setFull(false);
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !document.fullscreenElement && !world)
+        setFull(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full, world]);
+  const enterFull = () => {
+    setFull(true);
+    // Vrai plein écran du navigateur quand il est permis ; sinon la scène
+    // couvre simplement la page.
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  };
+  const leaveFull = () => {
+    setFull(false);
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  };
+  const openWorld = (w: 'world' | 'zone') => {
+    setFade(true);
+    setTimeout(() => {
+      setWorld(w);
+      setTimeout(() => setFade(false), 60);
+    }, 380);
+  };
 
   // Mode activé en cours de partie : l'instantané n'avait pas encore l'arpenteur.
   useEffect(() => {
@@ -170,7 +211,13 @@ export function ArpenteurView({
             teeth={8}
             className="absolute right-8 -bottom-4 z-10 hidden sm:block"
           />
-          <section className="relative w-full rounded-3xl overflow-hidden border border-fantasy-border-soft shadow-2xl bg-black aspect-[4/3] sm:aspect-[5/2] max-h-[62vh] min-h-[230px]">
+          <section
+            className={
+              full
+                ? 'fixed inset-0 z-[45] w-full h-full overflow-hidden bg-black'
+                : 'relative w-full rounded-3xl overflow-hidden border border-fantasy-border-soft shadow-2xl bg-black aspect-[4/3] sm:aspect-[5/2] max-h-[62vh] min-h-[230px]'
+            }
+          >
             <ShipScene3D
               doc={doc}
               build={shownBuild}
@@ -224,6 +271,16 @@ export function ArpenteurView({
                   {v === 'profil' ? 'Profil' : 'Coupe'}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={full ? leaveFull : enterFull}
+                className="h-8 w-8 ml-0.5 rounded-full text-[#cdb68c] hover:bg-white/10 text-base leading-none flex items-center justify-center"
+                title={full ? 'Quitter le plein écran (Échap)' : 'Plein écran'}
+                aria-label={full ? 'Quitter le plein écran' : 'Plein écran'}
+                aria-pressed={full}
+              >
+                {full ? '✕' : '⛶'}
+              </button>
             </div>
 
             {preview ? (
@@ -245,11 +302,55 @@ export function ArpenteurView({
                 Cliquez sur une salle pour la gérer
               </p>
             ) : (
-              <div className="hidden sm:flex absolute bottom-5 left-5 right-5 flex-wrap gap-2 pointer-events-none">
+              <div
+                className={`hidden sm:flex absolute left-5 right-5 flex-wrap gap-2 pointer-events-none ${full ? 'bottom-24' : 'bottom-5'}`}
+              >
                 {chips}
               </div>
             )}
+            {full && (
+              <nav
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[6] arp-plate rounded-2xl p-1.5 flex items-center gap-1.5 max-w-[96%] overflow-x-auto"
+                aria-label="Raccourcis"
+              >
+                <Shortcut
+                  icon="🗺"
+                  label="Carte des déserts"
+                  onClick={() => openWorld('world')}
+                />
+                {!travelNow &&
+                  spotsOf(doc.map.sector || UNKNOWN).length > 0 && (
+                    <Shortcut
+                      icon="⚑"
+                      label="Lieux-dits"
+                      onClick={() => openWorld('zone')}
+                    />
+                  )}
+                <Shortcut
+                  icon={view === 'coupe' ? '⛵' : '▤'}
+                  label={view === 'coupe' ? 'Profil' : 'Coupe'}
+                  onClick={() => setView(view === 'coupe' ? 'profil' : 'coupe')}
+                />
+                <Shortcut icon="✕" label="Quitter" onClick={leaveFull} />
+              </nav>
+            )}
+            <div
+              className={`pointer-events-none absolute inset-0 z-[60] bg-black transition-opacity duration-[380ms] ${fade ? 'opacity-100' : 'opacity-0'}`}
+              aria-hidden
+            />
           </section>
+          {world && (
+            <WorldMap3D
+              doc={doc}
+              can={rights.map}
+              isGM={isGM}
+              save={(next, log) =>
+                update('map', next, { log, immediate: !!log })
+              }
+              startInZone={world === 'zone'}
+              onClose={() => setWorld(null)}
+            />
+          )}
         </div>
         {!preview && view === 'profil' && (
           <div className="sm:hidden flex flex-wrap gap-1.5 -mt-1">{chips}</div>
@@ -354,6 +455,29 @@ export function ArpenteurView({
         </div>
       )}
     </div>
+  );
+}
+
+function Shortcut({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-11 px-3 sm:px-4 rounded-xl flex items-center gap-2 text-sm font-heading text-[#f3dfb4] hover:bg-white/10 whitespace-nowrap"
+    >
+      <span aria-hidden className="text-lg leading-none">
+        {icon}
+      </span>
+      {label}
+    </button>
   );
 }
 
