@@ -126,7 +126,8 @@ export function createMapView(
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.minDistance = 28;
-  controls.maxDistance = 170;
+  // Pas de recul au-delà de la position de départ (la carte entière).
+  controls.maxDistance = opts.start.pos.distanceTo(opts.start.target);
   // Caméra fixe au-dessus de la carte : pas de rotation, l'angle reste
   // celui du départ. Clic gauche maintenu : on fait glisser la carte ;
   // molette : zoom. Au doigt : glisser, pincer.
@@ -149,7 +150,7 @@ export function createMapView(
   controls.panSpeed = 1.1;
   controls.update();
   // Plan d'ouverture : la caméra part de la vue de la pièce et descend en
-  // arc au-dessus de la carte ; un clic l'abrège.
+  // arc au-dessus de la carte ; on ne peut ni bouger ni cliquer pendant.
   let intro: { t0: number; a: MapIntro } | null = null;
   if (opts.intro) {
     intro = { t0: performance.now(), a: opts.intro };
@@ -165,9 +166,6 @@ export function createMapView(
     controls.enabled = true;
     controls.update();
   };
-  const skip = () => endIntro();
-  canvas.addEventListener('pointerdown', skip);
-  canvas.addEventListener('wheel', skip, { passive: true });
 
   const resize = () => {
     const r = wrap.getBoundingClientRect();
@@ -199,8 +197,11 @@ export function createMapView(
   };
 
   let down: { x: number; y: number } | null = null;
-  const onMove = (e: PointerEvent) => opts.onHover?.(e);
+  const onMove = (e: PointerEvent) => {
+    if (!intro) opts.onHover?.(e);
+  };
   const onDown = (e: PointerEvent) => {
+    if (intro) return;
     down = { x: e.clientX, y: e.clientY };
     canvas.style.cursor = 'grabbing';
   };
@@ -311,8 +312,6 @@ export function createMapView(
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointerleave', onLeave);
-      canvas.removeEventListener('pointerdown', skip);
-      canvas.removeEventListener('wheel', skip);
       controls.dispose();
       // Le rendu est gardé pour la prochaine ouverture ; on le décroche.
       canvas.remove();
