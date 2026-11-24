@@ -5,7 +5,7 @@ import type {
   NativeHost,
   NativeShipOptions,
 } from '../../arpenteur3d/native';
-import { crewPose } from '../../arpenteur3d/stage';
+import { crewPose, type CrewPose } from '../../arpenteur3d/stage';
 import {
   ALLURE_SPECS,
   type CrewMember,
@@ -24,6 +24,7 @@ import {
 } from '../ref/ship';
 import { cyl, Kit, lathe, M, tess, torus } from '../ref/kit';
 import { Crowd } from './crew';
+import { Folk } from './folk';
 import { AetherRealm } from './aether';
 import { Herds } from './fauna';
 import { Landmarks } from './landmarks';
@@ -182,6 +183,16 @@ interface ShipRt {
   sailFresh: boolean;
 }
 
+/** Distance (unités ≈ mètres) en deçà de laquelle un habitant est réaliste. */
+const FOLK_NEAR = 160;
+
+/** Vitesse au sol d'un personnage (m/s), pour cadencer sa marche. */
+function groundSpeed(c: CrewMember, pose: CrewPose, time: number) {
+  if (c.role !== 'walk' && c.role !== 'capstan') return 0;
+  const q = crewPose(c, time - 0.1);
+  return Math.hypot(pose.pos[0] - q.pos[0], pose.pos[2] - q.pos[2]) / 0.1;
+}
+
 export class NativeLayer implements NativeHost {
   ready = false;
   readonly root = new THREE.Group();
@@ -191,6 +202,7 @@ export class NativeLayer implements NativeHost {
   private pending: { build: Build; opts: NativeShipOptions } | null = null;
   private npcs = new Map<string, ShipRt>();
   private crowd: Crowd;
+  private folk: Folk;
   private grass: THREE.Mesh;
   private herds: Herds;
   private aether: AetherRealm | null = null;
@@ -221,6 +233,9 @@ export class NativeLayer implements NativeHost {
     this.root.add(this.smoke.points, this.steam.points, this.dust.points);
     this.crowd = new Crowd(400, (m) => this.patch(m));
     this.root.add(this.crowd.root);
+    // Figurants réalistes (les plus proches) ; la foule simplifiée fait le reste.
+    this.folk = new Folk(this.lowQ ? 12 : 36, (m) => this.patch(m));
+    this.root.add(this.folk.root);
     // Savane : herbes sèches (carte graphique) et grands troupeaux.
     this.grass = grassField(
       shared as unknown as Record<string, { value: unknown }>,
@@ -602,6 +617,7 @@ vArpW = (modelMatrix * arpW).xyz;`
     }
 
     // Navire de la partie.
+    this.folk.begin();
     const shipM = new THREE.Matrix4().fromArray(f.shipM);
     const pr = this.player;
     if (pr) {
@@ -612,14 +628,21 @@ vArpW = (modelMatrix * arpW).xyz;`
       );
       this.crowd.begin();
       const base = pr.root.matrix;
-      for (const c of f.crew)
-        this.crowd.add(
-          base,
-          pr.crewStyle,
-          crewPose(pr.crewMap.get(c) ?? c, f.time),
-          0,
-          0.95
-        );
+      for (const c of f.crew) {
+        const m = pr.crewMap.get(c) ?? c;
+        const pose = crewPose(m, f.time);
+        if (
+          !this.folk.add(
+            base,
+            m,
+            pose,
+            groundSpeed(m, pose, f.time),
+            0.95,
+            false
+          )
+        )
+          this.crowd.add(base, pr.crewStyle, pose, 0, 0.95);
+      }
       this.emit(pr, shipM, f);
     }
 
@@ -660,15 +683,30 @@ vArpW = (modelMatrix * arpW).xyz;`
     const cam = this.camera.position;
     const bm = new THREE.Matrix4();
     const wp = new THREE.Vector3();
+    const near: { p: (typeof f.crowd)[number]; pose: CrewPose; d2: number }[] =
+      [];
     for (const p of f.crowd) {
       bm.fromArray(p.base);
       wp.set(p.member.pos[0], p.member.pos[1], p.member.pos[2]).applyMatrix4(
         bm
       );
-      if (wp.distanceToSquared(cam) > 420 * 420) continue;
-      this.crowd.add(bm, p.style, crewPose(p.member, f.time), 0, 0.95);
+      const d2 = wp.distanceToSquared(cam);
+      if (d2 > 420 * 420) continue;
+      const pose = crewPose(p.member, f.time);
+      if (this.folk.ready && d2 < FOLK_NEAR * FOLK_NEAR)
+        near.push({ p, pose, d2 });
+      else this.crowd.add(bm, p.style, pose, 0, 0.95);
+    }
+    // Les plus proches d'abord : ce sont eux qu'on voit en détail.
+    near.sort((a, b) => a.d2 - b.d2);
+    for (const { p, pose } of near) {
+      bm.fromArray(p.base);
+      const v = groundSpeed(p.member, pose, f.time);
+      if (!this.folk.add(bm, p.member, pose, v, 0.95, true))
+        this.crowd.add(bm, p.style, pose, 0, 0.95);
     }
     this.crowd.end();
+    this.folk.end(Math.min(0.1, Math.max(0, f.dt)));
 
     // Particules : couleur de la lumière du moment.
     const lit = new THREE.Color(
@@ -704,7 +742,7 @@ vArpW = (modelMatrix * arpW).xyz;`
     // sont que cachés en plus.
     const F = dbg.flags;
     if (pr) pr.root.visible = F.ship;
-    this.crowd.root.visible = F.crew;
+    this.crowd.root.visible = this.folk.root.visible = F.crew;
     if (this.scenery) this.scenery.root.visible = F.scenery;
     if (this.landmarks) this.landmarks.root.visible = F.landmarks;
     this.smoke.points.visible = this.steam.points.visible = F.particles;
@@ -801,5 +839,6 @@ vArpW = (modelMatrix * arpW).xyz;`
     this.scenery?.dispose();
     this.aether?.dispose();
     this.landmarks?.dispose();
+    this.folk.dispose();
   }
 }
