@@ -118,16 +118,15 @@ export function createMapView(
   controls.minPolarAngle = 0.12;
   controls.maxPolarAngle = 1.25;
   controls.screenSpacePanning = false;
-  // Un seul angle de vue (le décor est fait pour lui) : clic gauche maintenu
-  // pour faire glisser la carte, molette pour zoomer. Au doigt : glisser,
-  // pincer.
-  controls.enableRotate = false;
+  // Clic gauche maintenu : on fait glisser la carte ; clic droit : on tourne
+  // autour ; molette : zoom. Au doigt : glisser, pincer et tourner.
+  controls.enableRotate = true;
   controls.mouseButtons = {
     LEFT: THREE.MOUSE.PAN,
     MIDDLE: THREE.MOUSE.DOLLY,
-    RIGHT: THREE.MOUSE.PAN,
+    RIGHT: THREE.MOUSE.ROTATE,
   };
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
   controls.panSpeed = 1.1;
   controls.update();
 

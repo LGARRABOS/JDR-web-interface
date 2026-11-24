@@ -312,7 +312,8 @@ export function ZoneMap3D({
           </div>
         )}
         <p className="pointer-events-none absolute left-3 bottom-2 text-[11px] text-[#cdb68c] opacity-70">
-          Clic gauche maintenu pour déplacer la carte · molette pour zoomer
+          Clic gauche maintenu pour déplacer la carte · clic droit pour tourner
+          · molette pour zoomer
         </p>
       </div>
     </div>
