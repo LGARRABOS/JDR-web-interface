@@ -47,7 +47,7 @@ function roles(l: CrewLayout): Role[] {
         { clip: 'Parler', dur: 7 },
         { clip: 'Attente', dur: 5 },
         { clip: 'Discuter', dur: 6 },
-        { clip: 'Attente', dur: 4 },
+        { clip: 'Repos', dur: 5 },
       ],
     },
     {
@@ -59,7 +59,7 @@ function roles(l: CrewLayout): Role[] {
       beats: [
         { clip: 'Attente', dur: 8 },
         { clip: 'Discuter', dur: 6 },
-        { clip: 'Attente', dur: 6 },
+        { clip: 'Repos', dur: 6 },
       ],
     },
     {
@@ -69,7 +69,7 @@ function roles(l: CrewLayout): Role[] {
       z: -6,
       yaw: Math.PI / 2 - 0.15,
       beats: [
-        { clip: 'Attente', dur: 9 },
+        { clip: 'Repos', dur: 9 },
         { clip: 'Parler', dur: 5 },
         { clip: 'Attente', dur: 7 },
       ],
@@ -83,17 +83,19 @@ function roles(l: CrewLayout): Role[] {
       beats: [
         { clip: 'Attente', dur: 11 },
         { clip: 'Discuter', dur: 5 },
+        { clip: 'Repos', dur: 8 },
       ],
     },
     {
-      // La chirurgienne, près de la table d'échecs, suit la discussion.
+      // La chirurgienne, entre le coffre et la table d'échecs, suit la discussion.
       file: 'chirurgienne',
-      x: -70,
-      z: l.farZ - 102,
-      yaw: 0.6,
+      x: -115,
+      z: l.farZ - 85,
+      yaw: 0.75,
       beats: [
-        { clip: 'Attente', dur: 10 },
+        { clip: 'Repos', dur: 10 },
         { clip: 'Discuter', dur: 6 },
+        { clip: 'Attente', dur: 8 },
       ],
     },
     {
@@ -103,7 +105,7 @@ function roles(l: CrewLayout): Role[] {
       z: l.farZ - 112,
       yaw: 0,
       beats: [{ clip: 'Attente', dur: 1 }],
-      pace: { x0: -95, x1: 95, speed: 1.15, pause: 3.5 },
+      pace: { x0: -80, x1: 95, speed: 1.15, pause: 3.5 },
     },
   ];
 }
@@ -213,6 +215,12 @@ export class CrewCast {
   constructor(layout: CrewLayout) {
     this.group.position.y = layout.floorY;
     const loader = new GLTFLoader();
+    // La politique de sécurité du site interdit fetch() sur les URL blob: :
+    // les textures intégrées au .glb passent par des <img> (autorisées).
+    loader.register((parser) => {
+      parser.textureLoader = new THREE.TextureLoader(parser.options.manager);
+      return { name: 'jdr_textures_img' };
+    });
     roles(layout).forEach((role, i) => {
       loader.load(
         `${MODELS_URL}${role.file}.glb`,
