@@ -16,6 +16,7 @@ import {
   torus,
   tube,
 } from './kit';
+import { PropSet, type PropKind, type PropLib } from './props';
 
 // Navire de référence (gabarit « Protector » : 55 m, 10 m de large).
 // Tout est galbé : coque lissée en sections continues (étrave élancée,
@@ -24,6 +25,10 @@ import {
 // évasée, mâts et vergues effilés, voiles gonflées bordées de ralingues,
 // nacelles horizontales profilées sur bras articulés, tuyauterie courbe.
 // Repère : x vers la proue, y vers le haut, z par le travers ; quille à y = 0.
+
+// Objets de décor modélisés (barre, cabestan, tonneaux…) : posés en
+// instances quand ils sont chargés, sinon les pièces modelées en code restent.
+let P = new PropSet(null);
 
 // Gabarit courant (fixé au début de buildShip) : dimensions et forme.
 export let L = 55.2;
@@ -1091,6 +1096,7 @@ function forecastle(
   // Guindeau à tambour galbé.
   const gx = X(0.9),
     gy = deckY(0.9) + H + 0.55;
+  if (P.put('guindeau', gx, gy - 0.55, 0, Math.PI / 2)) return;
   k.add(
     m.castIron,
     lathe(
@@ -1311,32 +1317,42 @@ function engines(
   for (const side of [1, -1]) {
     const tx = x1 + 1.6,
       tz = side * 3.1;
-    k.add(m.copperSheath, lathe(capsule(0.95, 3.9), 48), M(tx, y0, tz));
-    for (const f of [0.22, 0.5, 0.78])
+    const tank = P.put(
+      'reservoir',
+      tx,
+      y0,
+      tz,
+      side > 0 ? Math.PI / 2 : -Math.PI / 2
+    );
+    if (!tank)
+      k.add(m.copperSheath, lathe(capsule(0.95, 3.9), 48), M(tx, y0, tz));
+    for (const f of tank ? [] : [0.22, 0.5, 0.78])
       k.add(
         m.brass,
         torus(0.97, 0.05, 48, 8),
         M(tx, y0 + 3.9 * f, tz, Math.PI / 2)
       );
-    k.add(
-      m.brass,
-      lathe(
-        [
-          [0.001, 0],
-          [0.22, 0],
-          [0.24, 0.04],
-          [0.22, 0.09],
-          [0.001, 0.09],
-        ],
-        24
-      ),
-      M(tx - 0.95, y0 + 2.1, tz, 0, 0, Math.PI / 2)
-    );
-    k.add(
-      m.glass,
-      new THREE.CircleGeometry(0.17, 24),
-      M(tx - 1.05, y0 + 2.1, tz, 0, -Math.PI / 2, 0)
-    );
+    if (!tank)
+      k.add(
+        m.brass,
+        lathe(
+          [
+            [0.001, 0],
+            [0.22, 0],
+            [0.24, 0.04],
+            [0.22, 0.09],
+            [0.001, 0.09],
+          ],
+          24
+        ),
+        M(tx - 0.95, y0 + 2.1, tz, 0, 0, Math.PI / 2)
+      );
+    if (!tank)
+      k.add(
+        m.glass,
+        new THREE.CircleGeometry(0.17, 24),
+        M(tx - 1.05, y0 + 2.1, tz, 0, -Math.PI / 2, 0)
+      );
     // Conduite courbe vers la salle des machines (brides aux extrémités).
     const a = V(tx, y0 + 3.85, tz);
     const b = V(x1 - 0.15, y0 + 2.4, tz - side * 0.6);
@@ -1488,6 +1504,13 @@ function reactor(k: Kit, m: RefMaterials, s = 0.53) {
 function helm(k: Kit, m: RefMaterials, s = 0.33) {
   const x = X(s) + 0.9,
     y = deckY(s);
+  if (P.put('barre', x + 0.1, y, 0)) {
+    if (!P.put('habitacle', x + 1.6, y, 0)) {
+      k.add(m.brass, sphere(0.3, 16, Math.PI / 2), M(x + 1.6, y + 1.0, 0));
+      k.add(m.darkWood, cyl(0.3, 0.24, 1.0, 16), M(x + 1.6, y + 0.5, 0));
+    }
+    return;
+  }
   k.add(
     m.darkWood,
     lathe(
@@ -2038,6 +2061,8 @@ export interface RefShip {
   ) => THREE.Vector3;
   /** Poste du timonier (devant la barre), s'il est sur le pont. */
   helmAt: THREE.Vector3 | null;
+  /** Objets de décor modélisés utilisés pour ce navire (null : aucun). */
+  propLib: PropLib | null;
 }
 
 /** Apparence choisie par l'équipage (reprise de la fiche du navire). */
@@ -2104,30 +2129,38 @@ function details(
     );
     const top = cat.clone().add(V(0, -0.4, 0));
     const shank = 2.6;
+    const modeled = P.put(
+      'ancre',
+      top.x + 0.2,
+      top.y - 2.9,
+      top.z,
+      Math.PI / 2
+    );
     const bot = top
       .clone()
       .add(V(0.25, -shank, 0))
       .addScaledVector(out, 0.35);
-    k.add(m.castIron, tube([top, bot], 0.11, 6, 8));
-    k.add(
-      m.castIron,
-      tube(
-        [
-          top
-            .clone()
-            .addScaledVector(out, -0.9)
-            .add(V(0, -0.3, 0)),
-          top
-            .clone()
-            .addScaledVector(out, 0.9)
-            .add(V(0, -0.3, 0)),
-        ],
-        0.08,
-        4,
-        6
-      )
-    );
-    for (const dir of [1, -1]) {
+    if (!modeled) k.add(m.castIron, tube([top, bot], 0.11, 6, 8));
+    if (!modeled)
+      k.add(
+        m.castIron,
+        tube(
+          [
+            top
+              .clone()
+              .addScaledVector(out, -0.9)
+              .add(V(0, -0.3, 0)),
+            top
+              .clone()
+              .addScaledVector(out, 0.9)
+              .add(V(0, -0.3, 0)),
+          ],
+          0.08,
+          4,
+          6
+        )
+      );
+    for (const dir of modeled ? [] : [1, -1]) {
       const arm = [
         bot,
         bot.clone().add(V(0.9 * dir, 0.35, 0)),
@@ -2172,31 +2205,42 @@ function details(
     const z = side * (halfB(s) + 0.9);
     const y = deckY(s) + 2.6;
     // Coque de bois clair à liston peint, bâche lacée par-dessus.
-    k.add(
-      m.hullWood,
-      sphere(1, 20, Math.PI / 2),
-      M(x, y, z, Math.PI, 0, 0, V(3.3, 1.0, 1.0))
-    );
-    k.add(
-      m.hullBand,
-      torus(1, 0.07, 32, 4),
-      M(x, y - 0.18, z, Math.PI / 2, 0, 0, V(3.28, 0.97, 1))
-    );
-    k.add(
-      m.darkWood,
-      torus(1, 0.06, 32, 4),
-      M(x, y, z, Math.PI / 2, 0, 0, V(3.32, 1.0, 1))
-    );
-    k.add(
-      m.darkWood,
-      tube([V(x - 3.3, y, z), V(x, y - 1.02, z), V(x + 3.3, y, z)], 0.06, 12, 4)
-    );
-    k.add(
-      m.canvas,
-      sphere(1, 16, Math.PI / 2),
-      M(x, y + 0.02, z, 0, 0, 0, V(3.25, 0.42, 0.97))
-    );
-    for (const dx of [-2, -0.7, 0.7, 2])
+    const boat = P.put('canot', x, y - 1.05, z);
+    if (!boat)
+      k.add(
+        m.hullWood,
+        sphere(1, 20, Math.PI / 2),
+        M(x, y, z, Math.PI, 0, 0, V(3.3, 1.0, 1.0))
+      );
+    if (!boat)
+      k.add(
+        m.hullBand,
+        torus(1, 0.07, 32, 4),
+        M(x, y - 0.18, z, Math.PI / 2, 0, 0, V(3.28, 0.97, 1))
+      );
+    if (!boat)
+      k.add(
+        m.darkWood,
+        torus(1, 0.06, 32, 4),
+        M(x, y, z, Math.PI / 2, 0, 0, V(3.32, 1.0, 1))
+      );
+    if (!boat)
+      k.add(
+        m.darkWood,
+        tube(
+          [V(x - 3.3, y, z), V(x, y - 1.02, z), V(x + 3.3, y, z)],
+          0.06,
+          12,
+          4
+        )
+      );
+    if (!boat)
+      k.add(
+        m.canvas,
+        sphere(1, 16, Math.PI / 2),
+        M(x, y + 0.02, z, 0, 0, 0, V(3.25, 0.42, 0.97))
+      );
+    for (const dx of boat ? [] : [-2, -0.7, 0.7, 2])
       k.add(
         m.rope,
         torus(1, 0.025, 16, 3, Math.PI),
@@ -2234,6 +2278,10 @@ function details(
       )
     )
       continue;
+    if (P.put('manche_air', x + 0.3, y, z)) {
+      blocks.push([x - 0.5, x + 1, z, 0.5]);
+      continue;
+    }
     k.add(m.brass, cyl(0.24, 0.24, 1.8, 16), M(x, y + 0.9, z));
     k.add(
       m.brass,
@@ -2271,6 +2319,7 @@ function details(
     const y = deckY(s);
     for (const side of [1, -1]) {
       const z = side * 1.25;
+      if (P.put('ratelier', mx, y, z, side > 0 ? 0 : Math.PI)) continue;
       k.add(m.darkWood, box(2.4, 0.14, 0.26, 0.03), M(mx, y + 0.95, z));
       for (const dx of [-1.05, 1.05])
         k.add(m.darkWood, cyl(0.07, 0.07, 0.95, 8), M(mx + dx, y + 0.47, z));
@@ -2299,7 +2348,11 @@ function details(
     }
   }
   // Habitacle (compas) et cloche devant la barre.
-  if (helmAt) {
+  if (helmAt && P.has('cloche')) {
+    const x = helmAt.x + 2.1;
+    P.put('cloche', x + 0.4, helmAt.y, 1.6, Math.PI / 2);
+    blocks.push([x - 0.4, x + 0.8, 0.8, 1.4]);
+  } else if (helmAt) {
     const x = helmAt.x + 2.1,
       y = helmAt.y;
     k.add(
@@ -2360,6 +2413,11 @@ function details(
       )
     )
       return;
+    const ry = zf > 0 ? Math.PI : 0;
+    if (P.put(i % 2 ? 'coffre' : 'glene', x, y, z, ry)) {
+      blocks.push([x - 0.7, x + 0.7, z, 0.5]);
+      return;
+    }
     if (i % 2) {
       k.add(m.darkWood, box(1.2, 0.6, 0.7, 0.05), M(x, y + 0.3, z));
       k.add(m.brass, box(1.24, 0.06, 0.74, 0.02), M(x, y + 0.45, z));
@@ -2705,8 +2763,10 @@ function flagTexture(color: string, emblem: string): THREE.Texture | null {
 
 export function buildShip(
   base: RefMaterials,
-  look: ShipLook = DEFAULT_LOOK
+  look: ShipLook = DEFAULT_LOOK,
+  props: PropLib | null = null
 ): RefShip {
+  P = new PropSet(props);
   const sp = look.spec;
   setForm(sp);
   LUM = look.luminaires;
@@ -2796,8 +2856,9 @@ export function buildShip(
       continue;
     const x = X(s),
       y = deckY(s);
-    k.add(m.darkWood, box(2.2, 0.4, 2.0, 0.12), M(x, y + 0.2, 0));
     blocks.push([x - 1.3, x + 1.3, 0, 1.2]);
+    if (P.put('ecoutille', x, y, 0)) continue;
+    k.add(m.darkWood, box(2.2, 0.4, 2.0, 0.12), M(x, y + 0.2, 0));
     for (let i = 0; i < 6; i++)
       k.add(
         m.castIron,
@@ -2826,8 +2887,13 @@ export function buildShip(
     const x = X(s),
       y = deckY(s),
       z = zf * halfB(s);
-    k.add(m.darkWood, keg.clone(), M(x, y, z));
     blocks.push([x - 0.6, x + 1.5, z, 0.7]);
+    if (P.has('tonneau') && P.has('caisse')) {
+      P.put('tonneau', x, y, z, s * 40);
+      P.put('caisse', x + 0.9, y, z * 0.9, 0.3);
+      continue;
+    }
+    k.add(m.darkWood, keg.clone(), M(x, y, z));
     for (const h of [0.18, 0.78])
       k.add(m.castIron, torus(0.375, 0.02, 32, 6), M(x, y + h, z, Math.PI / 2));
     k.add(
@@ -2837,6 +2903,57 @@ export function buildShip(
     );
   }
   keg.dispose();
+
+  // Décor modélisé en plus : canons de pont, boulets, pompe, treuil, sacs,
+  // établi… posés là où le pont est libre (les matelots les contournent).
+  if (P.lib) {
+    const fits = (x: number, z: number, r: number) => {
+      const s = x / L + 0.5;
+      if (s < 0.12 || s > 0.9 || roofAt(s) !== undefined) return false;
+      if (Math.abs(z) + r > halfB(s) - 0.5) return false;
+      if (sp.masts.some((q) => Math.abs(X(q) - x) < 1.4 + r)) return false;
+      return !blocks.some(
+        ([a, b, zc, hw]) =>
+          x + r > a - 0.3 && x - r < b + 0.3 && Math.abs(z - zc) < hw + r + 0.3
+      );
+    };
+    // Face avant (+x) tournée vers le bord (dehors) ou vers l'axe (dedans).
+    const out = (side: number) => (side > 0 ? -Math.PI / 2 : Math.PI / 2);
+    const inb = (side: number) => -out(side);
+    const place = (
+      kind: PropKind,
+      r: number,
+      edge: boolean,
+      ry: (side: number) => number,
+      from: number,
+      side0 = 1
+    ) => {
+      if (!P.has(kind)) return;
+      for (let s = from; s < 0.9; s += 0.025)
+        for (const side of [side0, -side0]) {
+          const x = X(s);
+          const z = edge ? side * (halfB(s) - 0.6 - r) : side * (1.6 + r);
+          if (!fits(x, z, r)) continue;
+          P.put(kind, x, deckY(s), z, ry(side));
+          blocks.push([x - r, x + r, z, r]);
+          return;
+        }
+    };
+    place('canon', 1.4, true, out, 0.3, 1);
+    place('canon', 1.4, true, out, 0.3, -1);
+    place('boulets', 0.5, true, out, 0.3, 1);
+    place('boulets', 0.5, true, out, 0.5, -1);
+    place('pompe', 0.6, false, inb, 0.5, 1);
+    place('treuil', 0.7, false, inb, 0.6, -1);
+    place('sacs', 0.7, true, inb, 0.55, 1);
+    place('seau', 0.5, true, inb, 0.45, -1);
+    place('etabli', 1.0, true, inb, 0.35, 1);
+    place('poulailler', 0.6, true, inb, 0.7, -1);
+    place('caisses', 0.9, true, inb, 0.6, 1);
+    place('table_cartes', 0.8, false, inb, 0.25, -1);
+    place('projecteur', 0.6, false, () => 0, 0.82, 1);
+    place('telescope', 0.9, false, inb, 0.72, -1);
+  }
 
   // Mâture (nombre de mâts selon le type, comme le modèle classique).
   const mt = look.mastType;
@@ -3103,6 +3220,7 @@ export function buildShip(
   }
 
   const group = k.build(m.rope);
+  group.add(P.build());
   group.add(sails, rig.ropes, rig.running, rig.gaskets, flags);
   if (prop) group.add(prop);
   const lampColor =
@@ -3157,5 +3275,6 @@ export function buildShip(
     walk: (s) => roofAt(s) ?? deckY(s),
     spot,
     helmAt,
+    propLib: P.lib,
   };
 }

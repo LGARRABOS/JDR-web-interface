@@ -25,6 +25,7 @@ import {
 import { cyl, Kit, lathe, M, tess, torus } from '../ref/kit';
 import { Crowd } from './crew';
 import { Folk } from './folk';
+import { loadProps, type PropLib } from '../ref/props';
 import { AetherRealm } from './aether';
 import { Herds } from './fauna';
 import { Landmarks } from './landmarks';
@@ -203,6 +204,8 @@ export class NativeLayer implements NativeHost {
   private npcs = new Map<string, ShipRt>();
   private crowd: Crowd;
   private folk: Folk;
+  /** Objets de décor modélisés (null : pièces modelées en code). */
+  private props: PropLib | null = null;
   private grass: THREE.Mesh;
   private herds: Herds;
   private aether: AetherRealm | null = null;
@@ -248,8 +251,15 @@ export class NativeLayer implements NativeHost {
     this.root.add(this.grass, this.herds.root);
     for (const p of [this.smoke, this.steam, this.dust])
       this.patch(p.mat as unknown as THREE.Material, false);
-    refLibrary(textures, quality.texSize)
-      .then((lib) => {
+    // Objets de décor : attendus au plus quelques secondes, sinon les navires
+    // gardent leurs pièces modelées en code.
+    const props = Promise.race([
+      loadProps().catch(() => null),
+      new Promise<null>((r) => setTimeout(() => r(null), 8000)),
+    ]);
+    Promise.all([refLibrary(textures, quality.texSize), props])
+      .then(([lib, pl]) => {
+        this.props = pl && pl.size ? pl : null;
         this.lib = lib;
         this.scenery = new BiomeScenery(lib, (m) => this.patch(m), quality);
         this.root.add(this.scenery.root);
@@ -335,7 +345,7 @@ vArpW = (modelMatrix * arpW).xyz;`
     tess.detail = crewCount ? 1 : 0.45;
     let ship: RefShip;
     try {
-      ship = buildShip(lib, look);
+      ship = buildShip(lib, look, this.props);
     } finally {
       tess.detail = 1;
     }
@@ -489,7 +499,14 @@ vArpW = (modelMatrix * arpW).xyz;`
       }
       rt.crewMap.set(c, nc);
       // Le cabestan du modèle classique, pour celui qui le vire.
-      if (c.role === 'capstan') {
+      const cap = this.props?.get('cabestan');
+      if (c.role === 'capstan' && cap) {
+        const g = new THREE.Mesh(cap.geometry, cap.material);
+        g.position.set(nc.pos[0], nc.pos[1], nc.pos[2]);
+        g.receiveShadow = true;
+        this.patch(cap.material);
+        rt.root.add(g);
+      } else if (c.role === 'capstan') {
         const k = new Kit();
         const lib = this.lib;
         k.add(
