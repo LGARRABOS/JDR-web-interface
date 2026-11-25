@@ -65,7 +65,7 @@ export const nextFrame = () =>
 
 /**
  * Prépare une maquette sans gel : programmes compilés en parallèle, puis
- * textures envoyées à la carte graphique une par image.
+ * textures envoyées à la carte graphique par petits paquets.
  */
 export async function warmScene(
   scene: THREE.Scene,
@@ -91,11 +91,18 @@ export async function warmScene(
       for (const v of Object.values(mm as unknown as Record<string, unknown>))
         if (v instanceof THREE.Texture) tex.add(v);
   });
+  // Envoi par paquets d'environ 12 ms : pas de gel, et pas d'attente
+  // inutile quand les images sont rares (onglet en arrière-plan, machine
+  // chargée).
   let i = 0;
+  let last = performance.now();
   for (const t of tex) {
     r.initTexture(t);
     progress?.(++i / Math.max(1, tex.size));
-    if (i % 2 === 0) await nextFrame();
+    if (performance.now() - last > 12) {
+      await nextFrame();
+      last = performance.now();
+    }
   }
 }
 
