@@ -100,7 +100,9 @@ export function ZoneMap3D({
           setReady('failed');
           return;
         }
-        setReady(live.stage ? 'wait' : 'none');
+        setReady(
+          live.stage && live.stage.mapInfo().realistic ? 'wait' : 'none'
+        );
         timer = window.setTimeout(tryStart, 400);
         return;
       }
@@ -294,7 +296,7 @@ export function ZoneMap3D({
               <div className="max-w-md flex flex-col gap-3">
                 <p>
                   La maquette 3D a besoin de la vue « Profil » du navire en
-                  rendu réaliste (en haut de la page).
+                  rendu réaliste (bouton ✦ en haut de la page).
                 </p>
                 <div className="flex flex-col gap-1.5">
                   {spots.map((s) => (

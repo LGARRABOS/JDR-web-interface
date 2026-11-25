@@ -99,7 +99,11 @@ export function ShipScene3D(props: ShipSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Moteur de rendu choisi par le joueur (mémorisé sur cet appareil).
   const [engine, setEngine] = useState<Engine>(readEngine);
+  // Seul un choix du joueur est mémorisé : un repli automatique (échec
+  // passager du rendu réaliste) ne doit pas le désactiver pour de bon.
+  const chosen = useRef(false);
   useEffect(() => {
+    if (!chosen.current) return;
     try {
       localStorage.setItem(ENGINE_KEY, engine);
     } catch {
@@ -466,11 +470,13 @@ export function ShipScene3D(props: ShipSceneProps) {
             });
             cleanup = run(new Stage(canvas, { backend }));
             setStageGen((g) => g + 1);
-          } catch {
+          } catch (err) {
+            console.error('[arpenteur] rendu réaliste indisponible :', err);
             setEngine('classic');
           }
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error('[arpenteur] rendu réaliste indisponible :', err);
           if (!cancelled) setEngine('classic');
         });
     } else {
@@ -717,7 +723,10 @@ export function ShipScene3D(props: ShipSceneProps) {
         <button
           type="button"
           className={`${btn} text-sm ${engine === 'three' ? '!bg-[#d9a441] !text-[#1a120b]' : ''}`}
-          onClick={() => setEngine(engine === 'three' ? 'classic' : 'three')}
+          onClick={() => {
+            chosen.current = true;
+            setEngine(engine === 'three' ? 'classic' : 'three');
+          }}
           title={
             engine === 'three'
               ? 'Rendu réaliste — passer au rendu classique (plus léger)'

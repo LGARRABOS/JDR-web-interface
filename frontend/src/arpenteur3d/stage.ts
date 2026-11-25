@@ -445,6 +445,8 @@ export class Stage {
       native: this.r.native?.mapKit?.() ?? null,
       /** Rendu réaliste en échec : les cartes 3D ne pourront pas s'ouvrir. */
       failed: !!this.r.native?.failed,
+      /** Rendu réaliste actif (sinon rendu classique : pas de carte 3D). */
+      realistic: !!this.r.native,
     };
   }
 

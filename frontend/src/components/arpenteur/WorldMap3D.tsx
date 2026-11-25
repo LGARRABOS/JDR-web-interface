@@ -147,7 +147,9 @@ export function WorldMap3D({
           setReady('failed');
           return;
         }
-        setReady(live.stage ? 'wait' : 'none');
+        setReady(
+          live.stage && live.stage.mapInfo().realistic ? 'wait' : 'none'
+        );
         timer = window.setTimeout(tryStart, 400);
         return;
       }
@@ -370,8 +372,8 @@ export function WorldMap3D({
               {
                 <p className="max-w-md">
                   La carte 3D a besoin de la vue « Profil » du navire en rendu
-                  réaliste (en haut de la page). La fiche à droite reste
-                  utilisable.
+                  réaliste (bouton ✦ en haut de la page). La fiche à droite
+                  reste utilisable.
                 </p>
               }
             </div>
