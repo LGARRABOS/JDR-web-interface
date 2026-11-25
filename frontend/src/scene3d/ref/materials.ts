@@ -99,8 +99,15 @@ function plates(u: number, v: number, nx: number, ny: number, rivets: number) {
   return { seam, d, id: (row * 31 + Math.floor(xs) * 17) % 97 };
 }
 
-/** Laisse respirer la page (barre de progression) entre deux étapes lourdes. */
-const breathe = () => new Promise<void>((r) => setTimeout(r, 0));
+/**
+ * Laisse respirer la page (barre de progression) entre deux étapes lourdes.
+ * Onglet caché : on enchaîne sans attendre (le navigateur y ralentit les
+ * minuteries à une par seconde, ce qui allongeait le chargement d'autant).
+ */
+const breathe = () =>
+  document.hidden
+    ? Promise.resolve()
+    : new Promise<void>((r) => setTimeout(r, 0));
 
 export async function createRefMaterials(
   base: string,

@@ -321,8 +321,12 @@ export function ShipScene3D(props: ShipSceneProps) {
       let resumeWait = 0;
       let warming = false;
       let resumeT = 0;
+      let lost = false;
       const resume = () => {
         if (still) return;
+        const tResume = performance.now();
+        const wasLost = lost;
+        lost = false;
         setResuming(true);
         resumeWait = 2;
         warming = true;
@@ -333,6 +337,9 @@ export function ShipScene3D(props: ShipSceneProps) {
           requestAnimationFrame(() => {
             void stage.warm().then(() => {
               if (id !== resumeT) return;
+              console.info(
+                `[arpenteur] reprise en ${((performance.now() - tResume) / 1000).toFixed(1)} s${wasLost ? ' (carte graphique réinitialisée)' : ''}`
+              );
               warming = false;
               dirty = true;
               last = 0;
@@ -345,7 +352,10 @@ export function ShipScene3D(props: ShipSceneProps) {
           })
         );
       };
-      const onLost = () => setResuming(true);
+      const onLost = () => {
+        lost = true;
+        setResuming(true);
+      };
       canvas.addEventListener('webglcontextlost', onLost);
       canvas.addEventListener('webglcontextrestored', resume);
       raf = requestAnimationFrame(frame);
@@ -427,6 +437,7 @@ export function ShipScene3D(props: ShipSceneProps) {
     let offProg: (() => void) | null = null;
     // Rendu réaliste : Three.js n'est chargé qu'à l'ouverture de la scène.
     setNativeReady(false);
+    const tLoad = performance.now();
     Promise.all([
       import('../../scene3d/threeBackend'),
       import('../../scene3d/native/layer'),
@@ -445,6 +456,9 @@ export function ShipScene3D(props: ShipSceneProps) {
                 setFailed(true);
                 return;
               }
+              console.info(
+                `[arpenteur] scène prête en ${((performance.now() - tLoad) / 1000).toFixed(1)} s`
+              );
               // Une image de plus pour compiler les matériaux avant de lever le voile.
               requestAnimationFrame(() =>
                 requestAnimationFrame(() => !cancelled && setNativeReady(true))

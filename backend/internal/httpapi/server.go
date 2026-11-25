@@ -148,7 +148,12 @@ func spaFileServer(root string) http.Handler {
 			if strings.HasPrefix(requestPath, "assets/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			} else {
+				// Revalidés à chaque fois, mais par empreinte du contenu : un
+				// fichier inchangé d'un déploiement à l'autre répond 304.
 				w.Header().Set("Cache-Control", "no-cache")
+				if tag := contentETag(fullPath, info); tag != "" {
+					w.Header().Set("ETag", tag)
+				}
 			}
 			fs.ServeHTTP(w, r)
 			return

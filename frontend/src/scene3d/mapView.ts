@@ -99,7 +99,8 @@ export async function warmScene(
   for (const t of tex) {
     r.initTexture(t);
     progress?.(++i / Math.max(1, tex.size));
-    if (performance.now() - last > 12) {
+    // Onglet caché : pas d'image à attendre (elles y sont suspendues).
+    if (!document.hidden && performance.now() - last > 12) {
       await nextFrame();
       last = performance.now();
     }
