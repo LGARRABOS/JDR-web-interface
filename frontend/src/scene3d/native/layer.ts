@@ -55,6 +55,8 @@ export function refLibrary(base: string, size: number) {
         listeners.forEach((fn) => fn(f, l));
       }))
     );
+  // Échec (réseau, mémoire) : la prochaine scène retentera.
+  p.catch(() => libs.delete(size));
   return p;
 }
 /** Suit la fabrication des matériaux (écran d'attente). */
@@ -196,6 +198,8 @@ function groundSpeed(c: CrewMember, pose: CrewPose, time: number) {
 
 export class NativeLayer implements NativeHost {
   ready = false;
+  /** Fabrication des matériaux échouée (rendu classique). */
+  failed = false;
   readonly root = new THREE.Group();
   private lib: RefMaterials | null = null;
   private fogU: FogU;
@@ -276,8 +280,10 @@ export class NativeLayer implements NativeHost {
         this.ready = true;
         this.onReady();
       })
-      .catch(() => {
+      .catch((err) => {
         // Textures absentes : le moteur garde ses maillages classiques.
+        console.error('[arpenteur] rendu réaliste indisponible :', err);
+        this.failed = true;
         this.onReady();
       });
   }

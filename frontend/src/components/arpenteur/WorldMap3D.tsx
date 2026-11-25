@@ -74,7 +74,7 @@ export function WorldMap3D({
     }
   };
   const [editing, setEditing] = useState<Marker | null>(null);
-  const [ready, setReady] = useState<'wait' | 'ok' | 'none'>('wait');
+  const [ready, setReady] = useState<'wait' | 'ok' | 'none' | 'failed'>('wait');
   const [prog, setProg] = useState({ f: 0, label: 'Ouverture de la carte' });
   const [panel, setPanel] = useState(true);
   const travel = useTravel(map.travel);
@@ -143,6 +143,10 @@ export function WorldMap3D({
         | null
         | undefined;
       if (!kit) {
+        if (live.stage?.mapInfo().failed) {
+          setReady('failed');
+          return;
+        }
         setReady(live.stage ? 'wait' : 'none');
         timer = window.setTimeout(tryStart, 400);
         return;
@@ -352,6 +356,15 @@ export function WorldMap3D({
             title="Préparation de la carte…"
             note=""
           />
+          {ready === 'failed' && (
+            <div className="absolute inset-0 flex items-center justify-center text-center p-6 text-[#e9dcc0]">
+              <p className="max-w-md">
+                Le rendu réaliste n'a pas pu se préparer sur ce navigateur : la
+                carte 3D est indisponible. Rechargez la page ; si le problème
+                revient, la console (F12) indique la cause.
+              </p>
+            </div>
+          )}
           {ready === 'none' && (
             <div className="absolute inset-0 flex items-center justify-center text-center p-6 text-[#e9dcc0]">
               {

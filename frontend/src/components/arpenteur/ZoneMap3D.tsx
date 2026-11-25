@@ -41,7 +41,7 @@ export function ZoneMap3D({
   onIntroPlayed?: () => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [ready, setReady] = useState<'wait' | 'ok' | 'none'>('wait');
+  const [ready, setReady] = useState<'wait' | 'ok' | 'none' | 'failed'>('wait');
   const [prog, setProg] = useState({ f: 0, label: 'Ouverture de la carte' });
   const [hover, setHover] = useState<{
     spot: Spot;
@@ -96,6 +96,10 @@ export function ZoneMap3D({
       if (disposed) return;
       const kit = live.stage?.mapInfo().native as ZoneMapKit | null | undefined;
       if (!kit) {
+        if (live.stage?.mapInfo().failed) {
+          setReady('failed');
+          return;
+        }
         setReady(live.stage ? 'wait' : 'none');
         timer = window.setTimeout(tryStart, 400);
         return;
@@ -275,6 +279,15 @@ export function ZoneMap3D({
           title="Préparation de la carte…"
           note=""
         />
+        {ready === 'failed' && (
+          <div className="absolute inset-0 flex items-center justify-center text-center p-6 text-[#e9dcc0]">
+            <p className="max-w-md">
+              Le rendu réaliste n'a pas pu se préparer sur ce navigateur : la
+              carte 3D est indisponible. Rechargez la page ; si le problème
+              revient, la console (F12) indique la cause.
+            </p>
+          </div>
+        )}
         {ready === 'none' && (
           <div className="absolute inset-0 flex items-center justify-center text-center p-6 text-[#e9dcc0]">
             {

@@ -443,6 +443,8 @@ export class Stage {
         : null,
       period: this.period,
       native: this.r.native?.mapKit?.() ?? null,
+      /** Rendu réaliste en échec : les cartes 3D ne pourront pas s'ouvrir. */
+      failed: !!this.r.native?.failed,
     };
   }
 

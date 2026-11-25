@@ -59,6 +59,8 @@ export interface NativeFrame {
 export interface NativeHost {
   /** Prêt à dessiner (matériaux fabriqués). */
   readonly ready: boolean;
+  /** Fabrication des matériaux échouée (rendu classique à la place). */
+  readonly failed?: boolean;
   setShip(build: Build, opts: NativeShipOptions): void;
   frame(f: NativeFrame): void;
   /**
