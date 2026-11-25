@@ -64,8 +64,35 @@ const CABIN_POSTS = [
   'Guetteur',
 ];
 
-/** Ponts intérieurs (du haut vers le bas) selon la taille du navire. */
-function levels(build: Build): Level[] {
+/** Ce qui compose le navire : ponts armés et postes occupés. */
+interface Fit {
+  /** Pont disponible avec des emplacements de canons. */
+  guns: (deck: string) => boolean;
+  /** Poste occupé par au moins un membre. */
+  has: (post: string) => boolean;
+}
+
+function fitOf(doc: ArpenteurDoc): Fit {
+  const posts = new Set(doc.crew.members.map((m) => canonicalPost(m.post)));
+  return {
+    guns: (id) => {
+      const d = doc.combat.decks.find((x) => x.id === id);
+      return (
+        !!d &&
+        d.available &&
+        d.guns.A1.slots + d.guns.A2.slots + d.guns.A3.slots > 0
+      );
+    },
+    has: (p) => posts.has(p),
+  };
+}
+
+/**
+ * Ponts intérieurs (du haut vers le bas) selon la taille du navire et ce qui
+ * le compose : canons seulement sur les ponts armés, cabines des seuls
+ * postes occupés, pièces construites à l'atelier.
+ */
+function levels(build: Build, fit: Fit): Level[] {
   const sup: Level = {
     id: 'superieur',
     label: 'Pont supérieur',
@@ -223,12 +250,34 @@ function levels(build: Build): Level[] {
       { id: 'geoles', label: 'Geôles', weight: 0.9, kind: 'jail' },
     ],
   };
+  // Canons du pont inférieur, s'il est armé.
+  inf.rooms.splice(2, 0, {
+    id: 'canons-inf',
+    label: 'Canons inférieurs',
+    short: 'Canons',
+    weight: 2.2,
+    target: 'combat',
+    kind: 'guns',
+    deck: 'inferieur',
+  });
   const list =
     build.ponts >= 3
       ? [sup, grand, inf, sous, cale]
       : build.ponts === 2
         ? [sup, grand, inf, cale]
         : [grand, inf, cale];
+  // Seulement ce que le navire possède.
+  const armed = ['superieur', 'grand', 'inferieur'].some(fit.guns);
+  for (const l of list)
+    l.rooms = l.rooms.filter((r) =>
+      r.post
+        ? fit.has(r.post)
+        : r.kind === 'guns'
+          ? fit.guns(r.deck ?? '')
+          : r.kind === 'ammo' || r.kind === 'powder'
+            ? armed
+            : true
+    );
   // Pièces ajoutées à l'atelier, sur leur pont (ou le plus proche existant).
   for (const r of build.rooms) {
     const lvl =
@@ -243,15 +292,16 @@ function levels(build: Build): Level[] {
       extra: r.kind,
     });
   }
-  if (build.ponts >= 3 && sous.rooms.length === 0) {
-    sous.rooms.push({
-      id: 'entrepot',
-      label: 'Entrepôt',
-      weight: 2,
-      target: 'hold',
-      kind: 'food',
-    });
-  }
+  // Pont resté vide (ni canons ni cabines) : entrepôt.
+  for (const l of list)
+    if (l.rooms.length === 0)
+      l.rooms.push({
+        id: `entrepot-${l.id}`,
+        label: 'Entrepôt',
+        weight: 2,
+        target: 'hold',
+        kind: 'food',
+      });
   return list;
 }
 
@@ -420,7 +470,8 @@ export function ShipCutaway({ doc, build, onRoom }: Props) {
   const coque = MATERIALS[build.coque.material];
   const poupe = MATERIALS[build.poupe.material];
   const quille = MATERIALS[build.quille.material];
-  const interior = levels(build);
+  const fit = fitOf(doc);
+  const interior = levels(build, fit);
 
   // Membres par poste (cabines) ; les autres logent dans les quartiers.
   const byPost = new Map<string, typeof doc.crew.members>();
@@ -555,6 +606,26 @@ export function ShipCutaway({ doc, build, onRoom }: Props) {
       target: 'crew',
       post: 'Contremaître',
     };
+    // Postes vacants : la pièce change d'usage.
+    const capRoom: RoomDef = fit.has('Capitaine')
+      ? capitaine
+      : {
+          id: 'carre',
+          label: 'Carré des officiers',
+          short: 'Carré',
+          weight: 1,
+          target: 'map',
+          kind: 'charts',
+        };
+    const cmRoom: RoomDef = fit.has('Contremaître')
+      ? contremaitre
+      : {
+          id: 'reserve-poupe',
+          label: 'Réserve',
+          weight: 1,
+          target: 'hold',
+          kind: 'food',
+        };
     const sa = c.a + 0.012;
     const sb = c.b - 0.008;
     if (stern) {
@@ -562,8 +633,8 @@ export function ShipCutaway({ doc, build, onRoom }: Props) {
         // Dunette : le capitaine en haut, à l'arrière ; dessous, le
         // contremaître et la salle des cartes.
         const mid = (s: number) => deck(s) - c.hLow(s) * VC;
-        mk(capitaine, sa, c.split - 0.006, roof, mid, true);
-        mk(contremaitre, sa, c.split - 0.006, (s) => mid(s) + 4, base, true);
+        mk(capRoom, sa, c.split - 0.006, roof, mid, true);
+        mk(cmRoom, sa, c.split - 0.006, (s) => mid(s) + 4, base, true);
         mk(
           {
             id: 'cartes',
@@ -580,23 +651,35 @@ export function ShipCutaway({ doc, build, onRoom }: Props) {
         );
       } else if (c.h >= 5) {
         const mid = (s: number) => (roof(s) + base(s)) / 2;
-        mk(capitaine, sa, sb, roof, mid, true);
-        mk(contremaitre, sa, sb, (s) => mid(s) + 4, base, true);
+        mk(capRoom, sa, sb, roof, mid, true);
+        mk(cmRoom, sa, sb, (s) => mid(s) + 4, base, true);
       } else {
         const cut = sa + (sb - sa) * 0.56;
-        mk(capitaine, sa, cut, roof, base, true);
-        mk(contremaitre, cut, sb, roof, base);
+        mk(capRoom, sa, cut, roof, base, true);
+        mk(cmRoom, cut, sb, roof, base);
       }
     } else if (c.shape === 'tower' || c.h >= 4) {
-      const battery: RoomDef = {
-        id: 'tour-proue',
-        label: 'Batterie haute',
-        short: 'Batterie',
-        weight: 1,
-        target: 'combat',
-        kind: 'guns',
-        deck: 'grand',
-      };
+      // Batterie haute : les canons du pont supérieur quand le navire n'a pas
+      // de pont supérieur intérieur ; sinon la tour sert de poste d'observation.
+      const battery: RoomDef =
+        fit.guns('superieur') && build.ponts < 2
+          ? {
+              id: 'tour-proue',
+              label: 'Batterie haute',
+              short: 'Batterie',
+              weight: 1,
+              target: 'combat',
+              kind: 'guns',
+              deck: 'superieur',
+            }
+          : {
+              id: 'observation',
+              label: "Poste d'observation",
+              short: 'Observation',
+              weight: 1,
+              target: 'map',
+              kind: 'lookout',
+            };
       if (c.h >= 7) {
         const mid = (s: number) => (roof(s) + base(s)) / 2;
         mk(
@@ -613,7 +696,21 @@ export function ShipCutaway({ doc, build, onRoom }: Props) {
           roof,
           mid
         );
-        mk(battery, sa, sb, (s) => mid(s) + 4, base);
+        mk(
+          battery.kind === 'guns'
+            ? battery
+            : {
+                id: 'reserve-proue',
+                label: 'Réserve',
+                weight: 1,
+                target: 'hold',
+                kind: 'food',
+              },
+          sa,
+          sb,
+          (s) => mid(s) + 4,
+          base
+        );
       } else mk(battery, sa, sb, roof, base);
     } else
       mk(
@@ -634,6 +731,7 @@ export function ShipCutaway({ doc, build, onRoom }: Props) {
   // --- Dessin --------------------------------------------------------------------
   const roomEls: ReactElement[] = [];
   const plaques: ReactElement[] = [];
+  const hoverPlaque: ReactElement[] = [];
   for (const bx of boxes) {
     const active = hover === bx.key;
     const clickable = !!bx.def.target && !!onRoom;
@@ -674,16 +772,19 @@ export function ShipCutaway({ doc, build, onRoom }: Props) {
         />
       </g>
     );
-    // Plaque de laiton avec le nom de la salle.
+    // Plaque de laiton avec le nom de la salle ; survolée, elle grandit et
+    // montre le nom complet, par-dessus les salles voisines.
     const w = bx.x1 - bx.x0;
-    const fs = 11.5;
+    const fs = active ? 19 : 12.5;
     const label =
-      w - 12 < bx.def.label.length * fs * 0.62
+      !active && w - 12 < bx.def.label.length * fs * 0.62
         ? (bx.def.short ?? bx.def.label)
         : bx.def.label;
-    const tw = Math.min(w - 8, label.length * fs * 0.62 + 12);
+    const tw = active
+      ? label.length * fs * 0.62 + 18
+      : Math.min(w - 8, label.length * fs * 0.62 + 12);
     if (tw > 20)
-      plaques.push(
+      (active ? hoverPlaque : plaques).push(
         <g key={`p${bx.key}`} style={{ pointerEvents: 'none' }}>
           <rect
             x={f((bx.x0 + bx.x1) / 2 - tw / 2)}
@@ -1303,6 +1404,7 @@ export function ShipCutaway({ doc, build, onRoom }: Props) {
         {deckProps}
       </g>
       {plaques}
+      {hoverPlaque}
       {levelMarks.map((m) => (
         <text
           key={m.label}
@@ -1376,25 +1478,134 @@ function Person({
       <circle cx={f(x)} cy={f(y - 29)} r={4.2} fill="#d8b48a" />
       <circle
         cx={f(x)}
-        cy={f(y - 44)}
-        r={8}
+        cy={f(y - 45)}
+        r={10}
         fill="#1b120c"
         stroke={ring}
         strokeWidth={2}
       />
-      <text
-        x={f(x)}
-        y={f(y - 41.2)}
-        textAnchor="middle"
-        fontSize={7.4}
-        fill="#f4e6c8"
-        style={{ fontWeight: 700 }}
-      >
-        {initials(m.name)}
-      </text>
+      {POST_ICONS[canonicalPost(m.post)]?.(x, y - 45) ?? (
+        <text
+          x={f(x)}
+          y={f(y - 41.8)}
+          textAnchor="middle"
+          fontSize={8.6}
+          fill="#f4e6c8"
+          style={{ fontWeight: 700 }}
+        >
+          {initials(m.name)}
+        </text>
+      )}
+      <title>
+        {[m.name, canonicalPost(m.post)].filter(Boolean).join(' · ')}
+      </title>
     </g>
   );
 }
+
+/** Emblème du poste dans la bulle (centre cx, cy ; rayon utile ≈ 6). */
+const POST_ICONS: Record<string, (cx: number, cy: number) => ReactElement> = {
+  // Tricorne.
+  Capitaine: (cx, cy) => (
+    <g transform={`translate(${f(cx)},${f(cy)}) scale(1.25)`}>
+      <path
+        d="M-6.2,1.6 Q-4.5,-4.6 0,-3.6 Q4.5,-4.6 6.2,1.6 Q0,4.2 -6.2,1.6 Z"
+        fill="#1a1410"
+        stroke="#e8bd4f"
+        strokeWidth={0.9}
+      />
+      <circle cx={0} cy={-0.6} r={1.1} fill="#e8bd4f" />
+    </g>
+  ),
+  // Sifflet de maître d'équipage.
+  Contremaître: (cx, cy) => (
+    <g transform={`translate(${f(cx)},${f(cy)}) scale(1.25)`}>
+      <path
+        d="M-5.5,-1.6 L2,-1.6 A2.6,2.6 0 1 1 2,3.6 L-5.5,1.2 Z"
+        fill="#c9a24a"
+        stroke="#f4e6c8"
+        strokeWidth={0.6}
+      />
+      <circle cx={2.6} cy={1} r={1} fill="#1b120c" />
+      <path
+        d="M-5.5,-0.2 Q-6.8,-4 -3,-5.2"
+        fill="none"
+        stroke="#f4e6c8"
+        strokeWidth={0.7}
+      />
+    </g>
+  ),
+  // Canon sur son affût.
+  'Maître canonnier': (cx, cy) => (
+    <g transform={`translate(${f(cx)},${f(cy)}) scale(1.25)`}>
+      <path
+        d="M-5.8,-1.6 L4.6,-3.4 L5.2,-0.8 L-5.4,1.2 Z"
+        fill="#2b2b2e"
+        stroke="#bfc3c7"
+        strokeWidth={0.6}
+      />
+      <circle
+        cx={-1.6}
+        cy={2.6}
+        r={2.2}
+        fill="#7a5130"
+        stroke="#f4e6c8"
+        strokeWidth={0.5}
+      />
+      <circle cx={-1.6} cy={2.6} r={0.6} fill="#f4e6c8" />
+    </g>
+  ),
+  // Trousse de secours.
+  Chirurgien: (cx, cy) => (
+    <g transform={`translate(${f(cx)},${f(cy)}) scale(1.25)`}>
+      <path
+        d="M-2,-4.2 h4 v1.4"
+        fill="none"
+        stroke="#f4e6c8"
+        strokeWidth={0.8}
+      />
+      <rect x={-5.4} y={-3} width={10.8} height={7.4} rx={1.4} fill="#f4efe6" />
+      <rect x={-1} y={-1.8} width={2} height={5} fill="#c8352b" />
+      <rect x={-2.5} y={-0.3} width={5} height={2} fill="#c8352b" />
+    </g>
+  ),
+  // Longue-vue.
+  Guetteur: (cx, cy) => (
+    <g transform={`translate(${f(cx)},${f(cy)}) scale(1.25) rotate(-25)`}>
+      <rect x={-6} y={-1.2} width={4.4} height={2.4} fill="#c9a24a" />
+      <rect x={-1.8} y={-1.6} width={4.2} height={3.2} fill="#7a5130" />
+      <rect x={2.4} y={-2.1} width={3.6} height={4.2} rx={0.6} fill="#c9a24a" />
+    </g>
+  ),
+  // Sabres croisés.
+  Combattant: (cx, cy) => (
+    <g
+      transform={`translate(${f(cx)},${f(cy)}) scale(1.25)`}
+      strokeLinecap="round"
+    >
+      <path d="M-4.6,4.4 L4.4,-4.6" stroke="#dfe3e6" strokeWidth={1.3} />
+      <path d="M4.6,4.4 L-4.4,-4.6" stroke="#dfe3e6" strokeWidth={1.3} />
+      <path
+        d="M-5.6,2.4 L-2.4,5.6 M5.6,2.4 L2.4,5.6"
+        stroke="#c9a24a"
+        strokeWidth={1.3}
+      />
+    </g>
+  ),
+  // Seau et serpillière.
+  Mousse: (cx, cy) => (
+    <g transform={`translate(${f(cx)},${f(cy)}) scale(1.25)`}>
+      <path d="M2.8,-5.6 L0.6,1" stroke="#c9a24a" strokeWidth={1} />
+      <path
+        d="M-5,-0.6 L1.6,-0.6 L0.8,5 L-4.2,5 Z"
+        fill="#7a5130"
+        stroke="#f4e6c8"
+        strokeWidth={0.5}
+      />
+      <path d="M-5,1.2 L1.4,1.2" stroke="#c9a24a" strokeWidth={0.7} />
+    </g>
+  ),
+};
 
 function Barrel({
   x,
@@ -1614,7 +1825,7 @@ function Furniture({
           deck.guns.A3.installed
         : 0;
       const per =
-        def.id === 'canons-flanc'
+        def.id === 'canons-flanc' || def.id === 'canons-inf'
           ? n
           : def.id === 'tour-proue'
             ? Math.min(n, 2)

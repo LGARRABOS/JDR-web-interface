@@ -191,7 +191,13 @@ func (s *Server) handlePatchArpenteur(w http.ResponseWriter, r *http.Request) {
 	if d.Combat.LastSalvo != nil {
 		prevSalvo = d.Combat.LastSalvo.ID
 	}
-	if err := d.Apply(req.Section, req.Value, gm); err != nil {
+	apply := func() error {
+		if req.Section == arpenteur.SectionCrewSelf && !gm {
+			return d.ApplySelf(req.Value, u.ID)
+		}
+		return d.Apply(req.Section, req.Value, gm)
+	}
+	if err := apply(); err != nil {
 		msg := "Données invalides"
 		if errors.Is(err, arpenteur.ErrUnknownSection) {
 			msg = "Section inconnue"

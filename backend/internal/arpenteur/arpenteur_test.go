@@ -444,3 +444,35 @@ func TestMatchPlayerAmbiguous(t *testing.T) {
 		t.Error("Mathilde reconnue")
 	}
 }
+
+func TestCrewSelfOnlyOwnMaxHealth(t *testing.T) {
+	d := Default()
+	me, other := int64(7), int64(8)
+	d.Crew.Members = []Member{
+		{ID: "moi", Name: "Moi", PC: true, UserID: &me, Vie: 22, VieMax: 20},
+		{ID: "lui", Name: "Lui", PC: true, UserID: &other, Vie: 15, VieMax: 15},
+		{ID: "pnj", Name: "Pnj", Vie: 10, VieMax: 10},
+	}
+	if !d.CanEdit(SectionCrewSelf, me, false) || d.CanEdit(SectionCrewSelf, 99, false) {
+		t.Fatal("seuls les joueurs liés à un personnage règlent ses PV max")
+	}
+	raw, _ := json.Marshal([]SelfUpdate{{ID: "moi", VieMax: 24}, {ID: "lui", VieMax: 99}, {ID: "pnj", VieMax: 99}})
+	if err := d.ApplySelf(raw, me); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{}
+	for _, m := range d.Crew.Members {
+		got[m.ID] = m.VieMax
+	}
+	if got["moi"] != 24 || got["lui"] != 15 || got["pnj"] != 10 {
+		t.Fatalf("PV max après la mise à jour : %v", got)
+	}
+	// Le MJ règle n'importe quel membre.
+	raw, _ = json.Marshal([]SelfUpdate{{ID: "pnj", VieMax: 12}})
+	if err := d.Apply(SectionCrewSelf, raw, true); err != nil {
+		t.Fatal(err)
+	}
+	if d.Crew.Members[2].VieMax != 12 {
+		t.Fatalf("MJ : PV max du PNJ = %d", d.Crew.Members[2].VieMax)
+	}
+}

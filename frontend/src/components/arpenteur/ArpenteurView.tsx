@@ -396,6 +396,7 @@ export function ArpenteurView({
               update={update}
               players={players}
               isGM={isGM}
+              userId={userId}
             />
           )}
           {tab === 'combat' && (

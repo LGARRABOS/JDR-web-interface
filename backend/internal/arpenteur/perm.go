@@ -23,6 +23,9 @@ const (
 	SectionCave        = "cave"        // cave
 	SectionMap         = "map"         // carte, cap, repères
 	SectionPermissions = "permissions" // droits par poste (MJ seul)
+	// SectionCrewSelf : un joueur règle les points de vie maximum du
+	// personnage qu'il incarne (le MJ, lui, passe par la section crew).
+	SectionCrewSelf = "crewSelf"
 )
 
 // EditableSections : sections dont le MJ peut confier les droits à des postes.
@@ -155,6 +158,14 @@ func (d *Doc) CanEdit(section string, userID int64, isGM bool) bool {
 	if section == SectionPermissions {
 		return false
 	}
+	if section == SectionCrewSelf {
+		for _, m := range d.Crew.Members {
+			if m.UserID != nil && *m.UserID == userID {
+				return true
+			}
+		}
+		return false
+	}
 	if section == SectionCrewHealth && d.CanEdit(SectionCrew, userID, false) {
 		return true
 	}
@@ -181,7 +192,7 @@ func (d *Doc) CanEdit(section string, userID int64, isGM bool) bool {
 // Rights : sections modifiables par ce participant (pour l'interface).
 func (d *Doc) Rights(userID int64, isGM bool) map[string]bool {
 	out := map[string]bool{}
-	for _, s := range append(append([]string{}, EditableSections...), SectionPermissions) {
+	for _, s := range append(append([]string{}, EditableSections...), SectionPermissions, SectionCrewSelf) {
 		out[s] = d.CanEdit(s, userID, isGM)
 	}
 	return out
@@ -204,7 +215,32 @@ type HealthUpdate struct {
 	Fatigue int    `json:"fatigue"`
 }
 
+// SelfUpdate : points de vie maximum d'un personnage (section crewSelf).
+type SelfUpdate struct {
+	ID     string `json:"id"`
+	VieMax int    `json:"vieMax"`
+}
+
 var ErrUnknownSection = errors.New("section inconnue")
+
+// ApplySelf : le joueur ne touche qu'aux points de vie maximum des
+// personnages qui lui sont liés ; le reste de la requête est ignoré.
+func (d *Doc) ApplySelf(raw json.RawMessage, userID int64) error {
+	var v []SelfUpdate
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return err
+	}
+	for _, u := range v {
+		for i := range d.Crew.Members {
+			m := &d.Crew.Members[i]
+			if m.ID == u.ID && m.UserID != nil && *m.UserID == userID {
+				m.VieMax = clamp(u.VieMax, 0, 9999)
+			}
+		}
+	}
+	Normalize(d)
+	return nil
+}
 
 // Apply remplace une section par la valeur reçue (droits vérifiés avant).
 // Pour un joueur, les liens membre ↔ joueur et les repères cachés sont
@@ -284,6 +320,19 @@ func (d *Doc) Apply(section string, raw json.RawMessage, isGM bool) error {
 		v.Travel = stamp(v.Travel, d.Map.Travel, now)
 		v.Hop = stamp(v.Hop, d.Map.Hop, now)
 		d.Map = v
+	case SectionCrewSelf:
+		// MJ : n'importe quel membre (les joueurs passent par ApplySelf).
+		var v []SelfUpdate
+		if err := json.Unmarshal(raw, &v); err != nil {
+			return err
+		}
+		for _, u := range v {
+			for i := range d.Crew.Members {
+				if d.Crew.Members[i].ID == u.ID {
+					d.Crew.Members[i].VieMax = u.VieMax
+				}
+			}
+		}
 	case SectionPermissions:
 		var v Permissions
 		if err := json.Unmarshal(raw, &v); err != nil {

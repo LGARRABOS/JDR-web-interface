@@ -40,6 +40,7 @@ interface Props {
   update: UpdateFn;
   players: Member[];
   isGM: boolean;
+  userId: number;
 }
 
 const emptyMember = (): CrewMember => ({
@@ -68,7 +69,14 @@ const emptyMember = (): CrewMember => ({
   note: '',
 });
 
-export function CrewPanel({ doc, rights, update, players, isGM }: Props) {
+export function CrewPanel({
+  doc,
+  rights,
+  update,
+  players,
+  isGM,
+  userId,
+}: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [editing, setEditing] = useState<CrewMember | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -204,6 +212,8 @@ export function CrewPanel({ doc, rights, update, players, isGM }: Props) {
                 players={players}
                 canEdit={canCrew}
                 canHeal={canHeal}
+                canSetMax={isGM || m.userId === userId}
+                onMax={(v) => update('crewSelf', [{ id: m.id, vieMax: v }])}
                 onEdit={() => setEditing(m)}
                 onHealth={(p) => setHealth(m.id, p)}
                 onSortie={() =>
@@ -347,6 +357,8 @@ function MemberCard({
   players,
   canEdit,
   canHeal,
+  canSetMax,
+  onMax,
   onEdit,
   onHealth,
   onSortie,
@@ -356,6 +368,9 @@ function MemberCard({
   players: Member[];
   canEdit: boolean;
   canHeal: boolean;
+  /** MJ, ou joueur de ce personnage : règle les points de vie maximum. */
+  canSetMax: boolean;
+  onMax: (v: number) => void;
   onEdit: () => void;
   onHealth: (p: { vie?: number; fatigue?: number }) => void;
   onSortie: () => void;
@@ -365,7 +380,8 @@ function MemberCard({
   const player =
     m.userId != null ? players.find((p) => p.userId === m.userId) : undefined;
   const hasSkills = m.combat + m.extraction + m.entretien + m.expertise > 0;
-  const vieMax = Math.max(m.vieMax, m.vie);
+  // Maximum réglé sur la fiche (la barre suit la vie jusqu'à ce maximum).
+  const vieMax = m.vieMax > 0 ? m.vieMax : m.vie;
   return (
     <article className="relative rounded-xl border border-[#5a3e1c] bg-gradient-to-br from-[#2c2117] to-[#18110b] shadow-[inset_0_1px_0_rgb(255_220_150/0.08)] p-3.5 flex flex-col gap-3 overflow-hidden">
       <div
@@ -447,14 +463,16 @@ function MemberCard({
       </div>
 
       {hasSkills && (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
           {SKILLS.map((s) => (
             <div
               key={s.id}
-              className="flex items-center justify-between gap-2"
+              className="flex items-center gap-2 rounded-md bg-black/20 px-2 py-1"
               title={`${s.label} : ${SKILL_LEVELS[m[s.id]]}`}
             >
-              <dt className="text-fantasy-muted">{s.short}</dt>
+              <dt className="text-fantasy-muted w-[4.6rem] shrink-0">
+                {s.short}
+              </dt>
               <dd className="flex items-center gap-1.5">
                 <Pips
                   value={m[s.id]}
@@ -466,6 +484,9 @@ function MemberCard({
                   }
                   size={7}
                 />
+                <span className="tabular-nums text-fantasy-text-soft">
+                  {m[s.id]}
+                </span>
               </dd>
             </div>
           ))}
@@ -495,6 +516,21 @@ function MemberCard({
               </span>
             )}
           </div>
+          {canSetMax && (
+            <div className="flex items-center gap-2">
+              <span className="w-14 text-fantasy-muted">Vie max</span>
+              <span className="flex-1 text-fantasy-muted">
+                {canHeal ? `${m.vie} / ${vieMax}` : ''}
+              </span>
+              <Stepper
+                value={m.vieMax}
+                min={1}
+                max={9999}
+                onChange={onMax}
+                label="vie maximum"
+              />
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <span className="w-14 text-fantasy-muted">Fatigue</span>
             <div className="flex-1">

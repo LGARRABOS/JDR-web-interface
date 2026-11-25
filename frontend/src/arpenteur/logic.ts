@@ -8,6 +8,7 @@ import type {
   HealthUpdate,
   Item,
   Section,
+  SelfUpdate,
   ShipSection,
   Target,
 } from './types';
@@ -61,6 +62,8 @@ export function canEdit(
 ): boolean {
   if (isGM) return true;
   if (section === 'permissions') return false;
+  if (section === 'crewSelf')
+    return doc.crew.members.some((m) => m.userId === userId);
   if (section === 'crewHealth' && canEdit(doc, 'crew', userId, false))
     return true;
   const perm = doc.permissions[section];
@@ -92,6 +95,7 @@ export function rightsFor(
     'cave',
     'map',
     'permissions',
+    'crewSelf',
   ];
   return Object.fromEntries(
     sections.map((s) => [s, canEdit(doc, s, userId, isGM)])
@@ -135,6 +139,19 @@ export function withSection(
           members: doc.crew.members.map((m) => {
             const h = byId.get(m.id);
             return h ? { ...m, vie: h.vie, fatigue: h.fatigue } : m;
+          }),
+        },
+      };
+    }
+    case 'crewSelf': {
+      const byId = new Map((value as SelfUpdate[]).map((h) => [h.id, h]));
+      return {
+        ...doc,
+        crew: {
+          ...doc.crew,
+          members: doc.crew.members.map((m) => {
+            const h = byId.get(m.id);
+            return h ? { ...m, vieMax: h.vieMax } : m;
           }),
         },
       };

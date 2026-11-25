@@ -297,7 +297,9 @@ export type Section =
   | 'hold'
   | 'cave'
   | 'map'
-  | 'permissions';
+  | 'permissions'
+  /** Points de vie maximum de son propre personnage (joueur lié). */
+  | 'crewSelf';
 
 /** Contenu de la section « ship ». */
 export interface ShipSection {
@@ -307,6 +309,12 @@ export interface ShipSection {
   build: Build;
   pending: Works | null;
   history: Upgrade[];
+}
+
+/** Section « crewSelf » : points de vie maximum d'un personnage. */
+export interface SelfUpdate {
+  id: string;
+  vieMax: number;
 }
 
 export interface HealthUpdate {
