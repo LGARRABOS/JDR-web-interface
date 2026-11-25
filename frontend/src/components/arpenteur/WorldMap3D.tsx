@@ -361,9 +361,9 @@ export function WorldMap3D({
           {ready === 'failed' && (
             <div className="absolute inset-0 flex items-center justify-center text-center p-6 text-[#e9dcc0]">
               <p className="max-w-md">
-                Le rendu réaliste n'a pas pu se préparer sur ce navigateur : la
-                carte 3D est indisponible. Rechargez la page ; si le problème
-                revient, la console (F12) indique la cause.
+                La scène 3D n'a pas pu se préparer sur ce navigateur : la carte
+                3D est indisponible. Rechargez la page ; si le problème revient,
+                la console (F12) indique la cause.
               </p>
             </div>
           )}
@@ -371,9 +371,8 @@ export function WorldMap3D({
             <div className="absolute inset-0 flex items-center justify-center text-center p-6 text-[#e9dcc0]">
               {
                 <p className="max-w-md">
-                  La carte 3D a besoin de la vue « Profil » du navire en rendu
-                  réaliste (bouton ✦ en haut de la page). La fiche à droite
-                  reste utilisable.
+                  La carte 3D a besoin de la vue « Profil » du navire (en haut
+                  de la page). La fiche à droite reste utilisable.
                 </p>
               }
             </div>

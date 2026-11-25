@@ -67,16 +67,12 @@ function sceneOf(sector: string, hangar = ''): Scene {
   return { desert: desertOf(id), place: {}, biome: id };
 }
 
-type Engine = 'classic' | 'three';
-// Nouvelle clé : le rendu réaliste devient celui par défaut (l'ancien choix
-// enregistré automatiquement ne doit pas le masquer).
-const ENGINE_KEY = 'arp-engine-2';
-function readEngine(): Engine {
-  try {
-    return localStorage.getItem(ENGINE_KEY) === 'classic' ? 'classic' : 'three';
-  } catch {
-    return 'three';
-  }
+// Ancien choix du moteur (rendu classique supprimé) : effacé de l'appareil.
+try {
+  localStorage.removeItem('arp-engine-2');
+  localStorage.removeItem('arp-engine');
+} catch {
+  // stockage indisponible
 }
 
 function supportsWebGL2() {
@@ -97,19 +93,6 @@ export function ShipScene3D(props: ShipSceneProps) {
     className,
   } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Moteur de rendu choisi par le joueur (mémorisé sur cet appareil).
-  const [engine, setEngine] = useState<Engine>(readEngine);
-  // Seul un choix du joueur est mémorisé : un repli automatique (échec
-  // passager du rendu réaliste) ne doit pas le désactiver pour de bon.
-  const chosen = useRef(false);
-  useEffect(() => {
-    if (!chosen.current) return;
-    try {
-      localStorage.setItem(ENGINE_KEY, engine);
-    } catch {
-      // stockage indisponible : le choix vaut pour la session
-    }
-  }, [engine]);
   // Incrémenté à chaque moteur prêt (le nouveau se charge en différé).
   const [stageGen, setStageGen] = useState(0);
   // Rendu réaliste : matériaux et paysages fabriqués sur la machine.
@@ -191,7 +174,7 @@ export function ShipScene3D(props: ShipSceneProps) {
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       let raf = 0;
       let dirty = true;
-      dbg.engine = engine === 'three' ? 'réaliste (Three.js)' : 'classique';
+      dbg.engine = 'réaliste (Three.js)';
       let t0 = performance.now();
       let paused = -1;
       let dbgTick = 0;
@@ -442,57 +425,49 @@ export function ShipScene3D(props: ShipSceneProps) {
       };
     };
     let offProg: (() => void) | null = null;
-    if (engine === 'three') {
-      // Nouveau rendu : Three.js n'est chargé que pour ceux qui l'activent.
-      setNativeReady(false);
-      Promise.all([
-        import('../../scene3d/threeBackend'),
-        import('../../scene3d/native/layer'),
-      ])
-        .then(([{ ThreeBackend }, { onLibraryProgress }]) => {
-          if (cancelled) return;
-          offProg = onLibraryProgress((f, label) =>
-            setNativeProg({ f, label })
-          );
-          try {
-            const backend = new ThreeBackend(canvas, {
-              textures: '/textures/pbr/',
-              native: () => {
-                offProg?.();
-                if (cancelled) return;
-                // Une image de plus pour compiler les matériaux avant de lever le voile.
-                requestAnimationFrame(() =>
-                  requestAnimationFrame(
-                    () => !cancelled && setNativeReady(true)
-                  )
-                );
-              },
-            });
-            cleanup = run(new Stage(canvas, { backend }));
-            setStageGen((g) => g + 1);
-          } catch (err) {
-            console.error('[arpenteur] rendu réaliste indisponible :', err);
-            setEngine('classic');
-          }
-        })
-        .catch((err) => {
-          console.error('[arpenteur] rendu réaliste indisponible :', err);
-          if (!cancelled) setEngine('classic');
-        });
-    } else {
-      try {
-        cleanup = run(new Stage(canvas));
-        setStageGen((g) => g + 1);
-      } catch {
-        setFailed(true);
-      }
-    }
+    // Rendu réaliste : Three.js n'est chargé qu'à l'ouverture de la scène.
+    setNativeReady(false);
+    Promise.all([
+      import('../../scene3d/threeBackend'),
+      import('../../scene3d/native/layer'),
+    ])
+      .then(([{ ThreeBackend }, { onLibraryProgress }]) => {
+        if (cancelled) return;
+        offProg = onLibraryProgress((f, label) => setNativeProg({ f, label }));
+        try {
+          const backend = new ThreeBackend(canvas, {
+            textures: '/textures/pbr/',
+            native: () => {
+              offProg?.();
+              if (cancelled) return;
+              // Matériaux impossibles à fabriquer : vue de profil dessinée.
+              if (backend.native?.failed) {
+                setFailed(true);
+                return;
+              }
+              // Une image de plus pour compiler les matériaux avant de lever le voile.
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => !cancelled && setNativeReady(true))
+              );
+            },
+          });
+          cleanup = run(new Stage(canvas, { backend }));
+          setStageGen((g) => g + 1);
+        } catch (err) {
+          console.error('[arpenteur] rendu 3D indisponible :', err);
+          setFailed(true);
+        }
+      })
+      .catch((err) => {
+        console.error('[arpenteur] rendu 3D indisponible :', err);
+        if (!cancelled) setFailed(true);
+      });
     return () => {
       cancelled = true;
       offProg?.();
       cleanup?.();
     };
-  }, [use3D, animate, engine]);
+  }, [use3D, animate]);
 
   // Mise à jour du navire quand sa construction change.
   useEffect(() => {
@@ -637,14 +612,13 @@ export function ShipScene3D(props: ShipSceneProps) {
         />
       )}
       <canvas
-        key={engine}
         ref={canvasRef}
         className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
         style={{ touchAction: 'pan-y' }}
         role="img"
         aria-label={`Arpenteur ${doc.name} — glisser pour pivoter, molette ou pincement pour zoomer`}
       />
-      {engine === 'three' && !coupe && (
+      {!coupe && (
         <SceneLoader
           visible={!nativeReady || resuming}
           f={nativeReady ? 1 : nativeProg.f}
@@ -719,23 +693,6 @@ export function ShipScene3D(props: ShipSceneProps) {
           aria-label="Revenir au point de vue par défaut"
         >
           ⟲
-        </button>
-        <button
-          type="button"
-          className={`${btn} text-sm ${engine === 'three' ? '!bg-[#d9a441] !text-[#1a120b]' : ''}`}
-          onClick={() => {
-            chosen.current = true;
-            setEngine(engine === 'three' ? 'classic' : 'three');
-          }}
-          title={
-            engine === 'three'
-              ? 'Rendu réaliste — passer au rendu classique (plus léger)'
-              : 'Revenir au rendu réaliste'
-          }
-          aria-pressed={engine === 'three'}
-          aria-label="Rendu réaliste"
-        >
-          ✦
         </button>
         {props.onMood && (
           <button

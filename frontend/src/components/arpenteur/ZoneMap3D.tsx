@@ -90,7 +90,7 @@ export function ZoneMap3D({
     let cleanup: (() => void) | null = null;
     let timer = 0;
     live.mapOpen = true;
-    // Les modèles viennent de la scène du navire (rendu réaliste) : on attend
+    // Les modèles viennent de la scène du navire (scène 3D) : on attend
     // qu'elle soit prête.
     const tryStart = () => {
       if (disposed) return;
@@ -284,9 +284,9 @@ export function ZoneMap3D({
         {ready === 'failed' && (
           <div className="absolute inset-0 flex items-center justify-center text-center p-6 text-[#e9dcc0]">
             <p className="max-w-md">
-              Le rendu réaliste n'a pas pu se préparer sur ce navigateur : la
-              carte 3D est indisponible. Rechargez la page ; si le problème
-              revient, la console (F12) indique la cause.
+              La scène 3D n'a pas pu se préparer sur ce navigateur : la carte 3D
+              est indisponible. Rechargez la page ; si le problème revient, la
+              console (F12) indique la cause.
             </p>
           </div>
         )}
@@ -295,8 +295,8 @@ export function ZoneMap3D({
             {
               <div className="max-w-md flex flex-col gap-3">
                 <p>
-                  La maquette 3D a besoin de la vue « Profil » du navire en
-                  rendu réaliste (bouton ✦ en haut de la page).
+                  La maquette 3D a besoin de la vue « Profil » du navire (en
+                  haut de la page).
                 </p>
                 <div className="flex flex-col gap-1.5">
                   {spots.map((s) => (
