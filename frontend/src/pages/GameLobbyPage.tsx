@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/core/auth/useAuth';
 import { GamesAPI } from '@/core/api/client';
@@ -16,8 +16,13 @@ import {
   Ship,
 } from '@/shared/ui/icons';
 import { initials } from '@/core/tabletop/presence';
-import { D20Logo } from './AuthPage';
-import { ADVENTURES, MODES, adventureOf } from '@/adventures/catalog';
+import {
+  PageHeader,
+  PageHeading,
+  PageShell,
+  glassPanel,
+} from '@/shared/ui/PageShell';
+import { ADVENTURES, MODES, posterOfGame } from '@/adventures/catalog';
 
 const POSTERS = [...MODES, ...ADVENTURES].map((p) => p.image).slice(0, 4);
 
@@ -148,6 +153,8 @@ export function GameLobbyPage() {
   const [leaveGameId, setLeaveGameId] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [busy, setBusy] = useState<'join' | null>(null);
+  // Affiche survolée : elle éclaire le fond de la page.
+  const [hover, setHover] = useState<string | null>(null);
 
   const loadGames = async () => {
     try {
@@ -234,10 +241,24 @@ export function GameLobbyPage() {
 
   const inputClass =
     'h-12 px-3.5 rounded-lg bg-fantasy-bg border border-fantasy-border text-base text-fantasy-text placeholder:text-fantasy-muted-soft focus:outline-none focus:border-fantasy-accent';
-  const card = 'rounded-2xl bg-fantasy-surface border border-fantasy-border';
+  const pill =
+    'h-10 px-4 rounded-full border border-fantasy-border bg-fantasy-bg/40 backdrop-blur text-sm text-fantasy-text-soft hover:text-fantasy-text hover:border-fantasy-accent/60 flex items-center gap-2 transition-colors';
+  const iconButton =
+    'w-10 h-10 rounded-lg border border-fantasy-border text-fantasy-muted hover:text-fantasy-text flex items-center justify-center';
 
   return (
-    <div className="min-h-screen bg-fantasy-bg text-fantasy-text">
+    <PageShell
+      backdrop={hover}
+      header={
+        <PageHeader>
+          <AccountMenu
+            name={user?.displayName ?? 'Mon compte'}
+            onProfile={() => setProfileModalOpen(true)}
+            onLogout={() => logout().then(() => navigate('/login'))}
+          />
+        </PageHeader>
+      }
+    >
       <ModalConfirm
         open={deleteGameId !== null}
         onClose={() => setDeleteGameId(null)}
@@ -264,22 +285,6 @@ export function GameLobbyPage() {
         onAccountDeleted={() => logout().then(() => navigate('/login'))}
       />
 
-      <header className="border-b border-fantasy-surface">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
-          <Link to="/games" className="flex items-center gap-2.5">
-            <D20Logo size={28} />
-            <span className="font-heading font-bold text-lg tracking-wide">
-              Table JDR
-            </span>
-          </Link>
-          <AccountMenu
-            name={user?.displayName ?? 'Mon compte'}
-            onProfile={() => setProfileModalOpen(true)}
-            onLogout={() => logout().then(() => navigate('/login'))}
-          />
-        </div>
-      </header>
-
       {err && (
         <div
           role="alert"
@@ -289,11 +294,32 @@ export function GameLobbyPage() {
         </div>
       )}
 
-      <main className="max-w-6xl mx-auto px-6 pt-8 pb-14 flex flex-col gap-8">
+      <main className="relative z-10 max-w-7xl mx-auto px-6 pt-8 pb-16 flex flex-col gap-10">
+        <PageHeading
+          kicker={
+            user?.displayName ? `Bienvenue, ${user.displayName}` : 'Bienvenue'
+          }
+          title="Mes parties"
+          subtitle="Reprenez une aventure, ouvrez une nouvelle table ou rejoignez celle de votre MJ."
+        >
+          <div className="flex flex-wrap justify-center gap-2 mt-1">
+            <Link to="/guide" className={pill}>
+              <HelpCircle size={16} />
+              Guide du jeu
+            </Link>
+            <Link to="/library" className={pill}>
+              <Library size={16} />
+              Ma bibliothèque
+            </Link>
+          </div>
+        </PageHeading>
+
         <div className="flex flex-wrap gap-4">
           <Link
             to="/nouvelle-partie"
-            className="group relative flex-[1_1_420px] min-h-[220px] overflow-hidden rounded-2xl border border-fantasy-border bg-black hover:border-fantasy-accent transition-colors"
+            onMouseEnter={() => setHover(MODES[1].image)}
+            onMouseLeave={() => setHover(null)}
+            className="group relative flex-[1_1_420px] min-h-[220px] overflow-hidden rounded-2xl border border-fantasy-border bg-black hover:border-fantasy-accent hover:shadow-[0_0_48px_-12px_rgb(var(--c-accent))] transition-all"
           >
             {/* Les affiches des modes et aventures, en éventail. */}
             <div
@@ -315,10 +341,10 @@ export function GameLobbyPage() {
             </div>
             <div className="absolute inset-0 bg-gradient-to-r from-fantasy-surface via-fantasy-surface/90 to-transparent" />
             <div className="relative h-full p-6 flex flex-col justify-center gap-3 max-w-[60%]">
-              <p className="text-xs uppercase tracking-[0.3em] text-fantasy-accent">
+              <p className="text-[11px] uppercase tracking-[0.35em] text-fantasy-accent">
                 Vous en serez le MJ
               </p>
-              <h2 className="font-heading font-semibold text-2xl">
+              <h2 className="font-heading font-semibold text-2xl tracking-wide">
                 Nouvelle partie
               </h2>
               <p className="text-sm text-fantasy-text-soft">
@@ -333,14 +359,17 @@ export function GameLobbyPage() {
 
           <form
             onSubmit={handleJoin}
-            className={`${card} flex-[1_1_320px] p-5 flex flex-col gap-3.5`}
+            className={`${glassPanel} flex-[1_1_320px] p-6 flex flex-col justify-center gap-4`}
           >
             <div>
-              <h2 className="font-heading font-semibold text-lg">
+              <p className="text-[11px] uppercase tracking-[0.35em] text-fantasy-accent">
+                Invité par un MJ
+              </p>
+              <h2 className="font-heading font-semibold text-2xl tracking-wide mt-2">
                 Rejoindre une partie
               </h2>
-              <p className="text-sm text-fantasy-muted">
-                Avec le code donné par votre MJ.
+              <p className="text-sm text-fantasy-muted mt-1">
+                Avec le code d&apos;invitation qu&apos;il vous a donné.
               </p>
             </div>
             <div className="flex gap-2.5">
@@ -366,179 +395,173 @@ export function GameLobbyPage() {
           </form>
         </div>
 
-        <section className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="font-heading font-bold text-2xl">Mes parties</h1>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                to="/guide"
-                className="h-10 px-3.5 rounded-lg border border-fantasy-border text-sm text-fantasy-text hover:bg-fantasy-surface flex items-center gap-2"
-              >
-                <HelpCircle size={16} />
-                Guide du jeu
-              </Link>
-              <button
-                type="button"
-                onClick={() => navigate('/library')}
-                className="h-10 px-3.5 rounded-lg border border-fantasy-border text-sm text-fantasy-text hover:bg-fantasy-surface flex items-center gap-2"
-              >
-                <Library size={16} />
-                Ma bibliothèque
-              </button>
-            </div>
+        <section aria-label="Vos parties" className="flex flex-col gap-5">
+          <div className="flex items-center gap-4">
+            <span className="flex-1 h-px bg-fantasy-border" />
+            <h2 className="font-heading text-xl tracking-wide">
+              À l&apos;affiche
+            </h2>
+            <span className="flex-1 h-px bg-fantasy-border" />
           </div>
           {loading ? (
-            <p className="text-fantasy-muted">Chargement…</p>
+            <p className="text-center text-fantasy-muted">Chargement…</p>
           ) : games.length === 0 ? (
-            <div className={`${card} p-8 text-center text-fantasy-muted`}>
+            <div className={`${glassPanel} p-8 text-center text-fantasy-muted`}>
               Vous n&apos;avez pas encore de partie. Créez-en une, ou rejoignez
               celle de votre MJ avec son code.
             </div>
           ) : (
-            <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-6">
               {games.map((g) => {
                 const isGM = g.role === 'MJ';
+                const poster = posterOfGame(g.isGemma, g.gemmaVariant);
+                const enter = () =>
+                  navigate(
+                    `/table/${g.id}${g.gemmaVariant === 'arpenteur' ? '?vue=arpenteur' : ''}`
+                  );
                 return (
                   <li
                     key={g.id}
-                    className={`${card} overflow-hidden flex flex-col`}
+                    className="group flex flex-col rounded-2xl overflow-hidden border border-white/10 bg-black shadow-2xl transition-all duration-300 hover:-translate-y-1 hover:border-[var(--accent)] hover:shadow-[0_0_48px_-12px_var(--accent)]"
+                    style={{ '--accent': poster.accent } as CSSProperties}
+                    onMouseEnter={() => setHover(poster.image)}
+                    onMouseLeave={() => setHover(null)}
                   >
-                    <div
-                      className="relative aspect-video flex items-center justify-center bg-fantasy-surface-hover"
-                      style={
-                        g.currentMapImageUrl
-                          ? undefined
-                          : {
-                              background:
-                                'linear-gradient(135deg, rgb(var(--c-input-hover)), rgb(var(--c-bg)))',
-                            }
-                      }
+                    <button
+                      type="button"
+                      onClick={enter}
+                      aria-label={`Entrer dans ${g.name}`}
+                      className="relative aspect-[4/5] overflow-hidden text-left focus:outline-none"
                     >
-                      {g.currentMapImageUrl ? (
-                        <img
-                          src={g.currentMapImageUrl}
-                          alt=""
-                          loading="lazy"
-                          className="absolute inset-0 w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="opacity-40">
-                          <D20Logo size={44} />
-                        </span>
-                      )}
-                      <div className="absolute top-2.5 left-2.5 right-2.5 flex flex-wrap gap-1.5 [&>span]:whitespace-nowrap">
+                      <img
+                        src={poster.image}
+                        alt=""
+                        loading="lazy"
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                      <div className="absolute inset-3 rounded-lg border border-white/10 pointer-events-none" />
+                      <div className="absolute top-5 left-5 right-5 flex flex-wrap gap-1.5 [&>span]:whitespace-nowrap">
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                             isGM
                               ? 'bg-fantasy-accent text-fantasy-bg'
-                              : 'bg-fantasy-bg/80 text-fantasy-secondary'
+                              : 'bg-black/70 text-fantasy-secondary'
                           }`}
                         >
                           {isGM ? 'MJ' : 'Joueur'}
                         </span>
-                        {g.isGemma && (
-                          <span className="px-2.5 py-0.5 rounded-full text-xs bg-black/60 text-white">
-                            {g.gemmaVariant
-                              ? `GEMMA · ${adventureOf(g.gemmaVariant).title}`
-                              : 'GEMMA'}
-                          </span>
-                        )}
                         {g.isTest && (
                           <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-400 text-black">
                             TEST
                           </span>
                         )}
                       </div>
-                    </div>
-                    <div className="p-4 flex flex-col gap-3">
-                      <div className="min-w-0">
-                        <h3
-                          className="font-heading font-semibold text-[17px] truncate"
+                      {g.currentMapImageUrl && (
+                        <img
+                          src={g.currentMapImageUrl}
+                          alt=""
+                          title={g.currentMapName}
+                          loading="lazy"
+                          className="absolute top-5 right-5 w-14 h-14 rounded-full object-cover border-2 border-white/30 shadow-xl"
+                        />
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 p-5 flex flex-col items-center text-center gap-1.5">
+                        <span
+                          className="text-[10px] uppercase tracking-[0.35em]"
+                          style={{ color: poster.accent }}
+                        >
+                          {g.isGemma
+                            ? `GEMMA · ${poster.title}`
+                            : 'JDR standard'}
+                        </span>
+                        <span
+                          className="font-heading font-bold text-xl leading-tight tracking-wide text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] line-clamp-2"
                           title={g.name}
                         >
                           {g.name}
-                        </h3>
-                        <p className="text-sm text-fantasy-muted truncate">
+                        </span>
+                        <span
+                          className="h-px w-12 my-1"
+                          style={{ background: poster.accent }}
+                        />
+                        <span className="text-xs text-white/75 truncate max-w-full">
                           {gameSubtitle(g)}
-                        </p>
+                        </span>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            navigate(
-                              `/table/${g.id}${g.gemmaVariant === 'arpenteur' ? '?vue=arpenteur' : ''}`
-                            )
-                          }
-                          className="flex-1 h-11 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold hover:bg-fantasy-accent-hover"
-                        >
-                          Entrer
-                        </button>
-                        {isGM && (
-                          <>
-                            {!g.isTest && (
-                              <button
-                                type="button"
-                                onClick={() => copyCode(g)}
-                                title="Copier le code d'invitation"
-                                aria-label={`Copier le code d'invitation ${g.inviteCode}`}
-                                className="h-11 px-3 rounded-lg border border-fantasy-border text-sm tracking-wider text-fantasy-muted hover:text-fantasy-text flex items-center gap-1.5"
-                              >
-                                {copiedId === g.id ? (
-                                  <Check size={14} />
-                                ) : (
-                                  <Copy size={14} />
-                                )}
-                                {copiedId === g.id ? 'Copié' : g.inviteCode}
-                              </button>
-                            )}
-                            {g.isGemma && g.gemmaVariant !== 'eternita' && (
-                              <button
-                                type="button"
-                                onClick={() => toggleArpenteur(g)}
-                                title={
-                                  g.gemmaVariant === 'arpenteur'
-                                    ? "Retirer l'aventure Désert de Keld (le navire est conservé)"
-                                    : "Passer à l'aventure Désert de Keld"
-                                }
-                                aria-label={
-                                  g.gemmaVariant === 'arpenteur'
-                                    ? `Retirer l'aventure Désert de Keld de ${g.name}`
-                                    : `Passer ${g.name} à l'aventure Désert de Keld`
-                                }
-                                aria-pressed={g.gemmaVariant === 'arpenteur'}
-                                className={`w-11 h-11 rounded-lg border flex items-center justify-center ${
-                                  g.gemmaVariant === 'arpenteur'
-                                    ? 'border-fantasy-accent text-fantasy-accent bg-fantasy-accent/10'
-                                    : 'border-fantasy-border text-fantasy-muted hover:text-fantasy-text'
-                                }`}
-                              >
-                                <Ship size={16} />
-                              </button>
-                            )}
+                    </button>
+                    <div className="flex gap-2 p-3 bg-fantasy-surface/95 border-t border-white/5">
+                      <button
+                        type="button"
+                        onClick={enter}
+                        className="flex-1 h-10 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold hover:bg-fantasy-accent-hover"
+                      >
+                        Entrer
+                      </button>
+                      {isGM && (
+                        <>
+                          {!g.isTest && (
                             <button
                               type="button"
-                              onClick={() => setDeleteGameId(g.id)}
-                              title="Quitter et supprimer la partie"
-                              aria-label={`Supprimer la partie ${g.name}`}
-                              className="w-11 h-11 rounded-lg border border-fantasy-border text-fantasy-muted hover:text-fantasy-error hover:border-fantasy-danger/60 flex items-center justify-center"
+                              onClick={() => copyCode(g)}
+                              title="Copier le code d'invitation"
+                              aria-label={`Copier le code d'invitation ${g.inviteCode}`}
+                              className={`${iconButton} w-auto px-2.5 gap-1.5 text-xs tracking-wider`}
                             >
-                              <Trash size={16} />
+                              {copiedId === g.id ? (
+                                <Check size={14} />
+                              ) : (
+                                <Copy size={14} />
+                              )}
+                              {copiedId === g.id ? 'Copié' : g.inviteCode}
                             </button>
-                          </>
-                        )}
-                        {!isGM && (
+                          )}
+                          {g.isGemma && g.gemmaVariant !== 'eternita' && (
+                            <button
+                              type="button"
+                              onClick={() => toggleArpenteur(g)}
+                              title={
+                                g.gemmaVariant === 'arpenteur'
+                                  ? "Retirer l'aventure Désert de Keld (le navire est conservé)"
+                                  : "Passer à l'aventure Désert de Keld"
+                              }
+                              aria-label={
+                                g.gemmaVariant === 'arpenteur'
+                                  ? `Retirer l'aventure Désert de Keld de ${g.name}`
+                                  : `Passer ${g.name} à l'aventure Désert de Keld`
+                              }
+                              aria-pressed={g.gemmaVariant === 'arpenteur'}
+                              className={`${iconButton} ${
+                                g.gemmaVariant === 'arpenteur'
+                                  ? '!border-fantasy-accent !text-fantasy-accent bg-fantasy-accent/10'
+                                  : ''
+                              }`}
+                            >
+                              <Ship size={16} />
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => setLeaveGameId(g.id)}
-                            title="Quitter la partie"
-                            aria-label={`Quitter la partie ${g.name}`}
-                            className="w-11 h-11 rounded-lg border border-fantasy-border text-fantasy-muted hover:text-fantasy-error hover:border-fantasy-danger/60 flex items-center justify-center"
+                            onClick={() => setDeleteGameId(g.id)}
+                            title="Quitter et supprimer la partie"
+                            aria-label={`Supprimer la partie ${g.name}`}
+                            className={`${iconButton} hover:!text-fantasy-error hover:!border-fantasy-danger/60`}
                           >
-                            <LogOut size={16} />
+                            <Trash size={16} />
                           </button>
-                        )}
-                      </div>
+                        </>
+                      )}
+                      {!isGM && (
+                        <button
+                          type="button"
+                          onClick={() => setLeaveGameId(g.id)}
+                          title="Quitter la partie"
+                          aria-label={`Quitter la partie ${g.name}`}
+                          className={`${iconButton} hover:!text-fantasy-error hover:!border-fantasy-danger/60`}
+                        >
+                          <LogOut size={16} />
+                        </button>
+                      )}
                     </div>
                   </li>
                 );
@@ -547,6 +570,6 @@ export function GameLobbyPage() {
           )}
         </section>
       </main>
-    </div>
+    </PageShell>
   );
 }

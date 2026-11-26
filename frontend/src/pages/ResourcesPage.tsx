@@ -5,7 +5,8 @@ import { getErrorMessage } from '@/shared/utils/errorMessage';
 import type { MapData } from '@/core/tabletop/MapCanvas';
 import { MapEditor } from '@/core/tabletop/MapEditor';
 import { Modal, ModalButtons, ModalConfirm } from '@/shared/ui/Modal';
-import { ChevronLeft, MapIcon, Music, Trash } from '@/shared/ui/icons';
+import { MapIcon, Music, Trash } from '@/shared/ui/icons';
+import { BackLink, PageHeader, PageShell } from '@/shared/ui/PageShell';
 import {
   MonsterEditorModal,
   type GameElementFull,
@@ -772,35 +773,30 @@ export function ResourcesPage({ libraryGameId }: ResourcesPageProps = {}) {
     'h-9 rounded-lg bg-fantasy-surface text-sm text-fantasy-text hover:bg-fantasy-surface-hover';
 
   return (
-    <div className="h-screen flex flex-col bg-fantasy-bg text-fantasy-text overflow-hidden">
-      <header className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-fantasy-surface">
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => navigate(backPath)}
-            className="inline-flex items-center gap-1.5 h-10 pl-2 pr-3 rounded-lg bg-fantasy-surface hover:bg-fantasy-surface-hover text-[15px]"
-          >
-            <ChevronLeft size={18} />
+    <PageShell
+      fill
+      header={
+        <PageHeader
+          wide
+          title={
+            <>
+              <h1 className="font-heading font-bold text-lg tracking-wide truncate">
+                {isLibrary ? 'Ma bibliothèque' : 'Ressources'}
+              </h1>
+              <span className="block text-[13px] text-fantasy-muted truncate">
+                {isLibrary
+                  ? 'Préparez vos ressources sans être en partie · disponibles dans toutes vos parties'
+                  : `${game.name} · votre bibliothèque est incluse`}
+              </span>
+            </>
+          }
+        >
+          <BackLink onClick={() => navigate(backPath)}>
             {isLibrary ? 'Mes parties' : 'Table de jeu'}
-          </button>
-          <div className="leading-tight">
-            <h1 className="font-heading font-bold text-[22px]">
-              {isLibrary ? 'Ma bibliothèque' : 'Ressources'}
-            </h1>
-            <span className="text-[13px] text-fantasy-muted">
-              {isLibrary
-                ? 'Préparez vos ressources sans être en partie'
-                : game.name}
-            </span>
-          </div>
-        </div>
-        <span className="text-[13px] text-fantasy-muted">
-          {isLibrary
-            ? 'Disponibles dans toutes vos parties'
-            : 'Votre bibliothèque est incluse'}
-        </span>
-      </header>
-
+          </BackLink>
+        </PageHeader>
+      }
+    >
       <Modal
         open={!!pendingMapFile}
         onClose={() => setPendingMapFile(null)}
@@ -895,7 +891,7 @@ export function ResourcesPage({ libraryGameId }: ResourcesPageProps = {}) {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="relative z-10 flex-1 min-h-0 overflow-auto">
         <div
           className={`flex flex-wrap gap-6 p-6 mx-auto ${
             activeTab === 'editor' ? 'max-w-none h-full' : 'max-w-[1360px]'
@@ -1300,7 +1296,7 @@ export function ResourcesPage({ libraryGameId }: ResourcesPageProps = {}) {
           </main>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

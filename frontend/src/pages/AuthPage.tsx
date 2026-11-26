@@ -1,30 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/core/auth/useAuth';
 import { getErrorMessage } from '@/shared/utils/errorMessage';
 import { ThemePicker } from '@/shared/ui/ThemePicker';
 import { MapIcon, Music } from '@/shared/ui/icons';
+import { PageHeader, PageShell, glassPanel } from '@/shared/ui/PageShell';
+import { ADVENTURES, MODES } from '@/adventures/catalog';
+
+const POSTERS = [...MODES, ...ADVENTURES];
 
 type Mode = 'login' | 'register';
-
-export function D20Logo({ size = 32 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className="text-fantasy-accent"
-    >
-      <path d="M12 2l9 5.2v9.6L12 22l-9-5.2V7.2z" />
-      <path d="M12 2l4.5 7.5h-9zM7.5 9.5L3 16.8M16.5 9.5L21 16.8M7.5 9.5L12 22l4.5-12.5M3 7.2l4.5 2.3M21 7.2l-4.5 2.3" />
-    </svg>
-  );
-}
 
 const FEATURES = [
   {
@@ -65,6 +50,15 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
   const [submitting, setSubmitting] = useState(false);
   const { login, register, error: authError, clearError } = useAuth();
   const navigate = useNavigate();
+  // Affiche mise en avant : elle change toutes les 7 s et éclaire le fond.
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const t = setInterval(
+      () => setShown((i) => (i + 1) % POSTERS.length),
+      7000
+    );
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => setMode(initialMode), [initialMode]);
 
@@ -102,30 +96,21 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
     'h-12 px-3.5 rounded-lg bg-fantasy-bg border border-fantasy-border text-base text-fantasy-text placeholder:text-fantasy-muted-soft focus:outline-none focus:border-fantasy-accent';
 
   return (
-    <div
-      className="min-h-screen flex flex-col text-fantasy-text"
-      style={{
-        background:
-          'radial-gradient(1200px 600px at 75% 15%, rgb(var(--c-accent) / 0.08), transparent 60%), rgb(var(--c-bg))',
-      }}
+    <PageShell
+      backdrop={POSTERS[shown].image}
+      header={<PageHeader home="/login" />}
     >
-      <header className="w-full max-w-6xl mx-auto px-6 py-6 flex items-center gap-2.5">
-        <D20Logo />
-        <span className="font-heading font-bold text-xl tracking-wide">
-          Table JDR
-        </span>
-      </header>
-
-      <main className="flex-1 w-full max-w-6xl mx-auto px-6 pb-14 flex flex-wrap items-center gap-14">
+      <main className="relative z-10 w-full max-w-6xl mx-auto px-6 pt-12 pb-14 flex flex-wrap items-center gap-14">
         <section className="flex-[1_1_440px] flex flex-col gap-7">
           <div className="flex flex-col gap-4">
-            <span className="self-start px-3 py-1 rounded-full text-[13px] bg-fantasy-accent/15 text-fantasy-accent">
+            <span className="text-[11px] uppercase tracking-[0.35em] text-fantasy-accent">
               Pour le MJ et ses joueurs, dans le navigateur
             </span>
-            <h1 className="font-heading font-bold text-4xl md:text-5xl leading-tight">
+            <h1 className="font-heading font-bold text-4xl md:text-5xl leading-tight tracking-wide">
               Votre table de jeu de rôle, partagée en direct
             </h1>
-            <p className="text-lg md:text-xl leading-relaxed max-w-xl text-fantasy-muted">
+            <span className="h-px w-16 bg-fantasy-accent/70" />
+            <p className="text-lg md:text-xl leading-relaxed max-w-xl text-fantasy-text-soft">
               Cartes, jetons, dés, fiches et musique : tout ce que fait le MJ
               apparaît instantanément chez les joueurs.
             </p>
@@ -143,11 +128,32 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
               </li>
             ))}
           </ul>
+          {/* Les affiches des tables et aventures, en éventail. */}
+          <div aria-hidden className="flex items-end gap-3 pt-2 pl-2">
+            {POSTERS.map((p, i) => (
+              <img
+                key={p.id}
+                src={p.image}
+                alt=""
+                className={`w-24 sm:w-28 aspect-[2/3] object-cover rounded-lg border shadow-2xl transition-all duration-700 ${
+                  i === shown
+                    ? '-translate-y-2 border-[var(--accent)] shadow-[0_0_32px_-6px_var(--accent)]'
+                    : 'border-white/10 opacity-70'
+                }`}
+                style={
+                  {
+                    '--accent': p.accent,
+                    rotate: `${(i - (POSTERS.length - 1) / 2) * 4}deg`,
+                  } as CSSProperties
+                }
+              />
+            ))}
+          </div>
         </section>
 
         <section
           aria-label={mode === 'login' ? 'Connexion' : 'Création de compte'}
-          className="flex-[0_1_420px] w-full rounded-2xl p-7 flex flex-col gap-5 bg-fantasy-surface border border-fantasy-border shadow-2xl"
+          className={`${glassPanel} flex-[0_1_420px] w-full p-7 flex flex-col gap-5 shadow-2xl`}
         >
           <div
             role="tablist"
@@ -278,13 +284,13 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
         </section>
       </main>
 
-      <footer className="w-full max-w-6xl mx-auto px-6 py-5 flex flex-wrap items-center justify-between gap-3 text-sm text-fantasy-muted-soft">
+      <footer className="relative z-10 w-full max-w-6xl mx-auto px-6 py-5 flex flex-wrap items-center justify-between gap-3 text-sm text-fantasy-muted-soft">
         <span>Table JDR</span>
         <span className="flex items-center gap-3">
           Palette
           <ThemePicker compact />
         </span>
       </footer>
-    </div>
+    </PageShell>
   );
 }

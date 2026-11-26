@@ -1,9 +1,15 @@
-import { useState, type CSSProperties } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Check, ChevronLeft } from '@/shared/ui/icons';
 import { GamesAPI } from '@/core/api/client';
 import { getErrorMessage } from '@/shared/utils/errorMessage';
-import { D20Logo } from './AuthPage';
+import {
+  BackLink,
+  PageHeader,
+  PageHeading,
+  PageShell,
+} from '@/shared/ui/PageShell';
+import { PosterCard } from '@/adventures/PosterCard';
 import {
   ADVENTURES,
   MODES,
@@ -92,47 +98,17 @@ export function NewGamePage() {
   ];
 
   return (
-    <div className="relative min-h-screen bg-fantasy-bg text-fantasy-text overflow-hidden">
-      {/* Fond : l'affiche, très floue, comme une lumière de salle. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 transition-opacity duration-700"
-        style={{ opacity: backdrop ? 0.32 : 0 }}
-      >
-        {backdrop && (
-          <img
-            key={backdrop.id}
-            src={backdrop.image}
-            alt=""
-            className="w-full h-full object-cover scale-110 blur-3xl"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-b from-fantasy-bg/40 via-fantasy-bg/70 to-fantasy-bg" />
-      </div>
-
-      <header className="relative z-10 border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
-          <Link to="/games" className="flex items-center gap-2.5">
-            <D20Logo size={28} />
-            <span className="font-heading font-bold text-lg tracking-wide">
-              Table JDR
-            </span>
-          </Link>
-          <Link
-            to="/games"
-            className="h-10 px-4 rounded-lg border border-fantasy-border text-sm text-fantasy-text-soft hover:text-fantasy-text flex items-center gap-2"
-          >
-            <ChevronLeft size={16} />
-            Mes parties
-          </Link>
-        </div>
-      </header>
-
+    <PageShell
+      backdrop={backdrop?.image}
+      header={
+        <PageHeader>
+          <BackLink to="/games">Mes parties</BackLink>
+        </PageHeader>
+      }
+    >
       <main className="relative z-10 max-w-7xl mx-auto px-6 pt-8 pb-16 flex flex-col gap-8">
         <div className="flex flex-col items-center gap-5 text-center">
-          <h1 className="font-heading text-3xl sm:text-4xl tracking-wide">
-            Nouvelle partie
-          </h1>
+          <PageHeading kicker="Vous en serez le MJ" title="Nouvelle partie" />
           <ol className="flex flex-wrap items-center justify-center gap-2 text-sm">
             {steps.map((s, i) => (
               <li key={s.id} className="flex items-center gap-2">
@@ -311,93 +287,6 @@ export function NewGamePage() {
           </form>
         )}
       </main>
-    </div>
-  );
-}
-
-/** Affiche : illustration plein cadre, titre en typographie de cinéma. */
-function PosterCard({
-  poster,
-  big = false,
-  selected = false,
-  onPick,
-  onHover,
-}: {
-  poster: Poster;
-  big?: boolean;
-  selected?: boolean;
-  onPick?: () => void;
-  onHover?: (p: Poster | null) => void;
-}) {
-  const style = { '--accent': poster.accent } as CSSProperties;
-  const body = (
-    <>
-      <img
-        src={poster.image}
-        alt=""
-        loading="lazy"
-        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/35 to-transparent" />
-      <div className="absolute inset-3 rounded-lg border border-white/10 pointer-events-none" />
-      <div
-        className={`absolute inset-x-0 bottom-0 flex flex-col items-center text-center gap-2 ${big ? 'p-8' : 'p-5'}`}
-      >
-        <span
-          className="text-[11px] uppercase tracking-[0.35em]"
-          style={{ color: poster.accent }}
-        >
-          {poster.kicker}
-        </span>
-        <span
-          className={`font-heading font-bold leading-none tracking-wide text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] ${big ? 'text-4xl sm:text-5xl' : 'text-2xl'}`}
-        >
-          {poster.title}
-        </span>
-        <span
-          className="h-px w-16 my-1"
-          style={{ background: poster.accent }}
-        />
-        <span
-          className={`text-white/80 ${big ? 'text-sm max-w-xs' : 'text-xs'}`}
-        >
-          {poster.tagline}
-        </span>
-      </div>
-      {selected && (
-        <span
-          className="absolute top-4 right-4 w-8 h-8 rounded-full grid place-items-center text-black"
-          style={{ background: poster.accent }}
-        >
-          <Check size={16} />
-        </span>
-      )}
-    </>
-  );
-  const frame = `group relative block w-full aspect-[2/3] overflow-hidden rounded-2xl border bg-black shadow-2xl transition-all duration-300 ${
-    selected
-      ? 'border-[var(--accent)] shadow-[0_0_40px_-8px_var(--accent)]'
-      : 'border-white/10'
-  }`;
-  if (!onPick)
-    return (
-      <div className={frame} style={style}>
-        {body}
-      </div>
-    );
-  return (
-    <button
-      type="button"
-      onClick={onPick}
-      onMouseEnter={() => onHover?.(poster)}
-      onMouseLeave={() => onHover?.(null)}
-      onFocus={() => onHover?.(poster)}
-      onBlur={() => onHover?.(null)}
-      aria-label={`${poster.title} — ${poster.tagline}`}
-      className={`${frame} text-left hover:-translate-y-1 hover:border-[var(--accent)] hover:shadow-[0_0_48px_-10px_var(--accent)] focus:outline-none focus-visible:border-[var(--accent)]`}
-      style={style}
-    >
-      {body}
-    </button>
+    </PageShell>
   );
 }

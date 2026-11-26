@@ -103,3 +103,8 @@ export const ADVENTURES: Adventure[] = [
 export function adventureOf(variant?: string): Adventure {
   return ADVENTURES.find((a) => a.variant === (variant ?? '')) ?? ADVENTURES[0];
 }
+
+/** Affiche d'une partie : son aventure GEMMA, ou le JDR standard. */
+export function posterOfGame(isGemma?: boolean, variant?: string): Poster {
+  return isGemma ? adventureOf(variant) : MODES[0];
+}
