@@ -570,7 +570,7 @@ export function GameLobbyPage() {
                           <D20Logo size={44} />
                         </span>
                       )}
-                      <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+                      <div className="absolute top-2.5 left-2.5 right-2.5 flex flex-wrap gap-1.5 [&>span]:whitespace-nowrap">
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                             isGM
