@@ -371,7 +371,7 @@ La même page existe hors partie : [[bibliotheque|Ma bibliothèque]].`,
 ## Créer une partie test
 
 1. Sur « Mes parties », cochez « Partie test » dans le cadre « Créer une partie ».
-2. Laissez « Remplir avec des données d'exemple » coché pour partir avec trois joueurs fictifs, une carte avec leurs jetons, deux monstres, un document et, en mode Arpenteur, un navire avec son équipage.
+2. Laissez « Remplir avec des données d'exemple » coché pour partir avec trois joueurs fictifs, une carte avec leurs jetons, deux monstres, un document et, dans l'aventure Désert de Keld, un navire avec son équipage.
 3. Cliquez sur « Créer ».
 
 ## Le bouton « Test »
@@ -622,13 +622,13 @@ Tout est enregistré automatiquement (« Enregistré » s'affiche).`,
     summary: 'Les ajouts d’une partie dans l’univers GEMMA.',
     audience: 'tous',
     keywords: ['GEMMA', 'univers', 'aether'],
-    body: `Une partie créée avec « Univers GEMMA » apporte :
+    body: `Une partie créée en mode « JDR GEMMA » apporte :
 
 - une [[fiche-gemma|fiche de personnage]] à remplir dans l'application, synchronisée avec le personnage sur la carte ;
 - la jauge **Aether** à la place du mana ;
 - la [[portee|portée d'attaque]] affichée autour des personnages ;
 - l'affichage des lancers au centre de la carte ;
-- en option, le [[arpenteur|mode Arpenteur]] : le vaisseau des sables du groupe.
+- des aventures, dont le [[arpenteur|Désert de Keld]] : le vaisseau des sables du groupe.
 
 Tout le reste (brouillard, documents, règle…) est disponible dans toutes les parties.`,
   },
@@ -664,7 +664,7 @@ Cliquez sur un personnage qui a une portée : un cercle jaune montre sa zone d'a
   {
     id: 'arpenteur',
     chapter: 'gemma',
-    title: 'Le mode Arpenteur',
+    title: 'Aventure Désert de Keld : l’arpenteur',
     summary: 'Le vaisseau des sables du groupe, sur sa propre page.',
     audience: 'tous',
     keywords: [
@@ -813,16 +813,16 @@ Un coût en coupons peut être déduit de l'expédition. Chaque amélioration s'
     id: 'arpenteur-mj',
     chapter: 'gemma',
     title: 'Arpenteur : mise en place (MJ)',
-    summary: 'Activer le mode, importer le classeur, relier les joueurs.',
+    summary: "Choisir l'aventure, importer le classeur, relier les joueurs.",
     audience: 'mj',
     keywords: ['arpenteur', 'import', 'excel', 'classeur', 'activer'],
     body: `1. Créez une partie « JDR GEMMA » avec l'aventure « Désert de Keld », ou passez une partie GEMMA existante à cette aventure avec le bouton en forme de navire sur sa carte (« Mes parties »).
 2. Dans l'onglet Réglages de l'arpenteur, importez votre classeur (Excel, LibreOffice ou CSV) : équipage, combat, cale, cave et expédition sont repris.
 3. Dans l'onglet Équipage, reliez chaque personnage joueur à son joueur (« Incarné par ») : ses droits suivent son poste.
 
-> Retirer le mode Arpenteur ne supprime pas le navire : il revient tel quel si vous le réactivez.
+> Retirer l'aventure Désert de Keld ne supprime pas le navire : il revient tel quel si vous la réactivez.
 
-> Pour essayer les postes avant la séance, créez une [[partie-test|partie test]] en mode Arpenteur : ses joueurs fictifs sont déjà placés dans l'équipage.`,
+> Pour essayer les postes avant la séance, créez une [[partie-test|partie test]] dans l'aventure Désert de Keld : ses joueurs fictifs sont déjà placés dans l'équipage.`,
   },
 
   // --- Compte ----------------------------------------------------------------------------
