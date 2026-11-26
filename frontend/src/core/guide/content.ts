@@ -93,7 +93,7 @@ Votre nom d'affichage est celui que voient les autres à la table. Vous pouvez l
     audience: 'mj',
     keywords: ['nouvelle partie', 'MJ', 'code', 'invitation', 'GEMMA', 'test'],
     body: `1. Sur « Mes parties », remplissez le cadre « Créer une partie » (le nom est facultatif).
-2. Choisissez le mode : « JDR standard » ou « JDR GEMMA » (voir [[gemma|Univers GEMMA]]) ; ce choix ne se change plus ensuite. En GEMMA, choisissez l'aventure : « Table libre », « Désert de Keld » ([[arpenteur|le vaisseau des sables]]) ou « Eternita ».
+2. Choisissez le mode : « JDR standard » ou « JDR GEMMA » (voir [[gemma|Univers GEMMA]]) ; ce choix ne se change plus ensuite. En GEMMA, choisissez l'aventure : « Table libre », « Désert de Keld » ([[arpenteur|le vaisseau des sables]]), « Eternita » ou « Arène Exalter ».
 3. Pour essayer les mécaniques seul, cochez « Partie test » : vous y incarnez des joueurs fictifs (voir [[partie-test|Partie test]]).
 4. Cliquez sur « Créer » : vous êtes le MJ de la partie.
 
@@ -628,7 +628,7 @@ Tout est enregistré automatiquement (« Enregistré » s'affiche).`,
 - la jauge **Aether** à la place du mana ;
 - la [[portee|portée d'attaque]] affichée autour des personnages ;
 - l'affichage des lancers au centre de la carte ;
-- des aventures : le [[arpenteur|Désert de Keld]], avec le vaisseau des sables du groupe, et Eternita.
+- des aventures : le [[arpenteur|Désert de Keld]], avec le vaisseau des sables du groupe, Eternita, et Arène Exalter, une arène et la ville qui l'entoure.
 
 Tout le reste (brouillard, documents, règle…) est disponible dans toutes les parties.`,
   },

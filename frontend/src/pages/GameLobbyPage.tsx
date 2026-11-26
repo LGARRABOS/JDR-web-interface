@@ -516,30 +516,32 @@ export function GameLobbyPage() {
                               {copiedId === g.id ? 'Copié' : g.inviteCode}
                             </button>
                           )}
-                          {g.isGemma && g.gemmaVariant !== 'eternita' && (
-                            <button
-                              type="button"
-                              onClick={() => toggleArpenteur(g)}
-                              title={
-                                g.gemmaVariant === 'arpenteur'
-                                  ? "Retirer l'aventure Désert de Keld (le navire est conservé)"
-                                  : "Passer à l'aventure Désert de Keld"
-                              }
-                              aria-label={
-                                g.gemmaVariant === 'arpenteur'
-                                  ? `Retirer l'aventure Désert de Keld de ${g.name}`
-                                  : `Passer ${g.name} à l'aventure Désert de Keld`
-                              }
-                              aria-pressed={g.gemmaVariant === 'arpenteur'}
-                              className={`${iconButton} ${
-                                g.gemmaVariant === 'arpenteur'
-                                  ? '!border-fantasy-accent !text-fantasy-accent bg-fantasy-accent/10'
-                                  : ''
-                              }`}
-                            >
-                              <Ship size={16} />
-                            </button>
-                          )}
+                          {g.isGemma &&
+                            (!g.gemmaVariant ||
+                              g.gemmaVariant === 'arpenteur') && (
+                              <button
+                                type="button"
+                                onClick={() => toggleArpenteur(g)}
+                                title={
+                                  g.gemmaVariant === 'arpenteur'
+                                    ? "Retirer l'aventure Désert de Keld (le navire est conservé)"
+                                    : "Passer à l'aventure Désert de Keld"
+                                }
+                                aria-label={
+                                  g.gemmaVariant === 'arpenteur'
+                                    ? `Retirer l'aventure Désert de Keld de ${g.name}`
+                                    : `Passer ${g.name} à l'aventure Désert de Keld`
+                                }
+                                aria-pressed={g.gemmaVariant === 'arpenteur'}
+                                className={`${iconButton} ${
+                                  g.gemmaVariant === 'arpenteur'
+                                    ? '!border-fantasy-accent !text-fantasy-accent bg-fantasy-accent/10'
+                                    : ''
+                                }`}
+                              >
+                                <Ship size={16} />
+                              </button>
+                            )}
                           <button
                             type="button"
                             onClick={() => setDeleteGameId(g.id)}

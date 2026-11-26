@@ -217,7 +217,7 @@ func TestArpenteurImportCSV(t *testing.T) {
 	}
 }
 
-// L'aventure Eternita est conservée ; une aventure inconnue retombe sur la
+// Les aventures Eternita et Arène Exalter sont conservées ; une aventure inconnue retombe sur la
 // table libre, et Eternita n'ouvre pas l'arpenteur.
 func TestGemmaVariantEternita(t *testing.T) {
 	sess := setupAuthAndGame(t)
@@ -239,6 +239,9 @@ func TestGemmaVariantEternita(t *testing.T) {
 	id, v := create("eternita")
 	if v != "eternita" {
 		t.Fatalf("eternita attendu, obtenu %q", v)
+	}
+	if _, v := create("arene"); v != "arene" {
+		t.Fatalf("arene attendu, obtenu %q", v)
 	}
 	if _, v := create("inconnue"); v != "" {
 		t.Fatalf("aventure inconnue : table libre attendue, obtenu %q", v)

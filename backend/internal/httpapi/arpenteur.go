@@ -31,6 +31,8 @@ const (
 	gemmaVariantArpenteur = "arpenteur"
 	// Aventure Eternita : pas encore d'outils dédiés, la table GEMMA suffit.
 	gemmaVariantEternita = "eternita"
+	// Aventure Arène Exalter : une arène et la ville autour, table GEMMA.
+	gemmaVariantArene    = "arene"
 	uploadsArpenteurBase = "uploads/arpenteur"
 	maxArpenteurImport   = 10 << 20
 	maxArpenteurImage    = 15 << 20
@@ -406,7 +408,7 @@ func (s *Server) handleResetArpenteur(w http.ResponseWriter, r *http.Request) {
 // cleanGemmaVariant ramène une aventure GEMMA inconnue à la table libre ("").
 func cleanGemmaVariant(v string) string {
 	switch v {
-	case gemmaVariantArpenteur, gemmaVariantEternita:
+	case gemmaVariantArpenteur, gemmaVariantEternita, gemmaVariantArene:
 		return v
 	}
 	return ""

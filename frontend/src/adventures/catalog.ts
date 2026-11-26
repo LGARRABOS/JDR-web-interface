@@ -2,7 +2,7 @@
 // aventures GEMMA. Pour ajouter une aventure : une entrée ici et son affiche
 // (portrait 2:3, environ 800 × 1200) dans public/posters/.
 
-export type GemmaVariant = '' | 'arpenteur' | 'eternita';
+export type GemmaVariant = '' | 'arpenteur' | 'eternita' | 'arene';
 
 export interface Poster {
   id: string;
@@ -91,6 +91,21 @@ export const ADVENTURES: Adventure[] = [
     tagline: "Une nouvelle aventure dans l'univers GEMMA.",
     image: '/posters/eternita.jpg',
     accent: '#8fb4ff',
+    features: [
+      'Fiches de personnage GEMMA',
+      "Jauge d'Aether, portée d'attaque",
+      'Lancers au centre de la carte',
+    ],
+  },
+  {
+    id: 'arene-exalter',
+    variant: 'arene',
+    title: 'Arène Exalter',
+    kicker: 'Aventure GEMMA',
+    tagline:
+      "Gloire, complots et paris : l'arène, et la ville qui vit autour d'elle.",
+    image: '/posters/arene-exalter.jpg',
+    accent: '#ff6a4a',
     features: [
       'Fiches de personnage GEMMA',
       "Jauge d'Aether, portée d'attaque",

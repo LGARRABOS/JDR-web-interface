@@ -89,7 +89,7 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 type createGameReq struct {
 	Name    string `json:"name"`
 	IsGemma bool   `json:"isGemma"`
-	// GemmaVariant : aventure GEMMA (« arpenteur », « eternita »), vide pour la table libre.
+	// GemmaVariant : aventure GEMMA (« arpenteur », « eternita », « arene »), vide pour la table libre.
 	GemmaVariant string `json:"gemmaVariant"`
 	// IsTest : partie test (joueurs fictifs, pas d'invitation).
 	IsTest bool `json:"isTest"`
@@ -343,7 +343,7 @@ func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Aventure GEMMA : changer l'aventure d'une partie GEMMA (Arpenteur, Eternita…).
+	// Aventure GEMMA : changer l'aventure d'une partie GEMMA (Arpenteur, Eternita, Arène…).
 	// Le document de l'arpenteur est conservé si le mode est retiré puis remis.
 	if req.GemmaVariant != nil {
 		variant := cleanGemmaVariant(*req.GemmaVariant)
