@@ -332,6 +332,128 @@ export function GameLobbyPage() {
                 Vous en serez le Maître du Jeu.
               </p>
             </div>
+            {/* Mode de jeu : deux grandes familles. */}
+            <div
+              className="grid grid-cols-2 gap-2.5"
+              role="radiogroup"
+              aria-label="Mode de jeu"
+            >
+              {(
+                [
+                  [
+                    false,
+                    'JDR standard',
+                    'Une table libre pour tout univers : carte, fiches, dés, musique.',
+                  ],
+                  [
+                    true,
+                    'JDR GEMMA',
+                    "L'univers GEMMA : règles et fiches dédiées, aventures.",
+                  ],
+                ] as const
+              ).map(([gemma, label, hint]) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="radio"
+                  aria-checked={isGemma === gemma}
+                  onClick={() => setIsGemma(gemma)}
+                  className={`text-left rounded-xl border px-3.5 py-3 transition-colors ${
+                    isGemma === gemma
+                      ? 'border-fantasy-accent bg-fantasy-accent/10'
+                      : 'border-fantasy-border hover:border-fantasy-muted'
+                  }`}
+                >
+                  <span
+                    className={`block font-heading font-semibold ${
+                      isGemma === gemma
+                        ? 'text-fantasy-accent'
+                        : 'text-fantasy-text'
+                    }`}
+                  >
+                    {label}
+                  </span>
+                  <span className="block text-xs text-fantasy-muted mt-0.5">
+                    {hint}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {isGemma && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs uppercase tracking-wider text-fantasy-muted">
+                  Aventure
+                </p>
+                <div
+                  className="grid grid-cols-2 gap-2.5"
+                  role="radiogroup"
+                  aria-label="Aventure GEMMA"
+                >
+                  {(
+                    [
+                      [
+                        '',
+                        'Table libre',
+                        'Les règles et fiches GEMMA, sans aventure imposée.',
+                      ],
+                      [
+                        'arpenteur',
+                        'Désert de Keld',
+                        'Le vaisseau des sables du groupe : équipage, canons, cale et carte des déserts.',
+                      ],
+                    ] as const
+                  ).map(([id, label, hint]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={gemmaVariant === id}
+                      onClick={() => setGemmaVariant(id)}
+                      className={`text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                        gemmaVariant === id
+                          ? 'border-fantasy-accent bg-fantasy-accent/10'
+                          : 'border-fantasy-border hover:border-fantasy-muted'
+                      }`}
+                    >
+                      <span className="block text-sm text-fantasy-text font-semibold">
+                        {label}
+                      </span>
+                      <span className="block text-xs text-fantasy-muted mt-0.5">
+                        {hint}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-fantasy-muted">
+                  L&apos;univers GEMMA ne se change plus après la création.
+                </p>
+              </div>
+            )}
+            <div className="flex flex-col gap-2 border-t border-fantasy-border pt-3.5">
+              <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isTest}
+                  onChange={(e) => setIsTest(e.target.checked)}
+                  className="w-[18px] h-[18px] accent-fantasy-accent"
+                />
+                Partie test (joueurs fictifs que vous incarnez, sans invitation)
+              </label>
+              {isTest && (
+                <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none pl-7">
+                  <input
+                    type="checkbox"
+                    checked={sample}
+                    onChange={(e) => setSample(e.target.checked)}
+                    className="w-4 h-4 accent-fantasy-accent"
+                  />
+                  Remplir avec des données d&apos;exemple (3 joueurs, une carte,
+                  des monstres
+                  {gemmaVariant === 'arpenteur' && isGemma ? ', un navire' : ''}
+                  )
+                </label>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2.5">
               <label htmlFor="create-name" className="sr-only">
                 Nom de la partie
@@ -351,78 +473,6 @@ export function GameLobbyPage() {
                 Créer
               </button>
             </div>
-            <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isGemma}
-                onChange={(e) => setIsGemma(e.target.checked)}
-                className="w-[18px] h-[18px] accent-fantasy-accent"
-              />
-              Univers GEMMA (règles et fiches dédiées, non modifiable ensuite)
-            </label>
-            {isGemma && (
-              <div
-                className="flex flex-col gap-2 pl-7"
-                role="radiogroup"
-                aria-label="Type de partie GEMMA"
-              >
-                {(
-                  [
-                    [
-                      '',
-                      'GEMMA classique',
-                      'La table, les fiches et les règles GEMMA.',
-                    ],
-                    [
-                      'arpenteur',
-                      'GEMMA Arpenteur',
-                      'En plus : le vaisseau des sables du groupe, son équipage, ses canons, sa cale et la carte des déserts.',
-                    ],
-                  ] as const
-                ).map(([id, label, hint]) => (
-                  <label
-                    key={id}
-                    className="flex items-start gap-2.5 text-sm cursor-pointer select-none"
-                  >
-                    <input
-                      type="radio"
-                      name="gemma-variant"
-                      checked={gemmaVariant === id}
-                      onChange={() => setGemmaVariant(id)}
-                      className="mt-0.5 w-4 h-4 accent-fantasy-accent"
-                    />
-                    <span>
-                      <span className="text-fantasy-text">{label}</span>
-                      <span className="block text-xs text-fantasy-muted">
-                        {hint}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-            <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isTest}
-                onChange={(e) => setIsTest(e.target.checked)}
-                className="w-[18px] h-[18px] accent-fantasy-accent"
-              />
-              Partie test (joueurs fictifs que vous incarnez, sans invitation)
-            </label>
-            {isTest && (
-              <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none pl-7">
-                <input
-                  type="checkbox"
-                  checked={sample}
-                  onChange={(e) => setSample(e.target.checked)}
-                  className="w-4 h-4 accent-fantasy-accent"
-                />
-                Remplir avec des données d&apos;exemple (3 joueurs, une carte,
-                des monstres
-                {gemmaVariant === 'arpenteur' && isGemma ? ', un navire' : ''})
-              </label>
-            )}
           </form>
 
           <form
@@ -533,7 +583,7 @@ export function GameLobbyPage() {
                         {g.isGemma && (
                           <span className="px-2.5 py-0.5 rounded-full text-xs bg-black/60 text-white">
                             {g.gemmaVariant === 'arpenteur'
-                              ? 'GEMMA · Arpenteur'
+                              ? 'GEMMA · Désert de Keld'
                               : 'GEMMA'}
                           </span>
                         )}
@@ -592,13 +642,13 @@ export function GameLobbyPage() {
                                 onClick={() => toggleArpenteur(g)}
                                 title={
                                   g.gemmaVariant === 'arpenteur'
-                                    ? 'Retirer le mode Arpenteur (le navire est conservé)'
-                                    : 'Activer le mode Arpenteur'
+                                    ? "Retirer l'aventure Désert de Keld (le navire est conservé)"
+                                    : "Passer à l'aventure Désert de Keld"
                                 }
                                 aria-label={
                                   g.gemmaVariant === 'arpenteur'
-                                    ? `Retirer le mode Arpenteur de ${g.name}`
-                                    : `Activer le mode Arpenteur pour ${g.name}`
+                                    ? `Retirer l'aventure Désert de Keld de ${g.name}`
+                                    : `Passer ${g.name} à l'aventure Désert de Keld`
                                 }
                                 aria-pressed={g.gemmaVariant === 'arpenteur'}
                                 className={`w-11 h-11 rounded-lg border flex items-center justify-center ${

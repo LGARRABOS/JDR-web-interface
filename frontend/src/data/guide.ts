@@ -93,7 +93,7 @@ Votre nom d'affichage est celui que voient les autres à la table. Vous pouvez l
     audience: 'mj',
     keywords: ['nouvelle partie', 'MJ', 'code', 'invitation', 'GEMMA', 'test'],
     body: `1. Sur « Mes parties », remplissez le cadre « Créer une partie » (le nom est facultatif).
-2. Cochez « Univers GEMMA » si vous jouez dans cet univers : ce choix ne se change plus ensuite (voir [[gemma|Univers GEMMA]]). Choisissez alors « GEMMA classique » ou « GEMMA Arpenteur » ([[arpenteur|le vaisseau des sables]]).
+2. Choisissez le mode : « JDR standard » ou « JDR GEMMA » (voir [[gemma|Univers GEMMA]]) ; ce choix ne se change plus ensuite. En GEMMA, choisissez l'aventure : « Table libre » ou « Désert de Keld » ([[arpenteur|le vaisseau des sables]]).
 3. Pour essayer les mécaniques seul, cochez « Partie test » : vous y incarnez des joueurs fictifs (voir [[partie-test|Partie test]]).
 4. Cliquez sur « Créer » : vous êtes le MJ de la partie.
 
@@ -676,7 +676,7 @@ Cliquez sur un personnage qui a une portée : un cercle jaune montre sa zone d'a
       'Keld',
       '3D',
     ],
-    body: `Une partie **GEMMA Arpenteur** ajoute un vaisseau des sables commun à tout le groupe. Le bouton « Arpenteur » en haut de la table ouvre sa page ; « Table » revient à la carte. Le chat, les dés et la musique restent disponibles.
+    body: `Une partie **GEMMA · Désert de Keld** ajoute un vaisseau des sables commun à tout le groupe. Le bouton « Arpenteur » en haut de la table ouvre sa page ; « Table » revient à la carte. Le chat, les dés et la musique restent disponibles.
 
 En haut de la page, l'arpenteur apparaît en 3D, vu de trois-quarts, survolant les dunes du désert où il se trouve. Son allure, ses matériaux, ses mâts, sa proue, ses éclairages et ses couleurs suivent ses améliorations, et ses canons sortent des sabords. Les réacteurs soulèvent le sable et les cheminées fument. L'équipage s'active sur le pont (barre, cabestan, drisses, vigie). Quand la coque est abîmée, des brèches, des feux et de la fumée apparaissent ; pendant un chantier, le navire est entouré d'échafaudages. La scène passe de nuit entre 20 h et 7 h. Le bouton « Coupe » montre le plan de l'intérieur : cliquez sur une salle pour la gérer.
 
@@ -816,7 +816,7 @@ Un coût en coupons peut être déduit de l'expédition. Chaque amélioration s'
     summary: 'Activer le mode, importer le classeur, relier les joueurs.',
     audience: 'mj',
     keywords: ['arpenteur', 'import', 'excel', 'classeur', 'activer'],
-    body: `1. Créez une partie « GEMMA Arpenteur », ou activez le mode sur une partie GEMMA existante avec le bouton en forme de navire sur sa carte (« Mes parties »).
+    body: `1. Créez une partie « JDR GEMMA » avec l'aventure « Désert de Keld », ou passez une partie GEMMA existante à cette aventure avec le bouton en forme de navire sur sa carte (« Mes parties »).
 2. Dans l'onglet Réglages de l'arpenteur, importez votre classeur (Excel, LibreOffice ou CSV) : équipage, combat, cale, cave et expédition sont repris.
 3. Dans l'onglet Équipage, reliez chaque personnage joueur à son joueur (« Incarné par ») : ses droits suivent son poste.
 
