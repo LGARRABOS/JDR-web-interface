@@ -17,7 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"jdr-backend/internal/arpenteur"
+	"jdr-backend/internal/adventures/arpenteur"
 	"jdr-backend/internal/docimport"
 	"jdr-backend/internal/realtime"
 )
@@ -25,7 +25,7 @@ import (
 // Mode GEMMA « Arpenteur » : le groupe commande un vaisseau des sables. Son
 // état (construction, équipage, canons, cale, cave, carte) tient dans un
 // document JSON par partie, modifié section par section selon les postes
-// occupés par les personnages des joueurs (voir internal/arpenteur).
+// occupés par les personnages des joueurs (voir internal/adventures/arpenteur).
 
 const (
 	gemmaVariantArpenteur = "arpenteur"

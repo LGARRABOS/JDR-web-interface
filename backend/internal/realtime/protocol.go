@@ -1,7 +1,7 @@
 package realtime
 
 // Ce fichier décrit le protocole WebSocket entre le serveur et les clients.
-// Il doit rester aligné avec frontend/src/realtime/protocol.ts.
+// Il doit rester aligné avec frontend/src/core/realtime/protocol.ts.
 //
 // Principe : le serveur est la seule source de vérité.
 //   - À chaque (re)connexion, le serveur envoie un message "sync.snapshot"

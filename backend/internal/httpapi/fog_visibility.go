@@ -6,7 +6,7 @@ import (
 )
 
 // Ce que les joueurs voient sous le brouillard, calculé par le serveur : un
-// ennemi caché n'est pas envoyé du tout (même logique que frontend/src/fog/fog.ts).
+// ennemi caché n'est pas envoyé du tout (même logique que frontend/src/core/tabletop/fog/fog.ts).
 
 func fogPatchContains(p *fogPatch, x, y float64) bool {
 	if p.Shape == "ellipse" {

@@ -26,7 +26,9 @@ npm run dev
 ## Structure
 
 - `backend/` : API REST + WebSocket (Go)
-- `frontend/` : Interface React
+- `frontend/` : Interface React (`src/shared`, `src/core`, `src/adventures/<aventure>`, `src/pages`, `src/app`)
+
+La carte détaillée du code (dossiers, routes, fichiers à garder alignés entre front et back) est dans [`CLAUDE.md`](CLAUDE.md).
 
 ## Temps réel : comment l'état est synchronisé
 
@@ -38,9 +40,9 @@ Le **serveur est la seule source de vérité**. Aucun client (même le MJ) ne d�
 4. En cas de coupure ou de client trop lent, la connexion est fermée ; le client se reconnecte et reçoit un nouvel instantané. Il n'y a donc rien à « rattraper ».
 5. Le serveur envoie un `ping` toutes les 25 s ; le client répond `pong` et considère la connexion morte s'il n'a rien reçu depuis 45 s.
 
-Côté frontend, `src/realtime/` contient le protocole typé (`protocol.ts`), la connexion (`connection.ts`) et le store (`gameStore.ts`, un reducer pur testé). Les composants envoient des commandes et affichent l'état du store ; ils ne modifient jamais eux-mêmes l'état partagé (sauf affichage optimiste pendant un glisser-déposer).
+Côté frontend, `src/core/realtime/` contient le protocole typé (`protocol.ts`), la connexion (`connection.ts`) et le store (`gameStore.ts`, un reducer pur testé). Les composants envoient des commandes et affichent l'état du store ; ils ne modifient jamais eux-mêmes l'état partagé (sauf affichage optimiste pendant un glisser-déposer).
 
-Le protocole est défini à deux endroits qui doivent rester alignés : `backend/internal/realtime/protocol.go` et `frontend/src/realtime/protocol.ts`.
+Le protocole est défini à deux endroits qui doivent rester alignés : `backend/internal/realtime/protocol.go` et `frontend/src/core/realtime/protocol.ts`.
 
 ## Tests et CI
 

@@ -1,20 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { GamesAPI, MapsAPI, MusicAPI, ElementsAPI } from '../api/client';
-import { getErrorMessage } from '../utils/errorMessage';
-import type { MapData } from '../components/MapCanvas';
-import { MapEditor } from '../components/MapEditor';
-import { Modal, ModalButtons, ModalConfirm } from '../components/Modal';
-import {
-  ChevronLeft,
-  MapIcon,
-  Music,
-  Trash,
-} from '../components/tabletop/icons';
+import { GamesAPI, MapsAPI, MusicAPI, ElementsAPI } from '@/core/api/client';
+import { getErrorMessage } from '@/shared/utils/errorMessage';
+import type { MapData } from '@/core/tabletop/MapCanvas';
+import { MapEditor } from '@/core/tabletop/MapEditor';
+import { Modal, ModalButtons, ModalConfirm } from '@/shared/ui/Modal';
+import { ChevronLeft, MapIcon, Music, Trash } from '@/shared/ui/icons';
 import {
   MonsterEditorModal,
   type GameElementFull,
-} from '../components/MonsterEditorModal';
+} from '@/core/tabletop/MonsterEditorModal';
 
 interface MusicTrack {
   id: number;

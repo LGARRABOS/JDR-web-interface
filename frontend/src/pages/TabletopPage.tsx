@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../auth/useAuth';
+import { useAuth } from '@/core/auth/useAuth';
 import {
   ElementsAPI,
   FogAPI,
@@ -18,41 +18,41 @@ import {
   RollsAPI,
   TokensAPI,
   type TokenUpdate,
-} from '../api/client';
-import { MapCanvas, type MapView, type Token } from '../components/MapCanvas';
-import { TokenPanel, type TokenFormData } from '../components/TokenPanel';
+} from '@/core/api/client';
+import { MapCanvas, type MapView, type Token } from '@/core/tabletop/MapCanvas';
+import { TokenPanel, type TokenFormData } from '@/core/tabletop/TokenPanel';
 import {
   MonsterEditorModal,
   type GameElementFull,
-} from '../components/MonsterEditorModal';
-import { CharacterSheetPanel } from '../components/CharacterSheetPanel';
-import { DiceRollOverlay } from '../components/DiceRollOverlay';
-import { TopBar } from '../components/tabletop/TopBar';
-import { TestPanel } from '../components/tabletop/TestPanel';
-import { activeActAs, switchActAs } from '../auth/actAs';
-import { GmToolbar, type FogTool } from '../components/tabletop/GmToolbar';
+} from '@/core/tabletop/MonsterEditorModal';
+import { CharacterSheetPanel } from '@/core/tabletop/CharacterSheetPanel';
+import { DiceRollOverlay } from '@/core/tabletop/DiceRollOverlay';
+import { TopBar } from '@/core/tabletop/TopBar';
+import { TestPanel } from '@/core/tabletop/TestPanel';
+import { activeActAs, switchActAs } from '@/core/auth/actAs';
+import { GmToolbar, type FogTool } from '@/core/tabletop/GmToolbar';
 import {
   elementForPlayers,
   tokensForPlayers,
-} from '../components/tabletop/playerView';
-import { SidePanel, type SidePanelTab } from '../components/tabletop/SidePanel';
-import { ChatFeed } from '../components/tabletop/ChatFeed';
-import { DiceBar } from '../components/tabletop/DiceBar';
-import { TokenQuickCard } from '../components/tabletop/TokenQuickCard';
-import { MonsterSheetView } from '../components/tabletop/MonsterSheetView';
-import { HandoutsTab } from '../components/tabletop/HandoutsTab';
-import { HandoutViewer } from '../components/tabletop/HandoutViewer';
-import { NotesTab } from '../components/tabletop/NotesTab';
-import { GuideDrawer } from '../components/guide/GuideDrawer';
-import { PresenceToasts } from '../components/tabletop/PresenceMenu';
-import type { Handout } from '../realtime/protocol';
-import { MiniPlayer, MusicTab } from '../components/tabletop/MusicControls';
-import { useAmbientMusic } from '../hooks/useAmbientMusic';
-import { useGameSession } from '../realtime/useGameSession';
-import type { RulerPoint } from '../realtime/protocol';
-import type { DrawnRuler } from '../components/tabletop/RulerLayer';
-import { colorForUser, displayNameOf } from '../components/tabletop/presence';
-import { getErrorMessage } from '../utils/errorMessage';
+} from '@/core/tabletop/playerView';
+import { SidePanel, type SidePanelTab } from '@/core/tabletop/SidePanel';
+import { ChatFeed } from '@/core/tabletop/ChatFeed';
+import { DiceBar } from '@/core/tabletop/DiceBar';
+import { TokenQuickCard } from '@/core/tabletop/TokenQuickCard';
+import { MonsterSheetView } from '@/core/tabletop/MonsterSheetView';
+import { HandoutsTab } from '@/core/tabletop/HandoutsTab';
+import { HandoutViewer } from '@/core/tabletop/HandoutViewer';
+import { NotesTab } from '@/core/tabletop/NotesTab';
+import { GuideDrawer } from '@/core/guide/GuideDrawer';
+import { PresenceToasts } from '@/core/tabletop/PresenceMenu';
+import type { Handout } from '@/core/realtime/protocol';
+import { MiniPlayer, MusicTab } from '@/core/tabletop/MusicControls';
+import { useAmbientMusic } from '@/core/tabletop/useAmbientMusic';
+import { useGameSession } from '@/core/realtime/useGameSession';
+import type { RulerPoint } from '@/core/realtime/protocol';
+import type { DrawnRuler } from '@/core/tabletop/RulerLayer';
+import { colorForUser, displayNameOf } from '@/core/tabletop/presence';
+import { getErrorMessage } from '@/shared/utils/errorMessage';
 
 const DEFAULT_VIEW: MapView = { scale: 1, offset: { x: 0, y: 0 } };
 const VIEW_SEND_INTERVAL_MS = 50;
@@ -76,7 +76,7 @@ interface LibraryElement {
 
 // Page de l'arpenteur (et moteur 3D) chargée seulement pour ce mode de jeu.
 const ArpenteurView = lazy(() =>
-  import('../components/arpenteur/ArpenteurView').then((m) => ({
+  import('@/adventures/arpenteur/ui/ArpenteurView').then((m) => ({
     default: m.ArpenteurView,
   }))
 );

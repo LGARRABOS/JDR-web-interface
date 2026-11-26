@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/useAuth';
-import { getErrorMessage } from '../utils/errorMessage';
-import { ThemePicker } from '../components/ThemePicker';
-import { MapIcon, Music } from '../components/tabletop/icons';
+import { useAuth } from '@/core/auth/useAuth';
+import { getErrorMessage } from '@/shared/utils/errorMessage';
+import { ThemePicker } from '@/shared/ui/ThemePicker';
+import { MapIcon, Music } from '@/shared/ui/icons';
 
 type Mode = 'login' | 'register';
 
