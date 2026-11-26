@@ -17,7 +17,7 @@ import {
 } from '@/shared/ui/icons';
 import { initials } from '@/core/tabletop/presence';
 import { D20Logo } from './AuthPage';
-import { ADVENTURES, MODES } from '@/adventures/catalog';
+import { ADVENTURES, MODES, adventureOf } from '@/adventures/catalog';
 
 const POSTERS = [...MODES, ...ADVENTURES].map((p) => p.image).slice(0, 4);
 
@@ -438,8 +438,8 @@ export function GameLobbyPage() {
                         </span>
                         {g.isGemma && (
                           <span className="px-2.5 py-0.5 rounded-full text-xs bg-black/60 text-white">
-                            {g.gemmaVariant === 'arpenteur'
-                              ? 'GEMMA · Désert de Keld'
+                            {g.gemmaVariant
+                              ? `GEMMA · ${adventureOf(g.gemmaVariant).title}`
                               : 'GEMMA'}
                           </span>
                         )}
@@ -492,7 +492,7 @@ export function GameLobbyPage() {
                                 {copiedId === g.id ? 'Copié' : g.inviteCode}
                               </button>
                             )}
-                            {g.isGemma && (
+                            {g.isGemma && g.gemmaVariant !== 'eternita' && (
                               <button
                                 type="button"
                                 onClick={() => toggleArpenteur(g)}

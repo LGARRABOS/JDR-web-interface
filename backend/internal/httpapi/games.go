@@ -89,7 +89,7 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 type createGameReq struct {
 	Name    string `json:"name"`
 	IsGemma bool   `json:"isGemma"`
-	// GemmaVariant : sous-type GEMMA (« arpenteur »), vide pour une partie classique.
+	// GemmaVariant : aventure GEMMA (« arpenteur », « eternita »), vide pour la table libre.
 	GemmaVariant string `json:"gemmaVariant"`
 	// IsTest : partie test (joueurs fictifs, pas d'invitation).
 	IsTest bool `json:"isTest"`
@@ -119,8 +119,8 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 		isGemma = 1
 	}
 	variant := ""
-	if req.IsGemma && req.GemmaVariant == gemmaVariantArpenteur {
-		variant = gemmaVariantArpenteur
+	if req.IsGemma {
+		variant = cleanGemmaVariant(req.GemmaVariant)
 	}
 	isTest := 0
 	if req.IsTest {
@@ -343,20 +343,17 @@ func (s *Server) handleUpdateGame(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Sous-type GEMMA : activer (ou retirer) le mode Arpenteur d'une partie GEMMA.
+	// Aventure GEMMA : changer l'aventure d'une partie GEMMA (Arpenteur, Eternita…).
 	// Le document de l'arpenteur est conservé si le mode est retiré puis remis.
 	if req.GemmaVariant != nil {
-		variant := ""
-		if *req.GemmaVariant == gemmaVariantArpenteur {
-			variant = gemmaVariantArpenteur
-		}
+		variant := cleanGemmaVariant(*req.GemmaVariant)
 		res, err := s.db.Exec("UPDATE games SET gemma_variant = ? WHERE id = ? AND COALESCE(is_gemma, 0) = 1", variant, gameID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Erreur serveur"})
 			return
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Le mode Arpenteur est réservé aux parties GEMMA"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Les aventures sont réservées aux parties GEMMA"})
 			return
 		}
 		s.hub.Broadcast(gameID, "game.settings", map[string]interface{}{"gemmaVariant": variant})

@@ -2,7 +2,7 @@
 // aventures GEMMA. Pour ajouter une aventure : une entrée ici et son affiche
 // (portrait 2:3, environ 800 × 1200) dans public/posters/.
 
-export type GemmaVariant = '' | 'arpenteur';
+export type GemmaVariant = '' | 'arpenteur' | 'eternita';
 
 export interface Poster {
   id: string;
@@ -83,4 +83,23 @@ export const ADVENTURES: Adventure[] = [
     ],
     sample: 'un navire et son équipage',
   },
+  {
+    id: 'eternita',
+    variant: 'eternita',
+    title: 'Eternita',
+    kicker: 'Aventure GEMMA',
+    tagline: "Une nouvelle aventure dans l'univers GEMMA.",
+    image: '/posters/eternita.jpg',
+    accent: '#8fb4ff',
+    features: [
+      'Fiches de personnage GEMMA',
+      "Jauge d'Aether, portée d'attaque",
+      'Lancers au centre de la carte',
+    ],
+  },
 ];
+
+/** Aventure d'une partie GEMMA (table libre si inconnue). */
+export function adventureOf(variant?: string): Adventure {
+  return ADVENTURES.find((a) => a.variant === (variant ?? '')) ?? ADVENTURES[0];
+}

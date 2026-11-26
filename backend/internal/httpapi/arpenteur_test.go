@@ -216,3 +216,44 @@ func TestArpenteurImportCSV(t *testing.T) {
 		t.Fatalf("le capitaine gère l'équipage : %d %s", rr.Code, rr.Body.String())
 	}
 }
+
+// L'aventure Eternita est conservée ; une aventure inconnue retombe sur la
+// table libre, et Eternita n'ouvre pas l'arpenteur.
+func TestGemmaVariantEternita(t *testing.T) {
+	sess := setupAuthAndGame(t)
+	create := func(v string) (int64, string) {
+		rr := doJSON(t, sess.Handler, sess.Cookies, http.MethodPost, "/api/games",
+			map[string]any{"name": "Partie", "isGemma": true, "gemmaVariant": v})
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("create %q: %d %s", v, rr.Code, rr.Body.String())
+		}
+		var resp struct {
+			Game struct {
+				ID           int64  `json:"id"`
+				GemmaVariant string `json:"gemmaVariant"`
+			} `json:"game"`
+		}
+		_ = json.NewDecoder(rr.Body).Decode(&resp)
+		return resp.Game.ID, resp.Game.GemmaVariant
+	}
+	id, v := create("eternita")
+	if v != "eternita" {
+		t.Fatalf("eternita attendu, obtenu %q", v)
+	}
+	if _, v := create("inconnue"); v != "" {
+		t.Fatalf("aventure inconnue : table libre attendue, obtenu %q", v)
+	}
+	base := "/api/games/" + strconv.FormatInt(id, 10)
+	if rr := doJSON(t, sess.Handler, sess.Cookies, http.MethodGet, base+"/arpenteur", nil); rr.Code != http.StatusNotFound {
+		t.Fatalf("Eternita : pas d'arpenteur, 404 attendu, obtenu %d", rr.Code)
+	}
+	if rr := doJSON(t, sess.Handler, sess.Cookies, http.MethodPatch, base, map[string]string{"gemmaVariant": "arpenteur"}); rr.Code != http.StatusOK {
+		t.Fatalf("passage à l'arpenteur : %d %s", rr.Code, rr.Body.String())
+	}
+	if rr := doJSON(t, sess.Handler, sess.Cookies, http.MethodPatch, base, map[string]string{"gemmaVariant": "eternita"}); rr.Code != http.StatusOK {
+		t.Fatalf("retour à Eternita : %d %s", rr.Code, rr.Body.String())
+	}
+	if rr := doJSON(t, sess.Handler, sess.Cookies, http.MethodGet, base+"/arpenteur", nil); rr.Code != http.StatusNotFound {
+		t.Fatalf("retour à Eternita : 404 attendu, obtenu %d", rr.Code)
+	}
+}

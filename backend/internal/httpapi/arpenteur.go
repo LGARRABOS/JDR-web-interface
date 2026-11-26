@@ -29,10 +29,12 @@ import (
 
 const (
 	gemmaVariantArpenteur = "arpenteur"
-	uploadsArpenteurBase  = "uploads/arpenteur"
-	maxArpenteurImport    = 10 << 20
-	maxArpenteurImage     = 15 << 20
-	maxArpenteurPatch     = 2 << 20
+	// Aventure Eternita : pas encore d'outils dédiés, la table GEMMA suffit.
+	gemmaVariantEternita = "eternita"
+	uploadsArpenteurBase = "uploads/arpenteur"
+	maxArpenteurImport   = 10 << 20
+	maxArpenteurImage    = 15 << 20
+	maxArpenteurPatch    = 2 << 20
 )
 
 // arpenteurLocks : un verrou par partie, pour que deux modifications
@@ -399,4 +401,13 @@ func (s *Server) handleResetArpenteur(w http.ResponseWriter, r *http.Request) {
 	}
 	s.broadcastArpenteur(gameID, d, version)
 	writeJSON(w, http.StatusOK, arpenteurFor(d, version, true))
+}
+
+// cleanGemmaVariant ramène une aventure GEMMA inconnue à la table libre ("").
+func cleanGemmaVariant(v string) string {
+	switch v {
+	case gemmaVariantArpenteur, gemmaVariantEternita:
+		return v
+	}
+	return ""
 }
