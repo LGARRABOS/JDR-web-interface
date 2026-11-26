@@ -23,6 +23,9 @@ const ResourcesPage = lazy(() =>
 const LabPage = lazy(() =>
   import('./pages/LabPage').then((m) => ({ default: m.LabPage }))
 );
+const NewGamePage = lazy(() =>
+  import('./pages/NewGamePage').then((m) => ({ default: m.NewGamePage }))
+);
 const WikiPage = lazy(() =>
   import('./pages/WikiPage').then((m) => ({ default: m.WikiPage }))
 );
@@ -111,6 +114,14 @@ export const App = () => {
             element={
               <ProtectedRoute>
                 <GameLobbyPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/nouvelle-partie"
+            element={
+              <ProtectedRoute>
+                <NewGamePage />
               </ProtectedRoute>
             }
           />

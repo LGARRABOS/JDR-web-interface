@@ -17,6 +17,9 @@ import {
 } from '../components/tabletop/icons';
 import { initials } from '../components/tabletop/presence';
 import { D20Logo } from './AuthPage';
+import { ADVENTURES, MODES } from '../data/adventures';
+
+const POSTERS = [...MODES, ...ADVENTURES].map((p) => p.image).slice(0, 4);
 
 interface Game {
   id: number;
@@ -139,17 +142,12 @@ export function GameLobbyPage() {
   const navigate = useNavigate();
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createName, setCreateName] = useState('');
-  const [isGemma, setIsGemma] = useState(false);
-  const [gemmaVariant, setGemmaVariant] = useState<'' | 'arpenteur'>('');
-  const [isTest, setIsTest] = useState(false);
-  const [sample, setSample] = useState(true);
   const [joinCode, setJoinCode] = useState('');
   const [err, setErr] = useState('');
   const [deleteGameId, setDeleteGameId] = useState<number | null>(null);
   const [leaveGameId, setLeaveGameId] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
-  const [busy, setBusy] = useState<'create' | 'join' | null>(null);
+  const [busy, setBusy] = useState<'join' | null>(null);
 
   const loadGames = async () => {
     try {
@@ -171,33 +169,6 @@ export function GameLobbyPage() {
     const t = setTimeout(() => setErr(''), 6000);
     return () => clearTimeout(t);
   }, [err]);
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErr('');
-    setBusy('create');
-    try {
-      const variant = isGemma ? gemmaVariant : '';
-      const { data } = await GamesAPI.create({
-        name: createName.trim() || undefined,
-        isGemma,
-        gemmaVariant: variant || undefined,
-        isTest: isTest || undefined,
-        sample: isTest ? sample : undefined,
-      });
-      setCreateName('');
-      setIsTest(false);
-      if (data.game?.id)
-        navigate(
-          `/table/${data.game.id}${variant === 'arpenteur' ? '?vue=arpenteur' : ''}`
-        );
-      else loadGames();
-    } catch (e: unknown) {
-      setErr(getErrorMessage(e, 'Création impossible'));
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const toggleArpenteur = async (g: Game) => {
     try {
@@ -320,160 +291,45 @@ export function GameLobbyPage() {
 
       <main className="max-w-6xl mx-auto px-6 pt-8 pb-14 flex flex-col gap-8">
         <div className="flex flex-wrap gap-4">
-          <form
-            onSubmit={handleCreate}
-            className={`${card} flex-[1_1_420px] p-5 flex flex-col gap-3.5`}
+          <Link
+            to="/nouvelle-partie"
+            className="group relative flex-[1_1_420px] min-h-[220px] overflow-hidden rounded-2xl border border-fantasy-border bg-black hover:border-fantasy-accent transition-colors"
           >
-            <div>
-              <h2 className="font-heading font-semibold text-lg">
-                Créer une partie
-              </h2>
-              <p className="text-sm text-fantasy-muted">
-                Vous en serez le Maître du Jeu.
-              </p>
-            </div>
-            {/* Mode de jeu : deux grandes familles. */}
+            {/* Les affiches des modes et aventures, en éventail. */}
             <div
-              className="grid grid-cols-2 gap-2.5"
-              role="radiogroup"
-              aria-label="Mode de jeu"
+              aria-hidden
+              className="absolute inset-y-0 right-0 w-[62%] flex items-center justify-end gap-3 pr-5"
             >
-              {(
-                [
-                  [
-                    false,
-                    'JDR standard',
-                    'Une table libre pour tout univers : carte, fiches, dés, musique.',
-                  ],
-                  [
-                    true,
-                    'JDR GEMMA',
-                    "L'univers GEMMA : règles et fiches dédiées, aventures.",
-                  ],
-                ] as const
-              ).map(([gemma, label, hint]) => (
-                <button
-                  key={label}
-                  type="button"
-                  role="radio"
-                  aria-checked={isGemma === gemma}
-                  onClick={() => setIsGemma(gemma)}
-                  className={`text-left rounded-xl border px-3.5 py-3 transition-colors ${
-                    isGemma === gemma
-                      ? 'border-fantasy-accent bg-fantasy-accent/10'
-                      : 'border-fantasy-border hover:border-fantasy-muted'
-                  }`}
-                >
-                  <span
-                    className={`block font-heading font-semibold ${
-                      isGemma === gemma
-                        ? 'text-fantasy-accent'
-                        : 'text-fantasy-text'
-                    }`}
-                  >
-                    {label}
-                  </span>
-                  <span className="block text-xs text-fantasy-muted mt-0.5">
-                    {hint}
-                  </span>
-                </button>
+              {POSTERS.map((src, i) => (
+                <img
+                  key={src}
+                  src={src}
+                  alt=""
+                  className="h-[78%] aspect-[2/3] object-cover rounded-lg border border-white/10 shadow-2xl transition-transform duration-500 group-hover:-translate-y-1"
+                  style={{
+                    transform: `rotate(${(i - (POSTERS.length - 1) / 2) * 4}deg)`,
+                    transitionDelay: `${i * 40}ms`,
+                  }}
+                />
               ))}
             </div>
-            {isGemma && (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs uppercase tracking-wider text-fantasy-muted">
-                  Aventure
-                </p>
-                <div
-                  className="grid grid-cols-2 gap-2.5"
-                  role="radiogroup"
-                  aria-label="Aventure GEMMA"
-                >
-                  {(
-                    [
-                      [
-                        '',
-                        'Table libre',
-                        'Les règles et fiches GEMMA, sans aventure imposée.',
-                      ],
-                      [
-                        'arpenteur',
-                        'Désert de Keld',
-                        'Le vaisseau des sables du groupe : équipage, canons, cale et carte des déserts.',
-                      ],
-                    ] as const
-                  ).map(([id, label, hint]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="radio"
-                      aria-checked={gemmaVariant === id}
-                      onClick={() => setGemmaVariant(id)}
-                      className={`text-left rounded-lg border px-3 py-2.5 transition-colors ${
-                        gemmaVariant === id
-                          ? 'border-fantasy-accent bg-fantasy-accent/10'
-                          : 'border-fantasy-border hover:border-fantasy-muted'
-                      }`}
-                    >
-                      <span className="block text-sm text-fantasy-text font-semibold">
-                        {label}
-                      </span>
-                      <span className="block text-xs text-fantasy-muted mt-0.5">
-                        {hint}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-fantasy-muted">
-                  L&apos;univers GEMMA ne se change plus après la création.
-                </p>
-              </div>
-            )}
-            <div className="flex flex-col gap-2 border-t border-fantasy-border pt-3.5">
-              <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={isTest}
-                  onChange={(e) => setIsTest(e.target.checked)}
-                  className="w-[18px] h-[18px] accent-fantasy-accent"
-                />
-                Partie test (joueurs fictifs que vous incarnez, sans invitation)
-              </label>
-              {isTest && (
-                <label className="flex items-center gap-2.5 text-sm text-fantasy-muted cursor-pointer select-none pl-7">
-                  <input
-                    type="checkbox"
-                    checked={sample}
-                    onChange={(e) => setSample(e.target.checked)}
-                    className="w-4 h-4 accent-fantasy-accent"
-                  />
-                  Remplir avec des données d&apos;exemple (3 joueurs, une carte,
-                  des monstres
-                  {gemmaVariant === 'arpenteur' && isGemma ? ', un navire' : ''}
-                  )
-                </label>
-              )}
+            <div className="absolute inset-0 bg-gradient-to-r from-fantasy-surface via-fantasy-surface/90 to-transparent" />
+            <div className="relative h-full p-6 flex flex-col justify-center gap-3 max-w-[60%]">
+              <p className="text-xs uppercase tracking-[0.3em] text-fantasy-accent">
+                Vous en serez le MJ
+              </p>
+              <h2 className="font-heading font-semibold text-2xl">
+                Nouvelle partie
+              </h2>
+              <p className="text-sm text-fantasy-text-soft">
+                JDR standard ou GEMMA : choisissez votre table et votre
+                aventure.
+              </p>
+              <span className="mt-1 self-start h-11 px-5 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold grid place-items-center group-hover:bg-fantasy-accent-hover">
+                Créer une partie
+              </span>
             </div>
-            <div className="flex flex-wrap gap-2.5">
-              <label htmlFor="create-name" className="sr-only">
-                Nom de la partie
-              </label>
-              <input
-                id="create-name"
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                placeholder="Nom de la partie"
-                className={`${inputClass} flex-[1_1_220px]`}
-              />
-              <button
-                type="submit"
-                disabled={busy !== null}
-                className="h-12 px-5 rounded-lg bg-fantasy-accent text-fantasy-bg font-bold hover:bg-fantasy-accent-hover disabled:opacity-60"
-              >
-                Créer
-              </button>
-            </div>
-          </form>
+          </Link>
 
           <form
             onSubmit={handleJoin}
