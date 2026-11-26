@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"jdr-backend/internal/arpenteur"
+	"jdr-backend/internal/adventures/arpenteur"
 )
 
 // arpenteurGame crée une partie GEMMA en mode Arpenteur pour le MJ de sess.

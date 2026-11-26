@@ -1,4 +1,4 @@
-import { ErrorPageLayout } from '../components/ErrorPageLayout';
+import { ErrorPageLayout } from '@/shared/ui/ErrorPageLayout';
 
 export function ForbiddenPage() {
   return (

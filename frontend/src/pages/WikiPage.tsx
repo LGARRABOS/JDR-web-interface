@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { GuideView } from '../components/guide/GuideView';
+import { GuideView } from '@/core/guide/GuideView';
 import { D20Logo } from './AuthPage';
 
 /** Le guide du jeu en pleine page (/guide, et /guide#article). */

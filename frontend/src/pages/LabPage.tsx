@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { SceneLoader } from '../components/arpenteur/SceneLoader';
-import type { RefMood, RefViewer } from '../scene3d/ref/viewer';
+import { SceneLoader } from '@/adventures/arpenteur/ui/SceneLoader';
+import type {
+  RefMood,
+  RefViewer,
+} from '@/adventures/arpenteur/scene/ref/viewer';
 
 // Labo de la refonte 3D : la scène de référence (navire neuf, canyon de
 // falaises stratifiées), à explorer librement avant le déploiement en jeu.
@@ -19,7 +22,7 @@ export function LabPage() {
     if (!canvas) return;
     let cancelled = false;
     let ro: ResizeObserver | null = null;
-    import('../scene3d/ref/viewer')
+    import('@/adventures/arpenteur/scene/ref/viewer')
       .then(({ RefViewer }) => {
         if (cancelled) return;
         const v = new RefViewer(canvas, {

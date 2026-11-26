@@ -19,7 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"jdr-backend/internal/arpenteur"
+	"jdr-backend/internal/adventures/arpenteur"
 	"jdr-backend/internal/domain"
 )
 

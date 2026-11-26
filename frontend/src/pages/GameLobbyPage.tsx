@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/useAuth';
-import { GamesAPI } from '../api/client';
-import { getErrorMessage } from '../utils/errorMessage';
-import { ModalConfirm } from '../components/Modal';
-import { ProfileModal } from '../components/ProfileModal';
+import { useAuth } from '@/core/auth/useAuth';
+import { GamesAPI } from '@/core/api/client';
+import { getErrorMessage } from '@/shared/utils/errorMessage';
+import { ModalConfirm } from '@/shared/ui/Modal';
+import { ProfileModal } from '@/core/auth/ProfileModal';
 import {
   Check,
   ChevronDown,
@@ -14,10 +14,10 @@ import {
   LogOut,
   Trash,
   Ship,
-} from '../components/tabletop/icons';
-import { initials } from '../components/tabletop/presence';
+} from '@/shared/ui/icons';
+import { initials } from '@/core/tabletop/presence';
 import { D20Logo } from './AuthPage';
-import { ADVENTURES, MODES } from '../data/adventures';
+import { ADVENTURES, MODES } from '@/adventures/catalog';
 
 const POSTERS = [...MODES, ...ADVENTURES].map((p) => p.image).slice(0, 4);
 

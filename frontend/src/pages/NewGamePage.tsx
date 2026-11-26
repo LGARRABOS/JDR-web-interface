@@ -1,8 +1,8 @@
 import { useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, ChevronLeft } from '../components/tabletop/icons';
-import { GamesAPI } from '../api/client';
-import { getErrorMessage } from '../utils/errorMessage';
+import { Check, ChevronLeft } from '@/shared/ui/icons';
+import { GamesAPI } from '@/core/api/client';
+import { getErrorMessage } from '@/shared/utils/errorMessage';
 import { D20Logo } from './AuthPage';
 import {
   ADVENTURES,
@@ -10,7 +10,7 @@ import {
   type Adventure,
   type Mode,
   type Poster,
-} from '../data/adventures';
+} from '@/adventures/catalog';
 
 // Nouvelle partie : choix du mode (JDR standard ou GEMMA), puis de
 // l'aventure GEMMA, présentés comme des affiches ; enfin le nom et les

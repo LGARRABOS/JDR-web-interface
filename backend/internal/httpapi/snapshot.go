@@ -10,7 +10,7 @@ import (
 )
 
 // Instantané de partie envoyé par WebSocket à chaque (re)connexion.
-// Doit rester aligné avec le type GameSnapshot de frontend/src/realtime/protocol.ts.
+// Doit rester aligné avec le type GameSnapshot de frontend/src/core/realtime/protocol.ts.
 
 type snapshotGame struct {
 	ID                  int64  `json:"id"`

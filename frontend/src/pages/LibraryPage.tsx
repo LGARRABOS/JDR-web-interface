@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LibraryAPI } from '../api/client';
+import { LibraryAPI } from '@/core/api/client';
 import { ResourcesPage } from './ResourcesPage';
 
 /** Bibliothèque personnelle : la page Ressources, hors de toute partie. */
