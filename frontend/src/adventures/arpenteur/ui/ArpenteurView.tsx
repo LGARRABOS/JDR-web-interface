@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { spotById, spotsOf } from '../model/spots';
 import { ArpenteurAPI } from '@/core/api/client';
 import { nodeName, regionById, UNKNOWN } from '../model/keld';
@@ -61,6 +61,15 @@ export function ArpenteurView({
     isGM
   );
   const [tab, setTab] = useState<Tab>('navire');
+  // Onglets déjà ouverts : ils restent montés, cachés, pour un retour immédiat.
+  const [opened, setOpened] = useState<Set<Tab>>(() => new Set([tab]));
+  if (!opened.has(tab)) setOpened(new Set(opened).add(tab));
+  const pane = (id: Tab, node: ReactNode) =>
+    opened.has(id) ? (
+      <Pane key={id} active={tab === id}>
+        {node}
+      </Pane>
+    ) : null;
   const [holdSide, setHoldSide] = useState<'hold' | 'cave'>('hold');
   const [view, setView] = useState<'profil' | 'coupe'>('profil');
   const [preview, setPreview] = useState<{
@@ -375,8 +384,10 @@ export function ArpenteurView({
           ))}
         </div>
 
-        <div key={tab} className="animate-[fadeIn_.25s_ease-out]">
-          {tab === 'navire' && (
+        {/* Un onglet déjà ouvert reste monté (caché) : y revenir est immédiat. */}
+        <div>
+          {pane(
+            'navire',
             <OverviewPanel
               doc={doc}
               rights={rights}
@@ -389,7 +400,8 @@ export function ArpenteurView({
               }
             />
           )}
-          {tab === 'equipage' && (
+          {pane(
+            'equipage',
             <CrewPanel
               doc={doc}
               rights={rights}
@@ -399,7 +411,8 @@ export function ArpenteurView({
               userId={userId}
             />
           )}
-          {tab === 'combat' && (
+          {pane(
+            'combat',
             <CombatPanel
               doc={doc}
               rights={rights}
@@ -407,7 +420,8 @@ export function ArpenteurView({
               onRoll={onRoll}
             />
           )}
-          {tab === 'cale' && (
+          {pane(
+            'cale',
             <InventoryPanel
               key={holdSide}
               doc={doc}
@@ -416,7 +430,8 @@ export function ArpenteurView({
               initial={holdSide}
             />
           )}
-          {tab === 'carte' && (
+          {pane(
+            'carte',
             <MapPanel
               gameId={gameId}
               doc={doc}
@@ -427,7 +442,8 @@ export function ArpenteurView({
               onError={setError}
             />
           )}
-          {tab === 'atelier' && (
+          {pane(
+            'atelier',
             <AtelierPanel
               doc={doc}
               rights={rights}
@@ -435,15 +451,17 @@ export function ArpenteurView({
               isGM={isGM}
             />
           )}
-          {tab === 'reglages' && isGM && (
-            <SettingsPanel
-              gameId={gameId}
-              doc={doc}
-              update={update}
-              store={store}
-              onError={setError}
-            />
-          )}
+          {isGM &&
+            pane(
+              'reglages',
+              <SettingsPanel
+                gameId={gameId}
+                doc={doc}
+                update={update}
+                store={store}
+                onError={setError}
+              />
+            )}
         </div>
       </div>
 
@@ -498,5 +516,19 @@ function Chip({
         {children}
       </span>
     </span>
+  );
+}
+
+/**
+ * Onglet gardé monté. Caché, il garde son dernier rendu : React ne le
+ * recalcule pas à chaque changement du navire, seulement quand on y revient.
+ */
+function Pane({ active, children }: { active: boolean; children: ReactNode }) {
+  const last = useRef(children);
+  if (active) last.current = children;
+  return (
+    <div hidden={!active} className="animate-[fadeIn_.25s_ease-out]">
+      {last.current}
+    </div>
   );
 }
