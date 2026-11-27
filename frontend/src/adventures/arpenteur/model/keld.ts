@@ -203,9 +203,9 @@ export const CITIES: City[] = [
   { id: 'FARDEL', name: 'Fardel', x: 340, y: 863 },
   { id: 'RAKDOS', name: 'Rakdos', x: 565, y: 1045, capital: true },
   { id: 'KARTOUM', name: 'Kartoum', x: 1062, y: 932 },
-  { id: 'DELROSIS', name: 'Delrosis', x: 1310, y: 431 },
+  { id: 'DELROSIS', name: 'Varnal', x: 1310, y: 431 },
   { id: 'GARKAL', name: 'Garkal', x: 1622, y: 906 },
-  { id: 'CITE-SUD', name: 'Cité du sud', x: 1435, y: 1113 },
+  { id: 'CITE-SUD', name: 'Sablar', x: 1435, y: 1113 },
   { id: 'FORT_SEKKEL', name: 'Fort Sekkel', x: 262, y: 556 },
 ];
 
