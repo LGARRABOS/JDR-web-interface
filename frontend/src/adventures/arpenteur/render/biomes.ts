@@ -732,7 +732,14 @@ export function featuresMesh(
   return b.build();
 }
 
-/** Lointains du paysage : mesas, aiguilles, dômes, falaises ou flèches de cristal. */
+/** Longueur (m) d'une bande de lointains, répétée le long de la route. */
+export const FAR_PERIOD = 3200;
+
+/**
+ * Lointains du paysage : mesas, aiguilles, dômes, falaises ou flèches de cristal,
+ * posés de part et d'autre de la route sur une bande de FAR_PERIOD mètres qui se
+ * répète sans couture : le navire s'en approche et les dépasse.
+ */
 export function farMesh(biome: Biome, night: boolean): MeshData {
   const b = new MeshBuilder();
   const r = rng('far' + biome.id);
@@ -747,10 +754,10 @@ export function farMesh(biome: Biome, night: boolean): MeshData {
   );
   const n = biome.far === 'falaises' ? 18 : biome.far === 'aiguilles' ? 40 : 28;
   for (let k = 0; k < n; k++) {
-    const ang = (k / n) * Math.PI * 2 + (r() - 0.5) * 0.2;
-    const dist = (650 + r() * 600) * 1.25;
-    const cx = Math.sin(ang) * dist;
-    const cz = -Math.cos(ang) * dist;
+    // Allongées le long de la route, un côté sur deux, loin du passage.
+    const ang = (r() - 0.5) * 0.5;
+    const cx = ((k + r() * 0.8) / n) * FAR_PERIOD;
+    const cz = (k % 2 ? 1 : -1) * (800 + r() * 800);
     const w = 60 + r() * 180;
     const h = 40 + r() * 80;
     let prof: [number, number][];

@@ -52,6 +52,7 @@ import {
   biomeLighting,
   biomeOf,
   farMesh,
+  FAR_PERIOD,
   featuresMesh,
   type Biome,
 } from './biomes';
@@ -1034,9 +1035,6 @@ export class Stage {
         moonDir: rot(light.moonDir),
       };
     }
-    // Lointains (montagnes) : à l'horizon, ils tournent avec le monde quand le
-    // navire vire, mais restent centrés sur lui (jamais rapprochés).
-    const farM = rotationY(hh);
     const turn = dt > 0 ? wrapC(hh - this.lastH, Math.PI * 2) / dt : 0;
     this.lastH = hh;
     this.bank +=
@@ -1112,7 +1110,14 @@ export class Stage {
       const bm = interior ? null : this.biomeMeshes(biome);
       if (bm) {
         items.push({ mesh: this.env.terrain, model: identity() });
-        items.push({ mesh: bm.far, model: farM });
+        // Lointains posés dans le paysage : ils défilent avec le sable (bande
+        // répétée) et tournent avec le monde quand le navire vire.
+        const x0 = -(((this.scrollPos % FAR_PERIOD) + FAR_PERIOD) % FAR_PERIOD);
+        for (let t = -1; t <= 1; t++)
+          items.push({
+            mesh: bm.far,
+            model: chain(rotationY(hh), translation(x0 + t * FAR_PERIOD, 0, 0)),
+          });
         if (!nat) items.push(...scenery);
       }
       if (cityDraw)
