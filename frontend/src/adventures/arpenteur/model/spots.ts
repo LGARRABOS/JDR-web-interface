@@ -6,9 +6,9 @@ import { routeLength, STOP_DX, STOP_DZ, wrapC } from '../render/nav';
 // sans changer de zone. Il quitte le large (ou un autre point d'intérêt),
 // navigue, puis s'arrête devant le repère du lieu.
 //
-// Position inconnue (mer de brume d'Aether) : quatre lieux. Palubori : P1
-// (champs volcaniques ensablés) et P4 (faille rocheuse). Les autres zones
-// viendront ici.
+// Position inconnue (mer de brume d'Aether) : quatre lieux. Mahibori : M1 à
+// M3. Palubori : P1 (champs volcaniques ensablés) et P4 (faille rocheuse).
+// Les autres zones viendront ici.
 
 /** Repère 3D affiché sur place (voir scene/native/landmarks.ts). */
 export type SpotLook =
@@ -19,7 +19,13 @@ export type SpotLook =
   | 'orgues'
   | 'aspizos'
   | 'faille'
-  | 'etangs';
+  | 'etangs'
+  | 'lagon'
+  | 'cascade'
+  | 'sylvabaob'
+  | 'troupeaux'
+  | 'barkhane'
+  | 'kraigs';
 
 /**
  * Repères posés sur le sable (les autres flottent dans la brume) : rayon de
@@ -30,6 +36,12 @@ export const GROUND_LOOKS: Partial<Record<SpotLook, number>> = {
   aspizos: 130,
   faille: 0,
   etangs: 100,
+  lagon: 150,
+  cascade: 110,
+  sylvabaob: 90,
+  troupeaux: 140,
+  barkhane: 120,
+  kraigs: 120,
 };
 /** Grande faille : demi-longueur et demi-largeur (m), le long de x. */
 export const RIFT = { hx: 340, hz: 85 };
@@ -93,6 +105,69 @@ export const SPOTS: Spot[] = [
     x: 3500,
     z: -2600,
     blurb: 'Un temple en ruine sur une île dont la brume coule en cascades.',
+  },
+  // Mahibori — M1 : l'Odur des sables, les Mawarennes.
+  {
+    id: 'grand-lagon',
+    name: 'Le Grand Lagon des Mawarennes',
+    zone: 'M1',
+    look: 'lagon',
+    x: 600,
+    z: -760,
+    blurb:
+      "Le plus vaste des lagons azur nichés entre les dunes blanches : de l'eau, de l'ombre et du repos après la traversée.",
+  },
+  {
+    id: 'chutes-odur',
+    name: "Les Chutes de l'Odur",
+    zone: 'M1',
+    look: 'cascade',
+    x: 2600,
+    z: -640,
+    blurb:
+      "Le fleuve de sable fin franchit un ressaut de grès blanc et s'y déverse comme une cascade d'eau dorée.",
+  },
+  // M2 : Grand Sylvabaob, savane des grands troupeaux.
+  {
+    id: 'grand-sylvabaob',
+    name: 'Le Grand Sylvabaob',
+    zone: 'M2',
+    look: 'sylvabaob',
+    x: 500,
+    z: -720,
+    blurb:
+      'Le plus vieux et le plus grand sylvabaob de Keld : plus de cent mètres, un refuge pour les Keldiens comme pour les bêtes.',
+  },
+  {
+    id: 'point-eau-troupeaux',
+    name: "Le Point d'eau des grands troupeaux",
+    zone: 'M2',
+    look: 'troupeaux',
+    x: 2600,
+    z: -660,
+    blurb:
+      'Une mare au milieu des herbes sèches où les grands troupeaux font halte pendant leurs migrations.',
+  },
+  // M3 : bande de barkhanes, formations de kraigs.
+  {
+    id: 'grande-barkhane',
+    name: 'La Grande Barkhane',
+    zone: 'M3',
+    look: 'barkhane',
+    x: 500,
+    z: -820,
+    blurb:
+      "Un croissant de sable haut de plus de cent mètres : les Arpenteurs s'en servent de tremplin pour planer.",
+  },
+  {
+    id: 'kraigs-caravanes',
+    name: 'Le Repos des caravanes',
+    zone: 'M3',
+    look: 'kraigs',
+    x: 2600,
+    z: -660,
+    blurb:
+      'Une forêt de kraigs sculptés par le vent : un repère fixe dans les dunes, et une ombre où les caravanes font halte.',
   },
   // Palubori — P1 : champs volcaniques ensablés.
   {

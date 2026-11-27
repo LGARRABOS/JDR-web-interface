@@ -139,6 +139,9 @@ export class BiomeScenery {
     floor: THREE.MeshStandardMaterial;
     fall: THREE.MeshStandardMaterial;
     voidTop: THREE.MeshBasicMaterial;
+    gold: THREE.MeshStandardMaterial;
+    hide: THREE.MeshStandardMaterial;
+    dune: THREE.MeshStandardMaterial;
   };
   private cliffs = new Map<string, THREE.MeshStandardMaterial>();
   /** Couleur de base de chaque matériau du paysage (assombri la nuit). */
@@ -280,6 +283,15 @@ export class BiomeScenery {
       } as Partial<THREE.MeshStandardMaterialParameters>),
       fall,
       voidTop: new THREE.MeshBasicMaterial({ color: '#140a06' }),
+      gold: tint(lib.sand, '#d8a868', {
+        roughness: 0.62,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      hide: tint(lib.rock, '#6a4a2e', {
+        roughness: 0.85,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      dune: tint(lib.sand, '#f2dcc2', {
+        roughness: 0.95,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
     };
   }
 
@@ -998,7 +1010,19 @@ export class BiomeScenery {
             ? this.rift(mini)
             : look === 'etangs'
               ? this.ponds()
-              : null;
+              : look === 'lagon'
+                ? this.bigLagoon()
+                : look === 'cascade'
+                  ? this.odurFalls()
+                  : look === 'sylvabaob'
+                    ? this.bigTree()
+                    : look === 'troupeaux'
+                      ? this.waterhole()
+                      : look === 'barkhane'
+                        ? this.bigBarchan()
+                        : look === 'kraigs'
+                          ? this.kraigForest()
+                          : null;
     obj?.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
@@ -1315,6 +1339,255 @@ export class BiomeScenery {
     return g;
   }
 
+  // --- Mahibori : lagons, Odur, sylvabaob, troupeaux, barkhane, kraigs -------
+
+  /** Bête des grands troupeaux, immobile (même allure que les hardes). */
+  private beast(k: Kit, r: () => number, x: number, z: number, ry: number) {
+    const s = 1.4 + r() * 0.5;
+    const m = this.x.hide;
+    const B = M(x, 0, z, 0, ry, 0).multiply(
+      new THREE.Matrix4().makeScale(s, s, s)
+    );
+    k.add(
+      m,
+      sphere(1, 12, Math.PI),
+      B.clone()
+        .multiply(M(0, 2.05, 0))
+        .multiply(new THREE.Matrix4().makeScale(1.55, 0.78, 0.62))
+    );
+    k.add(
+      m,
+      sphere(0.7, 10, Math.PI),
+      B.clone()
+        .multiply(M(0.65, 2.55, 0))
+        .multiply(new THREE.Matrix4().makeScale(1, 0.7, 0.8))
+    );
+    const graze = r() < 0.5;
+    k.add(
+      m,
+      cyl(0.22, 0.32, 1.3, 8),
+      B.clone().multiply(
+        M(1.6, graze ? 1.6 : 2.5, 0, 0, 0, graze ? -2.2 : -0.9)
+      )
+    );
+    k.add(
+      m,
+      sphere(0.34, 10, Math.PI),
+      B.clone()
+        .multiply(M(graze ? 2.1 : 2.3, graze ? 0.6 : 3.0, 0))
+        .multiply(new THREE.Matrix4().makeScale(1.6, 0.8, 0.75))
+    );
+    for (const [lx, lz] of [
+      [1, 0.35],
+      [1, -0.35],
+      [-1, 0.35],
+      [-1, -0.35],
+    ])
+      k.add(m, cyl(0.07, 0.1, 1.75, 6), B.clone().multiply(M(lx, 0.875, lz)));
+  }
+
+  /** Le Grand Lagon des Mawarennes : un lagon immense entre les dunes blanches. */
+  private bigLagoon() {
+    const r = rng(2121);
+    const g = new THREE.Group();
+    const main = this.lagoon(r, false);
+    main.scale.setScalar(3.4);
+    main.position.y = 0.15;
+    g.add(main);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.6;
+      const l = this.lagoon(r, false);
+      l.scale.setScalar(1.1 + r() * 0.5);
+      l.position.set(Math.cos(a) * 125, 0.15, Math.sin(a) * 105);
+      g.add(l);
+    }
+    return g;
+  }
+
+  /** Les Chutes de l'Odur : le fleuve de sable tombe d'un ressaut de grès blanc. */
+  private odurFalls() {
+    const r = rng(2323);
+    const g = new THREE.Group();
+    const ledge = this.butteObj(r, 'odur', 32, 26, 3.2);
+    ledge.position.set(0, 0, -30);
+    g.add(ledge);
+    // Coulées dorées le long de la face du ressaut.
+    for (let i = 0; i < 6; i++) {
+      const lx = -60 + i * 24 + (r() - 0.5) * 8;
+      const H = 22 + r() * 4,
+        R = 9 + r() * 6;
+      const c = new THREE.Mesh(
+        lathe(
+          [
+            [R * 0.2, H],
+            [R * 0.55, H * 0.55],
+            [R, 0],
+            [0.001, 0],
+          ],
+          16,
+          Math.PI
+        ),
+        this.x.gold
+      );
+      c.position.set(lx, -0.5, 0);
+      c.rotation.y = Math.PI / 2;
+      c.scale.set(0.9, 1, 1);
+      g.add(c);
+    }
+    // Lit d'arrivée : nappe de sable fin doré au pied.
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(1, 40), this.x.gold);
+    pool.rotation.x = -Math.PI / 2;
+    pool.scale.set(85, 30, 1);
+    pool.position.set(0, 0.3, 20);
+    g.add(pool);
+    return g;
+  }
+
+  /** Le Grand Sylvabaob : l'arbre géant, abris à ses racines, bêtes à l'ombre. */
+  private bigTree() {
+    const r = rng(4242);
+    const g = new THREE.Group();
+    g.add(sylvabaob(this.flora, 115, 4242));
+    const k = new Kit();
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      k.add(
+        this.lib.canvas,
+        lathe(
+          [
+            [4.5, 0],
+            [0.2, 5],
+            [0.001, 5.2],
+          ],
+          5
+        ),
+        M(Math.cos(a) * 32, 0, Math.sin(a) * 32, 0, r() * 3, 0)
+      );
+    }
+    for (let i = 0; i < 10; i++) {
+      const a = r() * Math.PI * 2,
+        d = 38 + r() * 30;
+      this.beast(k, r, Math.cos(a) * d, Math.sin(a) * d, r() * 6);
+    }
+    g.add(k.build(this.lib.rope));
+    return g;
+  }
+
+  /** Le Point d'eau des grands troupeaux : mare, acacias, harde au repos. */
+  private waterhole() {
+    const r = rng(2525);
+    const g = new THREE.Group();
+    const pond = this.lagoon(r, true);
+    pond.scale.setScalar(2.6);
+    pond.position.y = 0.15;
+    g.add(pond);
+    const k = new Kit();
+    for (let i = 0; i < 46; i++) {
+      const a = r() * Math.PI * 2,
+        d = 60 + r() * 60;
+      // Tournées vers l'eau, ou qui broutent alentour.
+      this.beast(
+        k,
+        r,
+        Math.cos(a) * d,
+        Math.sin(a) * d,
+        -a + Math.PI + (r() - 0.5) * 1.2
+      );
+    }
+    g.add(k.build(this.lib.rope));
+    for (let i = 0; i < 6; i++) {
+      const a = r() * Math.PI * 2;
+      const t = acacia(this.flora, 8 + r() * 5, Math.floor(r() * 999));
+      t.position.set(
+        Math.cos(a) * (95 + r() * 30),
+        0,
+        Math.sin(a) * (80 + r() * 30)
+      );
+      g.add(t);
+    }
+    return g;
+  }
+
+  /** La Grande Barkhane : croissant de sable géant, cornes sous le vent (+x). */
+  private bigBarchan() {
+    const R = 150,
+      H = 110,
+      N = 90;
+    const h = (x: number, z: number) => {
+      const body = Math.exp(
+        -((x * x) / (R * R * 0.8) + (z * z) / (R * R * 0.55))
+      );
+      const ex = x - R * 0.55;
+      const lee = Math.exp(
+        -((ex * ex) / (R * R * 0.3) + (z * z) / (R * R * 0.22))
+      );
+      return H * Math.min(1, Math.max(0, body - 0.9 * lee));
+    };
+    const S = R * 2.6;
+    const geo = grid(N, N, (i, j) => {
+      const x = (i / N - 0.5) * S,
+        z = (j / N - 0.5) * S;
+      return {
+        p: new THREE.Vector3(x, h(x, z) - 2, z),
+        uv: [x / 8, z / 8] as [number, number],
+      };
+    });
+    geo.computeVertexNormals();
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(geo, this.x.dune));
+    return g;
+  }
+
+  /** Le Repos des caravanes : forêt de kraigs, campement à leur ombre. */
+  private kraigForest() {
+    const r = rng(2727);
+    const g = new THREE.Group();
+    for (let i = 0; i < 16; i++) {
+      const a = r() * Math.PI * 2,
+        d = 30 + Math.sqrt(r()) * 85;
+      const kr = this.kraig(r, 'barkhanes');
+      kr.scale.setScalar(1.6 + r() * 1.4);
+      kr.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+      kr.rotation.y = r() * 6;
+      g.add(kr);
+    }
+    // Campement : tentes, caisses, chariots à voile.
+    const k = new Kit();
+    for (let i = 0; i < 5; i++)
+      k.add(
+        this.lib.canvas,
+        lathe(
+          [
+            [5, 0],
+            [0.2, 6],
+            [0.001, 6.2],
+          ],
+          6
+        ),
+        M(-12 + i * 7, 0, (r() - 0.5) * 10, 0, r() * 3, 0)
+      );
+    for (let i = 0; i < 8; i++)
+      k.add(
+        this.lib.hullWood,
+        box(2.2, 1.8, 2.2, 0.1),
+        M((r() - 0.5) * 34, 0.9, 10 + r() * 8, 0, r() * 3, 0)
+      );
+    for (let i = 0; i < 2; i++) {
+      const cx = -20 + i * 40;
+      k.add(this.lib.darkWood, box(9, 2, 4, 0.1), M(cx, 2.4, -14));
+      for (const s of [-1, 1])
+        k.add(
+          this.lib.darkWood,
+          torus(1.4, 0.2, 16, 6),
+          M(cx + s * 3, 1.4, -16.2)
+        );
+      k.add(this.lib.spar, cyl(0.2, 0.2, 9, 8), M(cx, 7.5, -14));
+      k.add(this.lib.canvas, box(0.1, 6, 5, 0.02), M(cx + 0.3, 8, -14));
+    }
+    g.add(k.build(this.lib.rope));
+    return g;
+  }
+
   // --- Paysage complet --------------------------------------------------------
 
   private makeSet(biome: string): BiomeSet {
@@ -1491,16 +1764,6 @@ export class BiomeScenery {
         lagoon: isLagoon,
       });
     }
-    // Le plus vieux et le plus grand sylvabaob de Keld : un repère qu'on
-    // voit venir de loin dans la savane.
-    if (biome === 'savane')
-      queue.push({
-        make: () => sylvabaob(this.flora, 115, 4242),
-        x: 420,
-        z: -560,
-        r: 50,
-        sink: 4,
-      });
     // Les plus proches du navire d'abord.
     queue.sort((a, b) => Math.abs(a.x) - Math.abs(b.x));
     const far = ranges(FAR[biome] ?? 'mesas', 2300);

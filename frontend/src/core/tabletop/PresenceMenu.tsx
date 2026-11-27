@@ -204,6 +204,7 @@ export function PresenceToasts({
   const [toasts, setToasts] = useState<PresenceChange[]>([]);
   const prev = useRef<Set<number> | null>(null);
   const seq = useRef(0);
+  const timers = useRef(new Set<number>());
 
   useEffect(() => {
     if (!ready) return;
@@ -234,13 +235,20 @@ export function PresenceToasts({
     ];
     if (fresh.length === 0) return;
     setToasts((t) => [...t, ...fresh].slice(-4));
+    // Minuterie propre à chaque lot : elle ne doit pas être annulée quand la
+    // liste des présents change (sinon la notification reste à l'infini).
     const ids2 = fresh.map((f) => f.id);
-    const timer = setTimeout(
-      () => setToasts((t) => t.filter((x) => !ids2.includes(x.id))),
-      4000
-    );
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => {
+      timers.current.delete(timer);
+      setToasts((t) => t.filter((x) => !ids2.includes(x.id)));
+    }, 4000);
+    timers.current.add(timer);
   }, [presence, players, youId, ready]);
+
+  useEffect(() => {
+    const all = timers.current;
+    return () => all.forEach((x) => clearTimeout(x));
+  }, []);
 
   if (toasts.length === 0) return null;
   return (

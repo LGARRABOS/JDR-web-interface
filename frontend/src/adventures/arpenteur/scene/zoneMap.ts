@@ -31,6 +31,12 @@ const MINI: Record<string, number> = {
   aspizos: 0.035,
   faille: 0.022,
   etangs: 0.045,
+  lagon: 0.03,
+  cascade: 0.045,
+  sylvabaob: 0.05,
+  troupeaux: 0.04,
+  barkhane: 0.03,
+  kraigs: 0.045,
 };
 // Sur une mer de nuages très claire, les lueurs additives disparaissent :
 // couleurs franches en mélange normal, un peu émissives.
