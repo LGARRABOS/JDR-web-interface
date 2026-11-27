@@ -8,6 +8,7 @@ import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { ServerErrorPage } from '@/pages/ServerErrorPage';
 import { AuthProvider } from '@/core/auth/AuthContext';
 import { useAuth } from '@/core/auth/useAuth';
+import { OutdatedVersionGuard } from '@/core/version/OutdatedVersionGuard';
 
 // Pages lourdes chargées à la demande : l'écran de connexion et la liste des
 // parties s'affichent sans télécharger la table, le moteur 3D ni le guide.
@@ -82,6 +83,7 @@ function ActAsGuard() {
 export const App = () => {
   return (
     <AuthProvider>
+      <OutdatedVersionGuard />
       <ActAsGuard />
       <Suspense fallback={<PageLoading />}>
         <Routes>

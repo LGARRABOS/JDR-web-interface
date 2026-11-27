@@ -56,6 +56,8 @@ core/
   realtime/     protocol.ts (messages WebSocket typés), connection.ts, gameStore.ts
                 (reducer pur de l'état partagé), useGameSession.ts
   types/        game.ts (MapData, etc.)
+  version/      version chargée vs version déployée (dist/version.json, écrit par
+                vite.config.ts) : OutdatedVersionGuard bloque la page après un déploiement
   tabletop/     la table : MapCanvas, MapEditor, FogLayer + fog/, TokenPanel, fiches
                 (CharacterSheet*, MonsterSheetView), dés (DiceBar, DiceRollOverlay),
                 chat (ChatFeed, feed.ts), barres (TopBar, GmToolbar, SidePanel),

@@ -47,7 +47,11 @@ jobs:
           cd backend
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../release/server ./cmd/server
 
+      # APP_VERSION : écrit dans dist/version.json ; les pages ouvertes sur une
+      # autre version demandent d'actualiser (frontend/src/core/version/).
       - name: Build frontend
+        env:
+          APP_VERSION: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           npm ci --prefix frontend
           npm run build --prefix frontend

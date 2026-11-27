@@ -1,5 +1,6 @@
 import { parseEnvelope, type ClientAction, type Envelope } from './protocol';
 import { activeActAs } from '@/core/auth/actAs';
+import { requestVersionCheck } from '@/core/version/version';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting';
 
@@ -112,6 +113,9 @@ export class GameConnection {
 
     ws.onopen = () => {
       this.armLiveness();
+      // Reconnexion après une coupure : souvent un redémarrage du serveur pour
+      // un déploiement. On vérifie tout de suite si la version a changé.
+      if (this.failedAttempts > 0) requestVersionCheck();
     };
     ws.onmessage = (event) => {
       this.armLiveness();
