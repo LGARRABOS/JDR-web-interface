@@ -130,7 +130,7 @@ export function ShipScene3D(props: ShipSceneProps) {
   const travelKey = mapTravel
     ? `${mapTravel.from}|${mapTravel.to}|${mapTravel.startedAt}|${mapTravel.duration}`
     : '';
-  // Lieu-dit de la zone, et trajet en cours pour s'y rendre.
+  // Point d'intérêt de la zone, et trajet en cours pour s'y rendre.
   const spot = doc.map.spot ?? '';
   const mapHop = doc.map.hop ?? null;
   const hop = useTravel(mapHop);
@@ -517,7 +517,7 @@ export function ShipScene3D(props: ShipSceneProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [use3D, animate, sector, travelKey, hangar, stageGen]);
 
-  // Lieu-dit : le navire s'y rend (trajet calé sur l'heure de départ) ou y
+  // Point d'intérêt : le navire s'y rend (trajet calé sur l'heure de départ) ou y
   // est déjà arrêté. Après l'effet du décor, qui peut l'avoir remis à zéro.
   useEffect(() => {
     const stage = stageRef.current;
@@ -526,7 +526,7 @@ export function ShipScene3D(props: ShipSceneProps) {
       const x = spotById(id);
       return x ? { id: x.id, look: x.look, x: x.x, z: x.z } : null;
     };
-    // Tous les lieux-dits de la zone : visibles de loin depuis le navire.
+    // Tous les points d'intérêt de la zone : visibles de loin depuis le navire.
     stage.setSpots(
       spotsOf(sector).map((x) => ({ id: x.id, look: x.look, x: x.x, z: x.z })),
       ZONE_PERIOD
@@ -549,7 +549,7 @@ export function ShipScene3D(props: ShipSceneProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [use3D, animate, sector, spot, hopKey, travelKey, hangar, stageGen]);
 
-  // Arrivée devant un lieu-dit : bandeau.
+  // Arrivée devant un point d'intérêt : bandeau.
   const wasHopping = useRef(false);
   useEffect(() => {
     if (hop) {
@@ -561,7 +561,7 @@ export function ShipScene3D(props: ShipSceneProps) {
     const s = spotById(spot);
     setBanner(
       s
-        ? { title: s.name, sub: 'Lieu-dit' }
+        ? { title: s.name, sub: "Point d'intérêt" }
         : { title: 'Au large', sub: nodeName(sector, doc.map.sectorNames) }
     );
     const t = setTimeout(() => setBanner(null), 5200);

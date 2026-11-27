@@ -10,11 +10,14 @@ import {
 } from '../render/nav';
 import type { AetherRealm } from './native/aether';
 import { buildCabin, type Cabin } from './cabin';
-import { Landmarks } from './native/landmarks';
+import { Landmarks, onGround } from './native/landmarks';
+import type { BiomeScenery } from './native/scenery';
+import { biomeOf } from '../render/biomes';
 import type { RefMaterials } from './ref/materials';
 
 // Carte 3D d'une zone : une maquette en bois posée sur la table des cartes,
-// mer de nuages en relief, îlots et repères des lieux-dits en miniature.
+// mer de nuages en relief et îlots (position inconnue) ou sable aux couleurs
+// du désert, et repères des points d'intérêt en miniature.
 // Les repères et la route sont lumineux ; le navire avance dessus en direct.
 
 /** Échelle : 1 unité = 100 m ; les décors sont grossis pour être lisibles. */
@@ -22,6 +25,13 @@ const K = 0.01;
 const DECO = 0.03;
 const LM = 0.075;
 const SHIP = 0.07;
+/** Repères posés sur le sable : échelle propre (certains sont immenses). */
+const MINI: Record<string, number> = {
+  orgues: 0.07,
+  aspizos: 0.035,
+  faille: 0.022,
+  etangs: 0.045,
+};
 // Sur une mer de nuages très claire, les lueurs additives disparaissent :
 // couleurs franches en mélange normal, un peu émissives.
 const CYAN = new THREE.Color('#1fc8ef');
@@ -31,6 +41,8 @@ export interface ZoneMapKit {
   lib: RefMaterials;
   aether: AetherRealm;
   ship: THREE.Object3D;
+  /** Paysages : modèlent les repères posés sur le sable. */
+  scenery?: BiomeScenery;
 }
 
 export interface ZoneMapInfo {
@@ -93,15 +105,19 @@ function glowTexture() {
   return dotTex;
 }
 
-/** Mer de nuages en relief (couleurs selon la hauteur). */
-function cloudSea(w: number, d: number) {
+/** Mer de nuages (ou sable du désert) en relief, couleurs selon la hauteur. */
+function cloudSea(
+  w: number,
+  d: number,
+  lo = new THREE.Color('#ad96d8'),
+  hi = new THREE.Color('#fbf6ff'),
+  amp = 1
+) {
   const g = new THREE.PlaneGeometry(w, d, 260, 110);
   g.rotateX(-Math.PI / 2);
   const p = g.attributes.position as THREE.BufferAttribute;
   const col = new Float32Array(p.count * 3);
-  const lo = new THREE.Color('#ad96d8'),
-    hi = new THREE.Color('#fbf6ff'),
-    c = new THREE.Color();
+  const c = new THREE.Color();
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i),
       z = p.getZ(i);
@@ -115,7 +131,7 @@ function cloudSea(w: number, d: number) {
     const h = n * n * (3 - 2 * n) * 0.9 + n2 * 0.22;
     // Bords qui retombent doucement dans le cadre.
     const e = Math.min(1, (w / 2 - Math.abs(x)) / 2, (d / 2 - Math.abs(z)) / 2);
-    p.setY(i, h * Math.max(0, e));
+    p.setY(i, h * amp * Math.max(0, e));
     c.copy(lo).lerp(hi, Math.min(1, h * 1.25));
     col[i * 3] = c.r;
     col[i * 3 + 1] = c.g;
@@ -171,6 +187,8 @@ export class ZoneMapScene {
     private period: number
   ) {
     const { lib, aether } = kit;
+    const zone = spots[0]?.zone ?? '?';
+    const desert = zone !== '?';
     const xs = spots.map((s) => s.x);
     this.cx = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0;
     const zs = spots.map((s) => s.z);
@@ -222,7 +240,22 @@ export class ZoneMapScene {
     const seaM = keep(
       new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })
     );
-    const sea = new THREE.Mesh(keep(cloudSea(W, D)), seaM);
+    // Désert : sable aux couleurs du paysage, dunes plus douces.
+    const sand = new THREE.Color(biomeOf(zone, 'palubori').sand ?? '#d9b48a');
+    const sea = new THREE.Mesh(
+      keep(
+        desert
+          ? cloudSea(
+              W,
+              D,
+              sand.clone().multiplyScalar(0.7),
+              sand.clone().lerp(new THREE.Color('#fff1dc'), 0.35),
+              0.45
+            )
+          : cloudSea(W, D)
+      ),
+      seaM
+    );
     sea.position.y = -0.45;
     sea.receiveShadow = true;
     sc.add(sea);
@@ -243,7 +276,7 @@ export class ZoneMapScene {
 
     // --- Îlots décoratifs (fixes, hors des repères et de la route) ---
     const r = rnd(4242);
-    for (let i = 0; i < 34; i++) {
+    for (let i = 0; i < (desert ? 0 : 34); i++) {
       const x = (r() - 0.5) * (W - 5),
         z = (r() - 0.5) * (D - 4);
       if (this.pinsNear(x, z, 5.5) || Math.abs(z - this.mz(0)) < 1.6) continue;
@@ -273,8 +306,8 @@ export class ZoneMapScene {
       });
     }
 
-    // --- Repères des lieux-dits (lumineux) ---
-    const lms = new Landmarks(lib, aether);
+    // --- Repères des points d'intérêt (lumineux) ---
+    const lms = new Landmarks(lib, aether, kit.scenery);
     const beamMat = () =>
       keep(
         new THREE.ShaderMaterial({
@@ -300,10 +333,11 @@ void main(){ float a = pow(1. - vUv.y, 1.4) * (.32 + .1 * sin(uTime * 2. + vUv.y
       root.position.set(this.mx(s.x), 0, this.mz(s.z));
       // Le repère d'abord (il compte plus que les îlots).
       this.jobs.unshift(() => {
-        const model = lms.make(s.look);
-        model.scale.setScalar(LM);
-        model.position.y = 0.3;
-        model.rotation.y = 0.5;
+        const ground = onGround(s.look);
+        const model = lms.make(s.look, true);
+        model.scale.setScalar(ground ? (MINI[s.look] ?? LM) : LM);
+        model.position.y = ground ? -0.2 : 0.3;
+        model.rotation.y = s.look === 'faille' ? 0 : 0.5;
         root.add(model);
         this.own.push({
           dispose: () =>
@@ -439,7 +473,7 @@ void main(){ float m = texture2D(uMap, gl_PointCoord).a; float a = smoothstep(.1
     return this.ship.position;
   }
 
-  /** Objets cliquables (un par lieu-dit, userData.spot = identifiant). */
+  /** Objets cliquables (un par point d'intérêt, userData.spot = identifiant). */
   get hits() {
     return this.pins.map((p) => p.hit);
   }

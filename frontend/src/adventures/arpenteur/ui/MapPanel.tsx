@@ -110,9 +110,9 @@ export function MapPanel({
           <Btn
             className="!h-8 !px-3 text-sm"
             onClick={() => setWorld('zone')}
-            title="Maquette 3D de la zone et de ses lieux-dits (ou cliquez sur votre position)"
+            title="Maquette 3D de la zone et de ses points d'intérêt (ou cliquez sur votre position)"
           >
-            🗺 Lieux-dits
+            🗺 Points d'intérêt
           </Btn>
         )}
         {isGM && can && map.sector && !travel && (
@@ -173,7 +173,7 @@ export function MapPanel({
                   Ouvrir la carte
                 </span>
                 <span className="text-xs text-[#cdb68c]/70">
-                  Voyages, fiches des secteurs, repères et lieux-dits
+                  Voyages, fiches des secteurs, repères et points d'intérêt
                 </span>
               </span>
             </button>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { along, route, toShip, wrapC } from './nav';
 
-describe('navigation vers les lieux-dits', () => {
+describe("navigation vers les points d'intérêt", () => {
   it('ramène dans la période', () => {
     expect(wrapC(1300, 2400)).toBe(-1100);
     expect(wrapC(-1300, 2400)).toBe(1100);

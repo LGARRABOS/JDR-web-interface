@@ -48,7 +48,7 @@ export const FLAG_LABELS: [keyof DebugFlags, string, string][] = [
   ['aetherSea', 'Mer de nuages', 'Position inconnue'],
   ['aetherPuffs', 'Voiles de brume', 'Position inconnue'],
   ['aetherIsles', 'Îles flottantes', 'Position inconnue'],
-  ['landmarks', 'Repères des lieux-dits', 'Position inconnue'],
+  ['landmarks', "Repères des points d'intérêt", 'Position inconnue'],
 ];
 
 const DEFAULTS: DebugFlags = {
@@ -292,7 +292,7 @@ class Debug {
         ? `Rendu : ${s.calls} appels · ${Math.round(s.triangles / 1000)}k triangles · ${s.programs} programmes · ${s.geometries} géométries · ${s.textures} textures`
         : '',
       sc
-        ? `Scène : ${sc.place} · désert ${sc.desert} · paysage ${sc.biome} · ${sc.mood}${sc.inVoid ? ' · position inconnue' : ''}${sc.spot ? ` · lieu-dit ${sc.spot}` : ''}${sc.hop !== null ? ` · trajet ${Math.round(sc.hop * 100)} %` : ''}${sc.journey !== null ? ` · voyage ${Math.round(sc.journey * 100)} %` : ''}`
+        ? `Scène : ${sc.place} · désert ${sc.desert} · paysage ${sc.biome} · ${sc.mood}${sc.inVoid ? ' · position inconnue' : ''}${sc.spot ? ` · point d'intérêt ${sc.spot}` : ''}${sc.hop !== null ? ` · trajet ${Math.round(sc.hop * 100)} %` : ''}${sc.journey !== null ? ` · voyage ${Math.round(sc.journey * 100)} %` : ''}`
         : '',
       sc ? `Caméra : ${sc.camera} · défilement ${Math.round(sc.scroll)}` : '',
       `Pixels noirs (dernière analyse) : ${this.black === null ? 'non mesuré' : Math.round(this.black * 1000) / 10 + ' %'}`,

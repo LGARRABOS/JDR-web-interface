@@ -79,7 +79,7 @@ export const ADVENTURES: Adventure[] = [
     features: [
       'Le vaisseau des sables du groupe',
       'Équipage, canons, cale et atelier',
-      'Carte 3D des déserts et lieux-dits',
+      "Carte 3D des déserts et points d'intérêt",
     ],
     sample: 'un navire et son équipage',
   },

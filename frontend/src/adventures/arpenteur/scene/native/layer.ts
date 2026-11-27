@@ -32,6 +32,7 @@ import { Landmarks } from './landmarks';
 import { dbg } from '../../render/debug';
 import { grassField } from './flora';
 import { sandHeight, type GroundParams } from './ground';
+import { GROUND_LOOKS, RIFT, type SpotLook } from '../../model/spots';
 import { BiomeScenery } from './scenery';
 
 // Couche réaliste du jeu : le navire de chaque partie (allure, matériaux,
@@ -67,6 +68,9 @@ export function onLibraryProgress(fn: (f: number, label: string) => void) {
 }
 
 interface FogU {
+  uHole?: { value: THREE.Vector4 };
+  uPad?: { value: THREE.Vector3 };
+  uHoleDir?: { value: THREE.Vector2 };
   uFog: { value: THREE.Vector3 };
   uFogDensity: { value: number };
   uSunDir: { value: THREE.Vector3 };
@@ -274,7 +278,7 @@ export class NativeLayer implements NativeHost {
           shared as unknown as Record<string, { value: unknown }>
         );
         this.root.add(this.aether.root);
-        this.landmarks = new Landmarks(lib, this.aether);
+        this.landmarks = new Landmarks(lib, this.aether, this.scenery);
         this.root.add(this.landmarks.root);
         if (this.pending) this.setShip(this.pending.build, this.pending.opts);
         this.ready = true;
@@ -290,7 +294,12 @@ export class NativeLayer implements NativeHost {
 
   mapKit() {
     if (!this.lib || !this.aether || !this.player) return null;
-    return { lib: this.lib, aether: this.aether, ship: this.player.root };
+    return {
+      lib: this.lib,
+      aether: this.aether,
+      ship: this.player.root,
+      scenery: this.scenery ?? undefined,
+    };
   }
 
   /** Brume du jeu (même formule que le moteur maison) sur un matériau natif. */
@@ -618,22 +627,49 @@ vArpW = (modelMatrix * arpW).xyz;`
         (Math.min(80, Math.max(0, dsc / f.dt)) - this.speed) *
         Math.min(1, f.dt * 2);
 
-    // Sol et paysage.
+    // Sol et paysage. Points d'intérêt du désert : la grande faille perce le
+    // sable, le plus proche des autres a son esplanade aplanie.
+    let hole: GroundParams['hole'],
+      pad: GroundParams['pad'],
+      best = Infinity;
+    let rift = '',
+      holeRot = 0;
+    if (f.ground && !f.inVoid)
+      for (const w of f.spots ?? []) {
+        const R = GROUND_LOOKS[w.look as SpotLook];
+        if (R === undefined || Math.hypot(w.x, w.z) > 4000) continue;
+        if (w.look === 'faille') {
+          hole = [w.x, w.z, RIFT.hx, RIFT.hz];
+          holeRot = w.rot;
+          rift = w.id;
+        } else if (Math.hypot(w.x, w.z) < best) {
+          best = Math.hypot(w.x, w.z);
+          pad = [w.x, w.z, R];
+        }
+      }
     this.gp = {
       scroll: f.scroll,
       amp: f.duneAmp,
       calm: f.calm,
       calmX: f.calmX,
       terrain: f.terrain,
+      hole,
+      holeRot,
+      pad,
     };
+    // Repères des points d'intérêt (devant lesquels le navire s'arrête).
+    const clear = this.landmarks ? this.landmarks.frame(f, this.gp) : [];
+    // Pas de trou sans les parois du gouffre (modelées une image plus tard).
+    if (rift && !this.landmarks?.shown(rift)) this.gp.hole = hole = undefined;
+    this.fogU.uHole?.value.set(...(hole ?? [0, 0, 0, 0]));
+    this.fogU.uPad?.value.set(...(pad ?? [0, 0, 0]));
+    this.fogU.uHoleDir?.value.set(Math.cos(holeRot), -Math.sin(holeRot));
     this.scenery?.frame(f, this.gp);
     const savanna = f.biome === 'savane' && f.ground && !f.inVoid;
     this.grass.visible = savanna;
     this.herds.frame(f.time, this.gp, savanna);
     this.scenery?.preload(f.nextBiome);
     // Mer de brume d'Aether (position inconnue), préparée pendant le voyage.
-    // Repères des lieux-dits (devant lesquels le navire s'arrête).
-    const clear = this.landmarks ? this.landmarks.frame(f) : [];
     if (this.aether) {
       this.aether.frame(f, f.inVoid && f.ground, this.pointScale, clear);
       if (f.nextVoid && !f.inVoid) this.aether.work(2);

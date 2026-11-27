@@ -3,10 +3,17 @@ import type { NativeFrame } from '../../render/native';
 import { box, cyl, Kit, lathe, M, torus, tube } from '../ref/kit';
 import type { RefMaterials } from '../ref/materials';
 import type { AetherRealm } from './aether';
+import { GROUND_LOOKS, type SpotLook } from '../../model/spots';
+import { sandHeight, type GroundParams } from './ground';
+import type { BiomeScenery } from './scenery';
 
-// Repères des lieux-dits : un grand décor reconnaissable, visible de loin
-// depuis le navire, qui s'y rend et s'arrête à côté (voir arpenteur3d/nav.ts).
-// Pour l'instant : les lieux de test de la position inconnue.
+// Repères des points d'intérêt : un grand décor reconnaissable, visible de
+// loin depuis le navire, qui s'y rend et s'arrête à côté (voir render/nav.ts).
+// Dans la brume d'Aether, ils flottent ; dans les déserts, ils sont posés sur
+// le sable (modelés par le paysage, voir BiomeScenery.landmark).
+
+/** Repère posé sur le sable (désert), et non flottant dans la brume. */
+export const onGround = (look: string) => look in GROUND_LOOKS;
 
 /** Hauteur du plateau, et taille des repères (on doit les voir de loin). */
 const Y = 2;
@@ -34,7 +41,8 @@ export class Landmarks {
 
   constructor(
     private lib: RefMaterials,
-    private aether: AetherRealm
+    private aether: AetherRealm,
+    private ground?: BiomeScenery
   ) {
     this.hull = lib.hullWood.clone();
     this.hull.side = THREE.DoubleSide;
@@ -332,7 +340,9 @@ export class Landmarks {
   }
 
   /** Modèle d'un repère, à taille réelle (sans le placer dans la scène). */
-  make(look: string): THREE.Object3D {
+  make(look: string, mini = false): THREE.Object3D {
+    if (onGround(look as SpotLook))
+      return this.ground?.landmark(look, mini) ?? new THREE.Group();
     const obj =
       look === 'arche'
         ? this.arche()
@@ -354,15 +364,20 @@ export class Landmarks {
 
   private build(look: string, id: string) {
     const obj = this.make(look);
-    obj.scale.setScalar(SCALE);
+    obj.scale.setScalar(onGround(look) ? 1 : SCALE);
     this.root.add(obj);
     const b = { obj, phase: id.length * 1.3 };
     this.built.set(id, b);
     return b;
   }
 
+  /** Repère déjà modelé et affiché. */
+  shown(id: string) {
+    return !!this.built.get(id)?.obj.visible;
+  }
+
   /** Positions (x, z) des repères affichés, pour dégager leurs alentours. */
-  frame(f: NativeFrame): [number, number][] {
+  frame(f: NativeFrame, g?: GroundParams): [number, number][] {
     const want = (f.ground && f.spots) || [];
     const out: [number, number][] = [];
     for (const [id, b] of this.built)
@@ -378,8 +393,18 @@ export class Landmarks {
       if (!b0) fresh = true;
       const b = b0 ?? this.build(w.look, w.id);
       b.obj.visible = true;
-      b.obj.position.set(w.x, Y + Math.sin(f.time * 0.2 + b.phase) * 1.2, w.z);
-      b.obj.rotation.y = 0.35 + b.phase + w.rot;
+      if (onGround(w.look)) {
+        // Sur le sable (aplani autour du repère) ; la faille suit l'axe x.
+        b.obj.position.set(w.x, g ? sandHeight(w.x, w.z, g) : 0, w.z);
+        b.obj.rotation.y = w.look === 'faille' ? w.rot : 0.35 + b.phase + w.rot;
+      } else {
+        b.obj.position.set(
+          w.x,
+          Y + Math.sin(f.time * 0.2 + b.phase) * 1.2,
+          w.z
+        );
+        b.obj.rotation.y = 0.35 + b.phase + w.rot;
+      }
       out.push([w.x, w.z]);
     }
     return out;

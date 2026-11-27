@@ -35,7 +35,7 @@ export interface NativeFrame {
   nextBiome?: string;
   /** Voyage vers la mer de brume d'Aether (préparée en arrière-plan). */
   nextVoid?: boolean;
-  /** Repères des lieux-dits de la zone, vus depuis le navire (cap vers +x). */
+  /** Repères des points d'intérêt de la zone, vus depuis le navire (cap vers +x). */
   spots?: { id: string; look: string; x: number; z: number; rot: number }[];
   /** Position et cap du navire dans la zone (le monde tourne autour de lui). */
   nav?: { x: number; z: number; h: number };
@@ -65,7 +65,7 @@ export interface NativeHost {
   frame(f: NativeFrame): void;
   /**
    * Modèles prêts à réutiliser (matériaux, îles et repères d'Aether, navire
-   * du joueur), pour la carte 3D des lieux-dits. Types opaques ici.
+   * du joueur), pour la carte 3D des points d'intérêt. Types opaques ici.
    */
   mapKit?(): { lib: unknown; aether: unknown; ship: unknown } | null;
 }

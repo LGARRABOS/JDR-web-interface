@@ -243,9 +243,9 @@ export interface MapState {
   mood?: '' | 'dusk' | 'night';
   /** Ville (id) où l'équipage possède son hangar, attribué par le MJ ('' : aucun). */
   hangar?: string;
-  /** Lieu-dit de la zone où l'arpenteur est arrêté ('' : au large). */
+  /** Point d'intérêt de la zone où l'arpenteur est arrêté ('' : au large). */
   spot?: string;
-  /** Trajet en cours vers un lieu-dit, sans changer de zone ('~' : le large). */
+  /** Trajet en cours vers un point d'intérêt, sans changer de zone ('~' : le large). */
   hop?: Travel | null;
 }
 

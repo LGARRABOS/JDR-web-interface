@@ -18,7 +18,7 @@ import { SceneLoader } from './SceneLoader';
 import { useTravel } from './useTravel';
 
 // Carte 3D d'une zone (plein écran) : la maquette en bois de la zone avec ses
-// lieux-dits. Un clic sur un lieu y envoie l'arpenteur ; on le voit avancer
+// points d'intérêt. Un clic sur un lieu y envoie l'arpenteur ; on le voit avancer
 // sur la maquette, comme sur la carte des secteurs.
 
 export function ZoneMap3D({
@@ -228,7 +228,7 @@ export function ZoneMap3D({
       className="fixed inset-0 z-50 bg-black/85 flex flex-col"
       role="dialog"
       aria-modal="true"
-      aria-label="Carte des lieux-dits"
+      aria-label="Carte des points d'intérêt"
     >
       <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-white/10 bg-[#15100b]">
         {onBack && (
@@ -242,7 +242,7 @@ export function ZoneMap3D({
         )}
         <div>
           <p className="font-heading text-[10px] uppercase tracking-[0.3em] text-[#cdb68c] opacity-80">
-            Lieux-dits
+            Points d'intérêt
           </p>
           <p className="font-heading text-lg leading-tight text-[#f3dfb4]">
             {nodeName(zone, map.sectorNames)}

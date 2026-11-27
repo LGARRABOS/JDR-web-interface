@@ -9,6 +9,12 @@ export interface GroundParams {
   calmX: number;
   /** Relief propre au paysage (voir Biome.terrain). */
   terrain?: number;
+  /** Grande faille : centre (x, z), demi-longueur, demi-largeur (voir shaders). */
+  hole?: [number, number, number, number];
+  /** Rotation de la faille dans la scène (rotation.y de son repère). */
+  holeRot?: number;
+  /** Esplanade d'un point d'intérêt : centre (x, z) et rayon. */
+  pad?: [number, number, number];
 }
 
 const fract = (x: number) => x - Math.floor(x);
@@ -104,6 +110,39 @@ function barchans(qx: number, qz: number) {
   return h;
 }
 
+/** Distance au bord de la grande faille (< 0 dedans). */
+export function holeD(
+  x: number,
+  z: number,
+  hole: GroundParams['hole'],
+  rot = 0
+): number {
+  if (!hole || hole[3] <= 0) return 1e5;
+  // Repère de la faille : axe local x = (cos, -sin), axe local z = (sin, cos).
+  const c = Math.cos(rot),
+    s = Math.sin(rot);
+  const dx = x - hole[0],
+    dz = z - hole[1];
+  const lx = dx * c - dz * s,
+    lz = dx * s + dz * c;
+  if (Math.abs(lx) > hole[2]) return Math.hypot(Math.abs(lx) - hole[2], lz);
+  const t = Math.min(1, Math.max(-1, lx / hole[2]));
+  const w =
+    hole[3] *
+    Math.sqrt(Math.max(0, 1 - t * t)) *
+    (1 + 0.18 * Math.sin(lx * 0.031) + 0.1 * Math.sin(lx * 0.077 + 1.3));
+  return Math.abs(lz) - w;
+}
+function flatK(x: number, z: number, g: GroundParams) {
+  let k = 1 - sm(4, 90, holeD(x, z, g.hole, g.holeRot));
+  const p = g.pad;
+  if (p && p[2] > 0)
+    k = Math.max(k, 1 - sm(p[2], p[2] + 90, Math.hypot(x - p[0], z - p[1])));
+  return k;
+}
+const crackC = (qx: number, z: number) =>
+  Math.abs(fbm(qx * 0.0045, z * 0.0045) - 0.5);
+
 /** Hauteur du sable au point (x, z) de la scène (même formule que le shader). */
 export function sandHeight(x: number, z: number, g: GroundParams) {
   const qx = x + g.scroll;
@@ -119,5 +158,8 @@ export function sandHeight(x: number, z: number, g: GroundParams) {
       (-3.5 + 0.25 * Math.sin(qx * 0.05 + z * 0.03) - (h * 1.3 + 3)) * riv;
   } else if (t === 2) h = h * 0.5 + (fbm(qx * 0.004, z * 0.004) - 0.5) * 7;
   else if (t === 3) h += barchans(qx, z) * sm(95, 190, Math.abs(z));
+  else if (t === 4) h = h * 0.35 + (fbm(qx * 0.006, z * 0.006) - 0.5) * 5;
+  else if (t === 5) h = h * 0.55 - 4 * (1 - sm(0, 0.025, crackC(qx, z)));
+  h *= 1 - flatK(x, z, g);
   return h + (-1 - h) * flat;
 }

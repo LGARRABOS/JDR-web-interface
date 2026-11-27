@@ -79,7 +79,7 @@ export function ArpenteurView({
   } | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   // Plein écran : la scène occupe tout l'écran, avec des raccourcis en bas
-  // (carte des déserts, lieux-dits, coupe). La carte s'ouvre après un fondu.
+  // (carte des déserts, points d'intérêt, coupe). La carte s'ouvre après un fondu.
   const [full, setFull] = useState(false);
   const [world, setWorld] = useState<null | 'world' | 'zone'>(null);
   const [fade, setFade] = useState(false);
@@ -180,7 +180,7 @@ export function ArpenteurView({
         {crewPlaces(doc.crew.members)}/{doc.crew.capacity}
       </Chip>
       <Chip label="Secteur">{sectorLabel}</Chip>
-      {spotHere && <Chip label="Lieu-dit">{spotHere.name}</Chip>}
+      {spotHere && <Chip label="Point d'intérêt">{spotHere.name}</Chip>}
       {doc.pending && <Chip label="Chantier">{doc.pending.label}</Chip>}
       {myPosts.length > 0 && <Chip label="Vous">{myPosts.join(', ')}</Chip>}
     </>
@@ -331,7 +331,7 @@ export function ArpenteurView({
                   spotsOf(doc.map.sector || UNKNOWN).length > 0 && (
                     <Shortcut
                       icon="⚑"
-                      label="Lieux-dits"
+                      label="Points d'intérêt"
                       onClick={() => openWorld('zone')}
                     />
                   )}

@@ -1,4 +1,4 @@
-// Navigation dans une zone, vers ses lieux-dits : le navire a une position
+// Navigation dans une zone, vers ses points d'intérêt : le navire a une position
 // (x, z) et un cap h dans le repère de la zone, et suit une route courbe
 // jusqu'à un point d'arrêt à côté du repère du lieu.
 //

@@ -126,7 +126,7 @@ export function DebugPanel3D() {
                 {sc.place} · {sc.biome} · {sc.mood}
               </p>
               <p>
-                lieu-dit {sc.spot || '—'} · trajet {pct(sc.hop)} · voyage{' '}
+                point d'intérêt {sc.spot || '—'} · trajet {pct(sc.hop)} · voyage{' '}
                 {pct(sc.journey)}
               </p>
               <p className="opacity-70">

@@ -37,6 +37,32 @@ float barchans(vec2 q){
   }
   return h;
 }
+// Grande faille (point d'intérêt) : lentille dentelée le long de x, centrée
+// en uHole.xy (scène), demi-longueur uHole.z, demi-largeur uHole.w (0 : aucune).
+// Le sable y est percé (voir le motif 8) et aplani tout autour.
+uniform vec4 uHole;
+// Axe de la faille dans la scène (cos, -sin de sa rotation ; nul : axe x).
+uniform vec2 uHoleDir;
+// Esplanade d'un autre point d'intérêt : sable aplani (x, z, rayon ; 0 : aucune).
+uniform vec3 uPad;
+float holeW(float lx){
+  float t = clamp(lx/uHole.z, -1., 1.);
+  return uHole.w*sqrt(max(0., 1. - t*t))*(1. + .18*sin(lx*.031) + .1*sin(lx*.077 + 1.3));
+}
+float holeD(vec2 w){
+  if (uHole.w <= 0.) return 1e5;
+  vec2 dir = dot(uHoleDir, uHoleDir) > .5 ? uHoleDir : vec2(1., 0.);
+  vec2 l0 = w - uHole.xy;
+  vec2 l = vec2(dot(l0, dir), dot(l0, vec2(-dir.y, dir.x)));
+  return abs(l.x) > uHole.z ? length(vec2(abs(l.x) - uHole.z, l.y)) : abs(l.y) - holeW(l.x);
+}
+float flatK(vec2 w){
+  float k = 1. - smoothstep(4., 90., holeD(w));
+  if (uPad.z > 0.) k = max(k, 1. - smoothstep(uPad.z, uPad.z + 90., length(w - uPad.xy)));
+  return k;
+}
+// Champs volcaniques ensablés (P1) et faille rocheuse (P4) : fissures fines.
+float crackC(vec2 q){ return abs(fbm(q*.0045) - .5); }
 // Relief du sable : q = position dans le désert (défilement compris), w = scène.
 float terrainH(vec2 q, vec2 w){
   float k = smoothstep(260., 850., length(w));
@@ -48,8 +74,12 @@ float terrainH(vec2 q, vec2 w){
     h = h*.5 + (fbm(q*.004) - .5)*7.;
   } else if (uTerrain == 3.) {
     h += barchans(q) * smoothstep(95., 190., abs(w.y));
+  } else if (uTerrain == 4.) {
+    h = h*.35 + (fbm(q*.006) - .5)*5.;
+  } else if (uTerrain == 5.) {
+    h = h*.55 - 4.*(1. - smoothstep(0., .025, crackC(q)));
   }
-  return h;
+  return mix(h, 0., flatK(w));
 }
 `;
 
@@ -256,6 +286,27 @@ export const SURFACE_CHAIN = /* glsl */ `
     albedo *= .92 + .1*rip2;
     rough = .95; metal = 0.;
     k = 1.;
+    // La grande faille : le sable s'ouvre sur le gouffre.
+    if (holeD(vWorld.xz) < 0.) discard;
+    // Champs volcaniques : dalles de basalte qui percent le sable, grains noirs.
+    if (uTerrain == 4.) {
+      float bas = smoothstep(.5, .6, fbm(q*.012 + 3.));
+      bas *= 1. - .65*smoothstep(.45, .75, fbm(q*.07 + 11.));
+      float joint = 1. - smoothstep(.02, .07, abs(noise(q*.11) - .5)) * detail(wm, .11);
+      vec3 basalt = albedo*vec3(.27, .25, .25)*(1. - .35*joint);
+      albedo *= .82 + .18*noise(q*2.7);
+      albedo = mix(albedo, basalt, bas);
+      h = mix(h, (noise(q*.4) - .5)*.04 - joint*.02, bas);
+      rough = mix(rough, .8, bas);
+    }
+    // Faille rocheuse : dalles rouges à nu, fissures sombres.
+    if (uTerrain == 5.) {
+      float sl = smoothstep(.55, .66, fbm(q*.02 + 7.));
+      albedo = mix(albedo, albedo*vec3(.82, .6, .5), sl);
+      h = mix(h, (fbm(q*.3) - .5)*.05, sl);
+      float cr = 1. - smoothstep(0., .02, crackC(q));
+      albedo *= 1. - .8*cr;
+    }
     // Savane : herbes sèches en plaques (paille, olive), le sable affleure.
     if (uTerrain == 2.) {
       float pt = fbm(q*.03), pt2 = fbm(q*.25);

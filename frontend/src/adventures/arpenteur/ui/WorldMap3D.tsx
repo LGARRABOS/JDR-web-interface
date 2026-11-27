@@ -34,7 +34,7 @@ import { ZoneMap3D } from './ZoneMap3D';
 // Carte des déserts de Keld en 3D, plein écran : la grande carte en relief
 // sur le bureau du capitaine. Clic sur une sous-région ou une ville : sa fiche
 // (départ, cap, outils du MJ, repères) ; clic sur la position du navire :
-// on plonge dans la maquette de ses lieux-dits.
+// on plonge dans la maquette de ses points d'intérêt.
 
 export function WorldMap3D({
   doc,
@@ -108,7 +108,7 @@ export function WorldMap3D({
   const clickRef = useRef<(id: string) => void>(() => {});
   clickRef.current = (id: string) => {
     const at = map.sector || UNKNOWN;
-    // Clic sur la position du navire : on plonge dans ses lieux-dits.
+    // Clic sur la position du navire : on plonge dans ses points d'intérêt.
     if (id === at && !travel && spotsOf(at).length) {
       const p = sceneRef.current?.nodePoint(id);
       const v = viewRef.current;
@@ -162,7 +162,7 @@ export function WorldMap3D({
       await nextFrame();
       await nextFrame();
       if (disposed) return;
-      // Carte gardée d'une ouverture à l'autre (et au retour des lieux-dits).
+      // Carte gardée d'une ouverture à l'autre (et au retour des points d'intérêt).
       const { scene: wm } = cachedWorldMap(kit);
       wm.setNames(map.sectorNames);
       wm.setMarkers(map.markers);
@@ -195,7 +195,7 @@ export function WorldMap3D({
       const nodeOf = (o: THREE.Object3D | null) =>
         o ? (o.userData.node as string) : '';
       // Plan d'ouverture une seule fois par ouverture de la carte (pas au
-      // retour des lieux-dits).
+      // retour des points d'intérêt).
       const playIntro = !introDone.current;
       introDone.current = true;
       // Vue d'ensemble de toute la carte.
@@ -248,7 +248,7 @@ export function WorldMap3D({
         sceneRef.current = null;
         viewRef.current = null;
       };
-      // Pendant qu'on regarde la carte, la maquette des lieux-dits de la zone
+      // Pendant qu'on regarde la carte, la maquette des points d'intérêt de la zone
       // du navire se prépare en arrière-plan : la plongée sera immédiate.
       const at = map.sector || UNKNOWN;
       const zkit = live.stage?.mapInfo().native as
@@ -272,7 +272,7 @@ export function WorldMap3D({
       clearTimeout(timer);
       cleanup?.();
     };
-    // Maquette construite à l'ouverture (et au retour des lieux-dits).
+    // Maquette construite à l'ouverture (et au retour des points d'intérêt).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
@@ -328,7 +328,7 @@ export function WorldMap3D({
               className="h-8 px-3 rounded-full border border-[#7ff3ff]/50 text-[#d8fbff] text-sm hover:bg-white/10"
               onClick={() => clickRef.current(here)}
             >
-              ✦ Lieux-dits de la zone
+              ✦ Points d'intérêt de la zone
             </button>
           )}
           <button
@@ -404,7 +404,7 @@ export function WorldMap3D({
               <p className="text-[11px] mt-1 text-[#7ff3ff]">
                 {hover.id === here && !travel
                   ? spotsOf(here).length
-                    ? "L'arpenteur est ici · cliquer pour voir ses lieux-dits"
+                    ? "L'arpenteur est ici · cliquer pour voir ses points d'intérêt"
                     : "L'arpenteur est ici"
                   : reachable.has(hover.id)
                     ? 'Accessible directement · cliquer pour la fiche'

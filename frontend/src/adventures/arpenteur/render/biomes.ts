@@ -29,7 +29,9 @@ export type BiomeId =
   | 'ruines'
   | 'odur'
   | 'savane'
-  | 'barkhanes';
+  | 'barkhanes'
+  | 'volcan'
+  | 'faille';
 
 export interface Biome {
   id: BiomeId;
@@ -121,16 +123,34 @@ export const BIOMES: Record<BiomeId, Biome> = {
     sandMix: 0.3,
     terrain: 3,
   },
+  // Palubori — P1 : champs volcaniques ensablés (basalte, sable gris-ocre).
+  volcan: {
+    id: 'volcan',
+    dune: 0.9,
+    far: 'mesas',
+    sand: '#8c7b68',
+    sandMix: 0.55,
+    terrain: 4,
+  },
+  // P4 : faille rocheuse et étangs de la mort noire (roche rouge, fissures).
+  faille: {
+    id: 'faille',
+    dune: 1,
+    far: 'falaises',
+    sand: '#b06a48',
+    sandMix: 0.4,
+    terrain: 5,
+  },
 };
 
 const BY_SECTOR: Record<string, BiomeId> = {
   M1: 'odur',
   M2: 'savane',
   M3: 'barkhanes',
-  P1: 'cheminees',
+  P1: 'volcan',
   P2: 'canyons',
   P3: 'dunes',
-  P4: 'ossements',
+  P4: 'faille',
   F1: 'cristaux',
   F2: 'engrenages',
   F3: 'ossements',
@@ -684,6 +704,14 @@ export function featuresMesh(
       break;
     case 'barkhanes':
       add(3, true, spur);
+      add(2, false, rockField);
+      break;
+    case 'volcan':
+      add(3, false, rockField);
+      add(1, true, spur);
+      break;
+    case 'faille':
+      add(2, true, spur);
       add(2, false, rockField);
       break;
     case 'ruines':

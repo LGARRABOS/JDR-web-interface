@@ -746,7 +746,7 @@ void main(){
         i.y + lift + Math.sin(f.time * 0.25 + i.phase) * i.amp,
         z
       );
-      // Place libre autour des repères des lieux-dits.
+      // Place libre autour des repères des points d'intérêt.
       i.obj.visible =
         !i.loop || clear.every(([lx, lz]) => Math.hypot(x - lx, z - lz) > 240);
       i.obj.rotation.y = Math.sin(f.time * 0.03 + i.phase) * 0.05 + nav.h;

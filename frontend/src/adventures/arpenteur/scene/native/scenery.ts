@@ -15,8 +15,9 @@ import {
   tube,
 } from '../ref/kit';
 import type { RefMaterials } from '../ref/materials';
+import { RIFT } from '../../model/spots';
 import { acacia, sylvabaob, type FloraMats } from './flora';
-import { sandHeight, type GroundParams } from './ground';
+import { holeD, sandHeight, type GroundParams } from './ground';
 
 // Curiosités des paysages (buttes, cheminées de fée, épaves, côtes de géants,
 // cristaux, engrenages, oasis, colonnades…) posées sur une boucle qui défile
@@ -83,6 +84,8 @@ const FAR: Record<string, RangeStyle> = {
   odur: 'domes',
   savane: 'mesas',
   barkhanes: 'aiguilles',
+  volcan: 'mesas',
+  faille: 'falaises',
 };
 
 /** Teintes des roches et des lointains (éclairé, ombre) par paysage. */
@@ -99,6 +102,8 @@ const ROCK: Record<string, [string, string, string]> = {
   odur: ['#fbf7ef', '#efe6d6', '#a49a8e'],
   savane: ['#ead6ae', '#cdb07c', '#6e5a44'],
   barkhanes: ['#f2b88c', '#dc925e', '#7a4a3e'],
+  volcan: ['#8a807a', '#6a625c', '#2e2a28'],
+  faille: ['#e09070', '#b86a4a', '#5a3028'],
 };
 
 export class BiomeScenery {
@@ -122,6 +127,19 @@ export class BiomeScenery {
     mud?: THREE.MeshStandardMaterial;
   };
   flora!: FloraMats;
+  /** Matériaux de Palubori (basalte, étangs noirs, lézards, faille). */
+  private x!: {
+    basalt: THREE.MeshStandardMaterial;
+    lizard: THREE.MeshStandardMaterial;
+    deadWater: THREE.MeshStandardMaterial;
+    deadMud: THREE.MeshStandardMaterial;
+    bubble: THREE.MeshStandardMaterial;
+    earth: THREE.MeshStandardMaterial;
+    wall: THREE.MeshStandardMaterial;
+    floor: THREE.MeshStandardMaterial;
+    fall: THREE.MeshStandardMaterial;
+    voidTop: THREE.MeshBasicMaterial;
+  };
   private cliffs = new Map<string, THREE.MeshStandardMaterial>();
   /** Couleur de base de chaque matériau du paysage (assombri la nuit). */
   private bases = new Map<THREE.MeshStandardMaterial, THREE.Color>();
@@ -213,6 +231,55 @@ export class BiomeScenery {
       } as Partial<THREE.MeshStandardMaterialParameters>),
       rock: tint(lib.rock, '#c9b8a0'),
       rope: lib.rope,
+    };
+    // Eau trouble et épaisse : peu de reflet du ciel, même en rasant.
+    const deadWater = water(1, 0.85);
+    deadWater.transparent = false;
+    deadWater.depthWrite = true;
+    deadWater.emissive.set('#4a0a06');
+    deadWater.emissiveIntensity = 0.35;
+    deadWater.envMapIntensity = 0.05;
+    deadWater.polygonOffset = true;
+    deadWater.polygonOffsetFactor = -1;
+    patch(deadWater);
+    const wall = lib.cliff.clone();
+    wall.side = THREE.DoubleSide;
+    patch(wall);
+    this.track(wall);
+    const fall = new THREE.MeshStandardMaterial({
+      color: '#c99a6c',
+      roughness: 1,
+      transparent: true,
+      opacity: 0.6,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    patch(fall);
+    this.track(fall);
+    this.x = {
+      basalt: tint(lib.rock, '#2f2c2b', {
+        roughness: 0.85,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      lizard: tint(lib.rock, '#b88c52', {
+        roughness: 0.7,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      deadWater,
+      deadMud: tint(lib.sand, '#3a2620', {
+        roughness: 0.45,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      bubble: tint(lib.rock, '#2a0c08', {
+        roughness: 0.1,
+        metalness: 0.2,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      earth: tint(lib.sand, '#8e6a4a', {
+        roughness: 0.9,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      wall,
+      floor: tint(lib.sand, '#2a1812', {
+        roughness: 1,
+      } as Partial<THREE.MeshStandardMaterialParameters>),
+      fall,
+      voidTop: new THREE.MeshBasicMaterial({ color: '#140a06' }),
     };
   }
 
@@ -616,18 +683,28 @@ export class BiomeScenery {
   }
 
   /** Lagon (ou point d'eau de la savane) : eau claire au centre, berge mouillée. */
-  private lagoon(r: () => number, savanna: boolean): THREE.Object3D {
+  private lagoon(
+    r: () => number,
+    savanna: boolean,
+    dead = false
+  ): THREE.Object3D {
     const g = new THREE.Group();
-    const R = (savanna ? 12 : 20) + r() * (savanna ? 8 : 16);
+    const R = dead
+      ? 7 + r() * 9
+      : (savanna ? 12 : 20) + r() * (savanna ? 8 : 16);
     const n = 56;
     const pos: number[] = [0, 0, 0],
       col: number[] = [];
-    const deep = new THREE.Color(savanna ? '#2f5a4a' : '#0a86b8'),
-      shallow = new THREE.Color(savanna ? '#6f8a5e' : '#3fd8d0');
+    const deep = new THREE.Color(
+        dead ? '#0a0202' : savanna ? '#2f5a4a' : '#0a86b8'
+      ),
+      shallow = new THREE.Color(
+        dead ? '#6a1a12' : savanna ? '#6f8a5e' : '#3fd8d0'
+      );
     col.push(deep.r, deep.g, deep.b);
     const idx: number[] = [];
     const ph = r() * 6;
-    const stretch = savanna ? 0 : 0.45;
+    const stretch = savanna ? 0 : dead ? 0.25 : 0.45;
     const radius = (a: number) =>
       R *
       (1 + 0.18 * Math.sin(a * 3 + ph) + 0.08 * Math.sin(a * 7 + ph * 2)) *
@@ -657,7 +734,7 @@ export class BiomeScenery {
     );
     const water = new THREE.Mesh(
       wg,
-      savanna ? this.mats.pond : this.mats.lagoon
+      dead ? this.x.deadWater : savanna ? this.mats.pond : this.mats.lagoon
     );
     water.receiveShadow = true;
     g.add(water);
@@ -686,10 +763,30 @@ export class BiomeScenery {
     sg.computeVertexNormals();
     const shore = new THREE.Mesh(
       sg,
-      savanna ? this.mats.mud : this.mats.wetSand
+      dead ? this.x.deadMud : savanna ? this.mats.mud : this.mats.wetSand
     );
     shore.receiveShadow = true;
     g.add(shore);
+    // Étangs de la mort noire : des bulles remontent à la surface.
+    if (dead)
+      for (let i = 0; i < 4 + Math.floor(r() * 5); i++) {
+        const a = r() * Math.PI * 2,
+          d = r() * R * 0.7;
+        const b = new THREE.Mesh(
+          new THREE.SphereGeometry(
+            0.3 + r() * 0.7,
+            10,
+            6,
+            0,
+            Math.PI * 2,
+            0,
+            Math.PI / 2
+          ),
+          this.x.bubble
+        );
+        b.position.set(Math.cos(a) * d, 0.02, Math.sin(a) * d);
+        g.add(b);
+      }
     if (savanna)
       for (let i = 0; i < 3; i++) {
         const a = r() * Math.PI * 2;
@@ -745,6 +842,476 @@ export class BiomeScenery {
       lintel.scale.set(1.5, 0.45, 0.7);
       g.add(lintel);
     }
+    return g;
+  }
+
+  // --- Palubori : basalte, lézards, faille, étangs ---------------------------
+
+  /** Colonnes de basalte serrées (prismes hexagonaux, sommets en marches). */
+  private basalt(r: () => number, R: number, H: number): THREE.Object3D {
+    const k = new Kit();
+    const rad = 1.3 + R * 0.04;
+    const dx = rad * 1.73,
+      dz = rad * 1.5;
+    const tilt = (r() - 0.5) * 0.25;
+    for (let j = -Math.ceil(R / dz); j <= Math.ceil(R / dz); j++)
+      for (let i = -Math.ceil(R / dx); i <= Math.ceil(R / dx); i++) {
+        const x = i * dx + (j & 1 ? dx / 2 : 0),
+          z = j * dz;
+        const d = Math.hypot(x, z) / R;
+        if (d > 1 || r() < 0.07) continue;
+        const h =
+          H * Math.pow(1 - Math.pow(d, 1.6), 0.8) * (0.75 + r() * 0.35) + 0.5;
+        k.add(
+          this.x.basalt,
+          lathe(
+            [
+              [rad * 0.98, -4],
+              [rad * 0.98, h],
+              [rad * 0.8, h + rad * 0.12],
+              [0.001, h + rad * 0.16],
+            ],
+            6
+          ),
+          M(x, 0, z, tilt, 0, (r() - 0.5) * 0.04)
+        );
+      }
+    // Tronçons tombés au pied.
+    for (let i = 0; i < Math.round(R / 3); i++) {
+      const a = r() * Math.PI * 2,
+        d = R * (0.9 + r() * 0.5),
+        L = 1.5 + r() * 4;
+      k.add(
+        this.x.basalt,
+        lathe(
+          [
+            [rad * 0.95, 0],
+            [rad * 0.95, L],
+            [0.001, L],
+          ],
+          6
+        ),
+        M(Math.cos(a) * d, rad * 0.7, Math.sin(a) * d, Math.PI / 2, r() * 3, 0)
+      );
+    }
+    return k.build(this.lib.rope);
+  }
+
+  /** Coulée de lave ancienne : dalles sombres et plates à fleur de sable. */
+  private lavaSlab(r: () => number): THREE.Object3D {
+    const g = new THREE.Group();
+    const n = 2 + Math.floor(r() * 4);
+    for (let i = 0; i < n; i++) {
+      const rad = 4 + r() * 7;
+      const b = boulder(
+        { ...this.lib, cliff: this.cliff('volcan') },
+        0,
+        0,
+        rad,
+        r() * 100
+      );
+      b.material = this.x.basalt;
+      b.position.set((r() - 0.5) * 30, -rad * 0.12, (r() - 0.5) * 22);
+      b.scale.set(1.3, 0.28, 1);
+      b.rotation.y = r() * 3;
+      g.add(b);
+    }
+    return g;
+  }
+
+  /** Gros lézard des sables (une dizaine de mètres), couché au soleil. */
+  private lizard(k: Kit, r: () => number, m: THREE.Matrix4) {
+    const s = 0.8 + r() * 0.5;
+    const body = new THREE.Matrix4()
+      .multiply(m)
+      .multiply(new THREE.Matrix4().makeScale(s, s * 0.62, s))
+      .multiply(M(0, 1.2, 0, 0, 0, -Math.PI / 2));
+    k.add(
+      this.x.lizard,
+      lathe(
+        [
+          [0.001, -10.5],
+          [0.3, -8],
+          [0.75, -5],
+          [1.45, -2],
+          [1.85, 0.4],
+          [1.6, 2.6],
+          [0.9, 3.7],
+          [1.1, 4.7],
+          [0.95, 5.8],
+          [0.35, 6.8],
+          [0.001, 7],
+        ],
+        14
+      ),
+      body
+    );
+    // Crête dorsale.
+    for (let i = 0; i < 9; i++)
+      k.add(
+        this.x.basalt,
+        lathe(
+          [
+            [0.28, 0],
+            [0.001, 0.8],
+          ],
+          5
+        ),
+        new THREE.Matrix4()
+          .multiply(m)
+          .multiply(new THREE.Matrix4().makeScale(s, s, s))
+          .multiply(M(-5 + i * 1.1, 2.2 - Math.abs(i - 5) * 0.12, 0))
+      );
+    // Pattes écartées, posées à plat.
+    for (const [lx, side] of [
+      [2.4, 1],
+      [2.4, -1],
+      [-1.6, 1],
+      [-1.6, -1],
+    ] as const)
+      k.add(
+        this.x.lizard,
+        tube(
+          [
+            new THREE.Vector3(lx, 1.1, side * 1.1),
+            new THREE.Vector3(lx + 0.4, 1.3, side * 2.6),
+            new THREE.Vector3(lx + 0.9, 0.15, side * 3.3),
+          ],
+          0.38,
+          8,
+          6
+        ),
+        new THREE.Matrix4()
+          .multiply(m)
+          .multiply(new THREE.Matrix4().makeScale(s, s, s))
+      );
+  }
+
+  /** Repère d'un point d'intérêt posé sur le sable (null : look inconnu). */
+  landmark(look: string, mini = false): THREE.Object3D | null {
+    const obj =
+      look === 'orgues'
+        ? this.orgues()
+        : look === 'aspizos'
+          ? this.aspizos()
+          : look === 'faille'
+            ? this.rift(mini)
+            : look === 'etangs'
+              ? this.ponds()
+              : null;
+    obj?.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.castShadow = !(mesh.material as THREE.Material).transparent;
+        mesh.receiveShadow = true;
+      }
+    });
+    return obj;
+  }
+
+  /** Les Orgues noires : colline de colonnes de basalte, coulée au pied. */
+  private orgues() {
+    const r = rng(7171);
+    const g = new THREE.Group();
+    g.add(this.basalt(r, 48, 66));
+    const b2 = this.basalt(r, 22, 34);
+    b2.position.set(52, 0, -18);
+    b2.rotation.z = 0.12;
+    g.add(b2);
+    const b3 = this.basalt(r, 15, 22);
+    b3.position.set(-50, 0, 20);
+    g.add(b3);
+    for (let i = 0; i < 4; i++) {
+      const s = this.lavaSlab(r);
+      const a = (i / 4) * Math.PI * 2 + 0.5;
+      s.position.set(Math.cos(a) * 62, 0, Math.sin(a) * 55);
+      g.add(s);
+    }
+    return g;
+  }
+
+  /** Zone de détente d'Aspizos : buttes de terre, de sable et de sel, lézards. */
+  private aspizos() {
+    const r = rng(5151);
+    const k = new Kit();
+    const mats = [this.x.earth, this.mats.wetSand!, this.mats.salt];
+    const tops: THREE.Vector3[] = [];
+    for (let i = 0; i < 30; i++) {
+      const a = r() * Math.PI * 2,
+        d = Math.sqrt(r()) * 115;
+      const R = 9 + r() * 14,
+        h = 2 + r() * 4;
+      const x = Math.cos(a) * d,
+        z = Math.sin(a) * d;
+      k.add(
+        mats[i % 3],
+        lathe(
+          [
+            [R, -1.5],
+            [R * 0.88, h * 0.35],
+            [R * 0.55, h * 0.85],
+            [0.001, h],
+          ],
+          18
+        ),
+        M(x, 0, z, 0, r() * 3, 0).multiply(
+          new THREE.Matrix4().makeScale(1 + r() * 0.6, 1, 1)
+        )
+      );
+      // Croûte de sel au sommet de certaines buttes.
+      if (i % 3 !== 2 && r() < 0.5)
+        k.add(
+          this.mats.salt,
+          lathe(
+            [
+              [R * 0.4, -0.3],
+              [R * 0.38, 0.15],
+              [0.001, 0.2],
+            ],
+            7
+          ),
+          M(x, h * 0.82, z, 0, r() * 3, 0)
+        );
+      tops.push(new THREE.Vector3(x, h * 0.75, z));
+    }
+    for (let i = 0; i < 9; i++) {
+      const p = tops[(i * 7) % tops.length];
+      this.lizard(k, r, M(p.x, p.y - 0.8, p.z, 0, r() * Math.PI * 2, 0));
+    }
+    return k.build(this.lib.rope);
+  }
+
+  /** La Grande Faille : gouffre dentelé, coulées de sable, mine au bord. */
+  private rift(mini: boolean) {
+    const r = rng(9393);
+    const g = new THREE.Group();
+    const { hx, hz } = RIFT;
+    const D = mini ? 40 : 260;
+    const W = (lx: number) => {
+      const t = Math.min(1, Math.max(-1, lx / hx));
+      return (
+        hz *
+        Math.sqrt(Math.max(0, 1 - t * t)) *
+        (1 + 0.18 * Math.sin(lx * 0.031) + 0.1 * Math.sin(lx * 0.077 + 1.3))
+      );
+    };
+    // Parois : strates rouges, ocre et sombres, plus étroites vers le fond.
+    const NU = 160,
+      NV = 18;
+    const strata = ['#c9875a', '#a8573a', '#8a4e36', '#d9a26c', '#6a3a2a'].map(
+      (c) => new THREE.Color(c)
+    );
+    for (const s of [-1, 1]) {
+      const pos: number[] = [],
+        uv: number[] = [],
+        col: number[] = [],
+        idx: number[] = [];
+      for (let j = 0; j <= NV; j++)
+        for (let i = 0; i <= NU; i++) {
+          const lx = -hx + (2 * hx * i) / NU;
+          const v = j / NV;
+          const jag =
+            v *
+            (5 * Math.sin(lx * 0.13 + j * 1.7 + s) +
+              3 * Math.sin(lx * 0.047 + j * 0.6));
+          const z = s * Math.max(0.3, W(lx) * (1 - 0.4 * v) + 0.6 + jag * 0.6);
+          const y = -D * v + (j > 0 ? Math.sin(lx * 0.2 + j) * 2 : 0);
+          pos.push(lx, y, z);
+          uv.push(lx / 6, y / 6);
+          const c =
+            strata[
+              Math.abs(Math.floor(y / 13 + Math.sin(lx * 0.01) * 0.8)) %
+                strata.length
+            ];
+          const dark = 1 - 0.75 * v;
+          col.push(c.r * dark, c.g * dark, c.b * dark);
+        }
+      for (let j = 0; j < NV; j++)
+        for (let i = 0; i < NU; i++) {
+          const a = j * (NU + 1) + i;
+          idx.push(a, a + NU + 1, a + 1, a + 1, a + NU + 1, a + NU + 2);
+        }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      g.add(new THREE.Mesh(geo, this.x.wall));
+    }
+    // Fond du gouffre, dans l'ombre.
+    const fl = new THREE.Shape();
+    for (let i = 0; i <= 60; i++) {
+      const lx = -hx + (2 * hx * i) / 60;
+      fl.lineTo(lx, W(lx) * 0.62 + 1);
+    }
+    for (let i = 60; i >= 0; i--) {
+      const lx = -hx + (2 * hx * i) / 60;
+      fl.lineTo(lx, -W(lx) * 0.62 - 1);
+    }
+    const floor = new THREE.Mesh(new THREE.ShapeGeometry(fl), this.x.floor);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -D + 2;
+    g.add(floor);
+    if (mini) {
+      // Maquette : pas de trou dans le sable, la bouche du gouffre est peinte.
+      const top = new THREE.Mesh(new THREE.ShapeGeometry(fl), this.x.voidTop);
+      top.rotation.x = -Math.PI / 2;
+      top.scale.set(1, 1 / 0.62, 1);
+      top.position.y = 0.6;
+      g.add(top);
+    }
+    // Éboulis sur les lèvres (cache le bord du sable).
+    const lib = { ...this.lib, cliff: this.cliff('faille') };
+    for (const s of [-1, 1])
+      for (let lx = -hx + 10; lx < hx - 10; lx += 18 + r() * 26) {
+        const rad = 1.5 + r() * 3;
+        const b = boulder(lib, 0, 0, rad, r() * 100);
+        b.position.set(lx, -rad * 0.25, s * (W(lx) + rad * 0.6 + r() * 4));
+        g.add(b);
+      }
+    // Coulées de sable : talus qui se déversent le long des parois.
+    for (let n = 0; n < 7; n++) {
+      const lx = -hx * 0.7 + r() * hx * 1.4;
+      const s = r() < 0.5 ? -1 : 1;
+      const H = D * (0.35 + r() * 0.35);
+      const R = 10 + r() * 14;
+      const cone = new THREE.Mesh(
+        lathe(
+          [
+            [R * 0.15, 2],
+            [R * 0.5, -H * 0.3],
+            [R, -H],
+            [0.001, -H],
+          ],
+          16,
+          Math.PI
+        ),
+        this.mats.wetSand
+      );
+      // Demi-cône plaqué contre la paroi, ouvert vers le gouffre.
+      cone.position.set(lx, 0, s * (W(lx) + 1));
+      cone.rotation.y = s > 0 ? Math.PI / 2 : -Math.PI / 2;
+      cone.scale.set(0.55, 1, 1);
+      g.add(cone);
+    }
+    // La mine : chevalement au bord, plancher en surplomb, treuil, câble, benne.
+    const k = new Kit();
+    const m = this.lib;
+    const mx = 110,
+      ez = W(mx);
+    const base = new THREE.Vector3(mx, 0, ez + 6);
+    const legH = 22;
+    for (const [ax, az] of [
+      [-5, -3],
+      [5, -3],
+      [-5, 9],
+      [5, 9],
+    ])
+      k.add(
+        m.darkWood,
+        tube(
+          [
+            new THREE.Vector3(base.x + ax, 0, base.z + az),
+            new THREE.Vector3(base.x + ax * 0.3, legH, base.z - 8 + az * 0.2),
+          ],
+          0.5,
+          4,
+          6
+        )
+      );
+    k.add(m.darkWood, box(12, 0.8, 18, 0.1), M(base.x, 1.2, base.z - 9));
+    k.add(m.darkWood, box(4, 1, 4), M(base.x, legH, base.z - 8));
+    k.add(
+      m.castIron,
+      torus(1.6, 0.25, 16, 6),
+      M(base.x, legH + 1.8, base.z - 10)
+    );
+    k.add(
+      m.darkWood,
+      cyl(1.2, 1.2, 4, 16),
+      M(base.x, 2.6, base.z + 12, 0, 0, Math.PI / 2)
+    );
+    const cable = mini ? 20 : 120;
+    k.add(
+      m.rope,
+      cyl(0.12, 0.12, legH + cable, 5),
+      M(base.x, legH - cable / 2, base.z - 11.5)
+    );
+    k.add(
+      m.castIron,
+      cyl(1.6, 1.3, 2.4, 14),
+      M(base.x, -cable + 1, base.z - 11.5)
+    );
+    // Échelles de bois accrochées à la paroi.
+    for (let i = 0; i < 8; i++)
+      k.add(
+        m.darkWood,
+        box(3, 0.3, 0.5),
+        M(mx + 14, -4 - i * 3.2, W(mx + 14) * (1 - ((i * 3.2) / D) * 0.4) + 0.4)
+      );
+    // Caisses et tente des mineurs.
+    for (let i = 0; i < 5; i++)
+      k.add(
+        m.hullWood,
+        box(2.4, 2, 2.4, 0.1),
+        M(base.x + 10 + r() * 10, 1, base.z + 8 + r() * 10, 0, r() * 3, 0)
+      );
+    k.add(
+      m.canvas,
+      lathe(
+        [
+          [5, 0],
+          [0.2, 6],
+          [0.001, 6.2],
+        ],
+        4
+      ),
+      M(base.x - 14, 0, base.z + 14, 0, 0.4, 0)
+    );
+    g.add(k.build(m.rope));
+    return g;
+  }
+
+  /** Étangs de la mort noire : mares rouges et noires, ossements, piquets. */
+  private ponds() {
+    const r = rng(3131);
+    const g = new THREE.Group();
+    const placed: [number, number, number][] = [];
+    for (let i = 0; i < 40 && placed.length < 10; i++) {
+      const a = r() * Math.PI * 2,
+        d = Math.sqrt(r()) * 85;
+      const x = Math.cos(a) * d,
+        z = Math.sin(a) * d;
+      if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 40)) continue;
+      const p = this.lagoon(r, false, true);
+      p.position.set(x, 0.15, z);
+      p.scale.setScalar(1.5 + r() * 0.6);
+      p.rotation.y = r() * 3;
+      g.add(p);
+      placed.push([x, z, 0]);
+    }
+    // Bêtes qui n'ont pas su s'éloigner à temps.
+    for (let i = 0; i < 3; i++) {
+      const c = this.ribcage(r);
+      c.scale.setScalar(0.45 + r() * 0.3);
+      c.position.set((r() - 0.5) * 150, -0.5, (r() - 0.5) * 120);
+      g.add(c);
+    }
+    // Piquets d'avertissement des caravaniers, crânes au sommet.
+    const k = new Kit();
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + r() * 0.4;
+      const x = Math.cos(a) * 105,
+        z = Math.sin(a) * 95;
+      k.add(
+        this.lib.darkWood,
+        cyl(0.25, 0.3, 5, 6),
+        M(x, 2.5, z, r() * 0.2, 0, r() * 0.2)
+      );
+      k.add(this.mats.bone, sphere(0.7, 10), M(x, 5.3, z));
+    }
+    g.add(k.build(this.lib.rope));
     return g;
   }
 
@@ -831,6 +1398,21 @@ export class BiomeScenery {
           this.butteObj(r, biome, 10 + r() * 8, 12 + r() * 16, 2.6 + r() * 1.5)
         );
         add(2, false, 12, rocks);
+        break;
+      case 'volcan':
+        // Champs volcaniques ensablés : basalte qui perce un sol plat.
+        add(3, true, 14, () => this.basalt(r, 6 + r() * 14, 9 + r() * 10));
+        add(3, false, 16, () => this.lavaSlab(r));
+        add(1, false, 10, rocks);
+        break;
+      case 'faille':
+        // Faille rocheuse : éperons rouges, éboulis, petites mares noires.
+        add(2, true, 16, () =>
+          this.butteObj(r, biome, 9 + r() * 9, 14 + r() * 16, 1.6 + r())
+        );
+        add(2, false, 14, rocks);
+        add(2, false, 18, () => this.lagoon(r, false, true));
+        lagoons = true;
         break;
       case 'sel':
         add(4, false, 20, () => this.crust(r));
@@ -995,8 +1577,13 @@ export class BiomeScenery {
       let x = ((((it.x - g.scroll) % LOOP) + LOOP * 1.5) % LOOP) - LOOP / 2;
       // Rien sur les quais : on écarte les curiosités autour des villes.
       const nearCity = g.calm > 0 && Math.hypot(x - g.calmX, it.z) < 900 + it.r;
-      it.obj.visible = !nearCity;
-      if (nearCity) continue;
+      // Ni sur l'esplanade d'un point d'intérêt, ni au bord de la faille.
+      const pad = g.pad;
+      const nearSpot =
+        (!!pad && Math.hypot(x - pad[0], it.z - pad[1]) < pad[2] + it.r + 30) ||
+        holeD(x, it.z, g.hole, g.holeRot) < it.r + 40;
+      it.obj.visible = !nearCity && !nearSpot;
+      if (nearCity || nearSpot) continue;
       if (Math.abs(x) > LOOP / 2 - 30) x = Math.sign(x) * (LOOP / 2 - 30);
       const lg = it.lagoon;
       if (lg) {

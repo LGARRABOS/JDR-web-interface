@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-// Vue des maquettes 3D (carte des secteurs, carte des lieux-dits) : rendu,
+// Vue des maquettes 3D (carte des secteurs, carte des points d'intérêt) : rendu,
 // caméra fixe à la verticale de la carte (glisser au clic gauche, zoom à la
 // molette), précédée à l'ouverture d'un plan qui montre toute la cabine puis
 // descend au-dessus du bureau ; survol et clic sur les objets désignés.

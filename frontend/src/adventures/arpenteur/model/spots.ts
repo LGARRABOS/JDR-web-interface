@@ -2,15 +2,37 @@ import { isUnknown } from './keld';
 import type { MapState } from './types';
 import { routeLength, STOP_DX, STOP_DZ, wrapC } from '../render/nav';
 
-// Lieux-dits : endroits nommés d'une zone où l'arpenteur peut se rendre sans
-// changer de zone. Il quitte le large (ou un autre lieu-dit), navigue, puis
-// s'arrête devant le repère du lieu.
+// Points d'intérêt : endroits nommés d'une zone où l'arpenteur peut se rendre
+// sans changer de zone. Il quitte le large (ou un autre point d'intérêt),
+// navigue, puis s'arrête devant le repère du lieu.
 //
-// Pour l'instant, seuls des lieux de test existent, dans la position inconnue
-// (mer de brume d'Aether). Les vrais lieux des zones M1, M2… viendront ici.
+// Position inconnue (mer de brume d'Aether) : quatre lieux. Palubori : P1
+// (champs volcaniques ensablés) et P4 (faille rocheuse). Les autres zones
+// viendront ici.
 
-/** Repère 3D affiché sur place (voir scene3d/native/landmarks.ts). */
-export type SpotLook = 'arche' | 'epave' | 'aiguille' | 'sanctuaire';
+/** Repère 3D affiché sur place (voir scene/native/landmarks.ts). */
+export type SpotLook =
+  | 'arche'
+  | 'epave'
+  | 'aiguille'
+  | 'sanctuaire'
+  | 'orgues'
+  | 'aspizos'
+  | 'faille'
+  | 'etangs';
+
+/**
+ * Repères posés sur le sable (les autres flottent dans la brume) : rayon de
+ * l'esplanade aplanie autour d'eux (m). La faille, elle, perce le sable.
+ */
+export const GROUND_LOOKS: Partial<Record<SpotLook, number>> = {
+  orgues: 80,
+  aspizos: 130,
+  faille: 0,
+  etangs: 100,
+};
+/** Grande faille : demi-longueur et demi-largeur (m), le long de x. */
+export const RIFT = { hx: 340, hz: 85 };
 
 export interface Spot {
   id: string;
@@ -29,9 +51,9 @@ export interface Spot {
   blurb: string;
 }
 
-/** Le large : hors de tout lieu-dit. */
+/** Le large : hors de tout point d'intérêt. */
 export const OPEN = '~';
-/** Longueur d'une zone (m) : en croisière, on repasse devant ses lieux-dits. */
+/** Longueur d'une zone (m) : en croisière, on repasse devant ses points d'intérêt. */
 export const ZONE_PERIOD = 4400;
 
 export const SPOTS: Spot[] = [
@@ -72,20 +94,62 @@ export const SPOTS: Spot[] = [
     z: -2600,
     blurb: 'Un temple en ruine sur une île dont la brume coule en cascades.',
   },
+  // Palubori — P1 : champs volcaniques ensablés.
+  {
+    id: 'orgues-noires',
+    name: 'Les Orgues noires',
+    zone: 'P1',
+    look: 'orgues',
+    x: 500,
+    z: -780,
+    blurb:
+      "Des milliers de colonnes de basalte, serrées comme des tuyaux d'orgue, percent le sable : la trace d'un ancien volcan, riche en minerais.",
+  },
+  {
+    id: 'detente-aspizos',
+    name: "Zone de détente d'Aspizos",
+    zone: 'P1',
+    look: 'aspizos',
+    x: 2600,
+    z: -640,
+    blurb:
+      'Petites dunes de terre, de sable et de sel : les gros lézards des sables viennent y soigner leur peau.',
+  },
+  // Palubori — P4 : faille rocheuse, étangs de la mort noire.
+  {
+    id: 'grande-faille',
+    name: 'La Grande Faille',
+    zone: 'P4',
+    look: 'faille',
+    x: 400,
+    z: -770,
+    blurb:
+      "Le désert tranché en deux : le sable se jette dans un gouffre de plusieurs centaines de mètres. Une mine s'accroche au bord.",
+  },
+  {
+    id: 'etangs-mort-noire',
+    name: 'Étangs de la mort noire',
+    zone: 'P4',
+    look: 'etangs',
+    x: 2700,
+    z: -660,
+    blurb:
+      "Des mares rouges et noirâtres où remontent des bulles : l'odeur repousse presque toutes les bêtes.",
+  },
 ];
 
 const norm = (zone: string) =>
   isUnknown(zone) ? '?' : zone.trim().toUpperCase();
 
-/** Lieux-dits d'une zone. */
+/** Points d'intérêt d'une zone. */
 export const spotsOf = (zone: string) =>
   SPOTS.filter((s) => s.zone === norm(zone));
 
-/** Lieu-dit par identifiant (null : le large ou inconnu). */
+/** Point d'intérêt par identifiant (null : le large ou inconnu). */
 export const spotById = (id: string | undefined | null) =>
   (id && SPOTS.find((s) => s.id === id)) || null;
 
-/** Nom à afficher (« Au large » hors lieu-dit). */
+/** Nom à afficher (« Au large » hors point d'intérêt). */
 export const spotName = (id: string | undefined | null) =>
   spotById(id)?.name ?? 'Au large';
 
@@ -117,7 +181,7 @@ export function hopSeconds(from: string, to: string) {
 }
 
 /**
- * Départ vers un lieu-dit (ou vers le large avec OPEN) : nouvel état de la
+ * Départ vers un point d'intérêt (ou vers le large avec OPEN) : nouvel état de la
  * carte (trajet horodaté par le serveur) et ligne du journal.
  */
 export function hopTo(

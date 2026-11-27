@@ -55,7 +55,7 @@ export interface WorldState {
   hover: string;
   reachable: Set<string>;
   hangar: string;
-  /** Nœuds qui ont des lieux-dits (petite étoile). */
+  /** Nœuds qui ont des points d'intérêt (petite étoile). */
   withSpots: Set<string>;
 }
 
@@ -828,7 +828,7 @@ void main(){ float dash = step(.45, fract(vUv.x * uLen * .9 - uTime * (.6 + uOn)
     this.flash.visible = false;
     this.flash.renderOrder = 15;
     sc.add(this.flash);
-    // Étoile des lieux-dits.
+    // Étoile des points d'intérêt.
     const st = document.createElement('canvas');
     st.width = st.height = 64;
     const sg = st.getContext('2d')!;
@@ -960,7 +960,7 @@ void main(){ float dash = step(.45, fract(vUv.x * uLen * .9 - uTime * (.6 + uOn)
         n.label.userData.base ??
         (n.label.userData.base = n.label.scale.clone());
       n.label.scale.set(base.x * k, base.y * k, 1);
-      // Étoile : ce nœud a des lieux-dits.
+      // Étoile : ce nœud a des points d'intérêt.
       if (st.withSpots.has(n.id) && !n.star) {
         n.star = new THREE.Sprite(
           new THREE.SpriteMaterial({

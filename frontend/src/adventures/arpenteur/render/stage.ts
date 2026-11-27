@@ -106,7 +106,7 @@ export interface Place {
   city?: { id: string; capital?: boolean; hangar?: boolean };
 }
 
-/** Lieu-dit (repère 3D) : identifiant et allure du repère. */
+/** Point d'intérêt (repère 3D) : identifiant et allure du repère. */
 export interface SpotView {
   id: string;
   look: string;
@@ -227,14 +227,14 @@ export class Stage {
   private crowd: import('./native').NativeFrame['crowd'] = [];
   private scrollPos = 0;
   private lastT = -1;
-  /** Lieux-dits de la zone (repères visibles de loin) et période de la zone. */
+  /** Points d'intérêt de la zone (repères visibles de loin) et période de la zone. */
   private zoneSpots: SpotView[] = [];
   private period = 2400;
-  /** Centre de la zone : la carte des lieux-dits montre une période autour. */
+  /** Centre de la zone : la carte des points d'intérêt montre une période autour. */
   private zoneCx = 0;
   /** Position et cap du navire dans la zone (voir nav.ts). */
   private nav: Nav = { x: 0, z: 0, h: 0 };
-  /** Lieu-dit où le navire est arrêté (ou vers lequel il fait route). */
+  /** Point d'intérêt où le navire est arrêté (ou vers lequel il fait route). */
   private spot: SpotView | null = null;
   private hop: {
     key: string;
@@ -353,7 +353,7 @@ export class Stage {
     };
   }
 
-  /** Lieux-dits de la zone : leurs repères sont visibles de loin. */
+  /** Points d'intérêt de la zone : leurs repères sont visibles de loin. */
   setSpots(list: SpotView[], period: number) {
     this.zoneSpots = list;
     this.period = period;
@@ -362,8 +362,8 @@ export class Stage {
   }
 
   /**
-   * Point d'arrêt d'un lieu-dit : l'exemplaire du même tour de zone que le
-   * navire (comme sur la carte des lieux-dits, la route ne passe jamais par
+   * Point d'arrêt d'un point d'intérêt : l'exemplaire du même tour de zone que le
+   * navire (comme sur la carte des points d'intérêt, la route ne passe jamais par
    * le bord de la carte).
    */
   private stopOf(sp: SpotView) {
@@ -374,8 +374,8 @@ export class Stage {
   }
 
   /**
-   * Lieu-dit de la zone : le navire s'y rend sans changer de zone. Avec
-   * `hop`, il part à `startMs` (d'un lieu-dit ou du large), vire et suit une
+   * Point d'intérêt de la zone : le navire s'y rend sans changer de zone. Avec
+   * `hop`, il part à `startMs` (d'un point d'intérêt ou du large), vire et suit une
    * route courbe jusqu'au repère, où il s'arrête au bout de `durationMs` ;
    * sans, il est déjà sur place (ou au large si `spot` est null).
    */
@@ -404,7 +404,7 @@ export class Stage {
       ? this.stopOf(spot)
       : { x: this.nav.x + Math.max(1200, Math.abs(this.nav.z) * 1.6), z: 0 };
     const r = route({ ...this.nav }, to);
-    // Départ arrêté (lieu-dit) ou en croisière lente ; arrivée arrêtée ou
+    // Départ arrêté (point d'intérêt) ou en croisière lente ; arrivée arrêtée ou
     // reprise de la croisière.
     const v0 = hop.from ? 0 : 0.3;
     const v1 = spot ? 0 : 0.3;
@@ -430,7 +430,7 @@ export class Stage {
   }
 
   /**
-   * Pour la carte des lieux-dits : position et cap du navire dans la zone,
+   * Pour la carte des points d'intérêt : position et cap du navire dans la zone,
    * route en cours et période de la zone.
    */
   mapInfo() {
@@ -939,7 +939,7 @@ export class Stage {
       inVoid = !!this.place.void;
       const h = this.hop;
       if (h) {
-        // En route vers un lieu-dit : il accélère, vire, file, puis ralentit
+        // En route vers un point d'intérêt : il accélère, vire, file, puis ralentit
         // et s'arrête à côté du repère ; la caméra accompagne le trajet.
         const p = Math.min(1, Math.max(0, (Date.now() - h.start) / h.duration));
         const f = p * SAMPLES;
