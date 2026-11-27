@@ -259,7 +259,7 @@ export function ArpenteurView({
               )}
             </div>
 
-            <div className="absolute top-3 right-3 sm:top-5 sm:right-5 arp-lever rounded-full p-1 flex">
+            <div className="absolute z-[5] top-3 right-3 sm:top-5 sm:right-5 arp-lever rounded-full p-1 flex">
               {(['profil', 'coupe'] as const).map((v) => (
                 <button
                   key={v}
@@ -284,7 +284,7 @@ export function ArpenteurView({
             </div>
 
             {preview ? (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 arp-plate rounded-xl pl-4 pr-1.5 py-1.5 flex items-center gap-3 text-sm max-w-[94%]">
+              <div className="absolute z-[5] bottom-3 left-1/2 -translate-x-1/2 arp-plate rounded-xl pl-4 pr-1.5 py-1.5 flex items-center gap-3 text-sm max-w-[94%]">
                 <span className="truncate">
                   <span className="text-fantasy-muted">Évolution :</span>{' '}
                   {preview.label}
@@ -298,7 +298,7 @@ export function ArpenteurView({
                 </button>
               </div>
             ) : view === 'coupe' ? (
-              <p className="absolute bottom-3 left-1/2 -translate-x-1/2 arp-plate rounded-xl px-3 py-1.5 text-xs text-fantasy-text-soft">
+              <p className="absolute z-[5] bottom-3 left-1/2 -translate-x-1/2 arp-plate rounded-xl px-3 py-1.5 text-xs text-fantasy-text-soft pointer-events-none">
                 Cliquez sur une salle pour la gérer
               </p>
             ) : (
