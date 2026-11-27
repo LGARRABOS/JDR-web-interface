@@ -2,6 +2,7 @@ package arpenteur
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"jdr-backend/internal/docimport"
@@ -261,6 +262,82 @@ func TestMapHangarGMOnly(t *testing.T) {
 	}
 }
 
+func TestMapEntrepotGMOnly(t *testing.T) {
+	d := Default()
+	next := d.Map
+	next.Entrepot = "zenit"
+	raw, _ := json.Marshal(next)
+	if err := d.Apply(SectionMap, raw, false); err != nil {
+		t.Fatal(err)
+	}
+	if d.Map.Entrepot != "" {
+		t.Fatal("un joueur ne peut pas s'attribuer un entrepôt")
+	}
+	if err := d.Apply(SectionMap, raw, true); err != nil {
+		t.Fatal(err)
+	}
+	if d.Map.Entrepot != "ZENIT" {
+		t.Fatalf("entrepôt du MJ mal enregistré : %q", d.Map.Entrepot)
+	}
+	next = d.Map
+	next.Entrepot = ""
+	raw, _ = json.Marshal(next)
+	if err := d.Apply(SectionMap, raw, false); err != nil {
+		t.Fatal(err)
+	}
+	if d.Map.Entrepot != "ZENIT" {
+		t.Fatal("l'entrepôt doit survivre aux modifications des joueurs")
+	}
+}
+
+// Une partie enregistrée avant le renommage garde sa cave, devenue entrepôt,
+// ainsi que les droits réglés pour elle.
+func TestMigrateCaveToEntrepot(t *testing.T) {
+	raw := `{"cave":{"title":"Cave","description":"Sous la taverne","capacity":40,
+		"items":[{"id":"a","name":"Dard de scorpion","weight":4}]},
+		"permissions":{"cave":{"posts":["Mousse"],"fallback":[]}}}`
+	d := Default()
+	if err := json.Unmarshal([]byte(raw), &d); err != nil {
+		t.Fatal(err)
+	}
+	Normalize(&d)
+	e := d.Entrepot
+	if e.Title != EntrepotTitle || e.Description != "Sous la taverne" || e.Capacity != 40 || len(e.Items) != 1 || e.Items[0].Name != "Dard de scorpion" {
+		t.Fatalf("entrepôt migré : %+v", e)
+	}
+	if d.LegacyCave != nil {
+		t.Fatal("l'ancienne cave doit disparaître après migration")
+	}
+	if p := d.Permissions[SectionEntrepot].Posts; len(p) != 1 || p[0] != "Mousse" {
+		t.Fatalf("droits de la cave non repris : %v", p)
+	}
+	if _, ok := d.Permissions[SectionCave]; ok {
+		t.Fatal("la section cave ne doit plus figurer dans les droits")
+	}
+	b, _ := json.Marshal(d)
+	if strings.Contains(string(b), `"cave"`) {
+		t.Fatalf("le document réenregistré contient encore la cave : %s", b)
+	}
+
+	// Un nom choisi par le groupe est conservé.
+	d = Default()
+	_ = json.Unmarshal([]byte(`{"cave":{"title":"Cave Darrakis","items":[]}}`), &d)
+	Normalize(&d)
+	if d.Entrepot.Title != "Cave Darrakis" {
+		t.Fatalf("nom personnalisé perdu : %q", d.Entrepot.Title)
+	}
+
+	// Ancienne page pas encore rechargée : la section « cave » vise l'entrepôt.
+	inv, _ := json.Marshal(Inventory{Title: "Entrepôt", Items: []Item{{ID: "b", Name: "Corde"}}})
+	if err := d.Apply(SectionCave, inv, true); err != nil {
+		t.Fatal(err)
+	}
+	Normalize(&d)
+	if len(d.Entrepot.Items) != 1 || d.Entrepot.Items[0].Name != "Corde" {
+		t.Fatalf("section cave non redirigée : %+v", d.Entrepot)
+	}
+}
+
 func TestNormalizeBounds(t *testing.T) {
 	d := Default()
 	d.Combat.Decks[0].Guns.A1 = Battery{Slots: 4, Installed: 9, Loaded: 7, Primed: -2}
@@ -292,7 +369,7 @@ func TestApplyUnknownSection(t *testing.T) {
 }
 
 // Classeur reprenant la structure des feuilles d'un groupe (Arpenteur, Combat,
-// Cale, Cave, sauvegarde).
+// Cale, Cave, sauvegarde) ; la cave est reprise dans l'entrepôt.
 func sampleWorkbook() *docimport.Content {
 	title := `Arpenteur 1 - "Darrak-Varis" (Anciennement sous le contrôle de Grisha Rouvaris)`
 	return &docimport.Content{Kind: "sheet", Sheets: []docimport.Sheet{
@@ -415,8 +492,8 @@ func TestImportWorkbook(t *testing.T) {
 	if venin.Coupons != nil || venin.Rarity != "B" {
 		t.Errorf("venin : %+v", venin)
 	}
-	if res.Cave == nil || len(res.Cave.Items) != 1 || res.Cave.Title != "Cave Darrakis" || res.Cave.Description == "" {
-		t.Fatalf("cave : %+v", res.Cave)
+	if res.Entrepot == nil || len(res.Entrepot.Items) != 1 || res.Entrepot.Title != "Cave Darrakis" || res.Entrepot.Description == "" {
+		t.Fatalf("entrepôt : %+v", res.Entrepot)
 	}
 	if len(res.Summary.Ignored) != 1 || res.Summary.Ignored[0] != "SAVE-Combat" {
 		t.Errorf("feuille de sauvegarde ignorée : %v", res.Summary.Ignored)

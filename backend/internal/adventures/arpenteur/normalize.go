@@ -83,7 +83,7 @@ func Default() Doc {
 			PowderReserveMax: 10,
 		},
 		Hold:        Inventory{Title: "Cale"},
-		Cave:        Inventory{Title: "Cave"},
+		Entrepot:    Inventory{Title: EntrepotTitle},
 		Permissions: DefaultPermissions(),
 	}
 	Normalize(&d)
@@ -108,7 +108,8 @@ func Normalize(d *Doc) {
 	NormalizeCombat(&d.Combat)
 	NormalizeOrders(&d.Orders)
 	NormalizeInventory(&d.Hold, "Cale")
-	NormalizeInventory(&d.Cave, "Cave")
+	migrateCave(d)
+	NormalizeInventory(&d.Entrepot, EntrepotTitle)
 	NormalizeMap(&d.Map)
 	NormalizePermissions(&d.Permissions)
 	if d.Log == nil {
@@ -331,6 +332,29 @@ func NormalizeOrders(o *Orders) {
 	}
 }
 
+// EntrepotTitle : nom par défaut de l'entrepôt.
+const EntrepotTitle = "Entrepôt"
+
+// migrateCave verse l'ancienne cave dans l'entrepôt : les parties créées
+// avant le renommage gardent leurs objets, leur description et leur
+// capacité. Le nom par défaut « Cave » devient « Entrepôt » ; un nom choisi
+// par le groupe est conservé.
+func migrateCave(d *Doc) {
+	old := d.LegacyCave
+	d.LegacyCave = nil
+	if old == nil {
+		return
+	}
+	cur := d.Entrepot
+	if len(cur.Items) > 0 || cur.Description != "" || cur.Capacity > 0 {
+		return // déjà migrée : l'entrepôt fait foi
+	}
+	d.Entrepot = *old
+	if t := strings.TrimSpace(d.Entrepot.Title); t == "" || strings.EqualFold(t, "Cave") {
+		d.Entrepot.Title = EntrepotTitle
+	}
+}
+
 func NormalizeInventory(inv *Inventory, defTitle string) {
 	inv.Title = text(inv.Title, maxShortText)
 	if inv.Title == "" {
@@ -400,6 +424,7 @@ func NormalizeMap(m *MapState) {
 		m.Mood = ""
 	}
 	m.Hangar = strings.ToUpper(text(m.Hangar, 12))
+	m.Entrepot = strings.ToUpper(text(m.Entrepot, 12))
 	if t := m.Travel; t != nil {
 		t.From = strings.ToUpper(text(t.From, 12))
 		t.To = strings.ToUpper(text(t.To, 12))

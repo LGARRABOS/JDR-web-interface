@@ -31,14 +31,14 @@ type ImportResult struct {
 	Crew        *Crew
 	Combat      *Combat
 	Hold        *Inventory
-	Cave        *Inventory
+	Entrepot    *Inventory
 	Summary     ImportSummary
 }
 
 type ImportSummary struct {
 	Crew       int      `json:"crew"`
 	Hold       int      `json:"hold"`
-	Cave       int      `json:"cave"`
+	Entrepot   int      `json:"entrepot"`
 	Combat     bool     `json:"combat"`
 	Expedition bool     `json:"expedition"`
 	Ignored    []string `json:"ignored"`
@@ -68,11 +68,11 @@ func ImportContent(c *docimport.Content, players []PlayerRef) ImportResult {
 		}
 		if hdr, cols := findHeader(sh.Rows, isItemHeader); hdr >= 0 {
 			inv := parseItems(sh.Rows, hdr, cols)
-			if strings.Contains(key, "cave") || strings.Contains(key, "coffre") || strings.Contains(key, "stock") {
+			if strings.Contains(key, "entrepot") || strings.Contains(key, "cave") || strings.Contains(key, "coffre") || strings.Contains(key, "stock") {
 				inv.Title = strings.TrimSpace(strings.ReplaceAll(sh.Name, "_", " "))
 				inv.Description = sheetDescription(sh.Rows[:hdr])
-				NormalizeInventory(&inv, "Cave")
-				res.Cave = mergeInventory(res.Cave, inv)
+				NormalizeInventory(&inv, EntrepotTitle)
+				res.Entrepot = mergeInventory(res.Entrepot, inv)
 			} else {
 				NormalizeInventory(&inv, "Cale")
 				inv.Title = "Cale"
@@ -90,8 +90,8 @@ func ImportContent(c *docimport.Content, players []PlayerRef) ImportResult {
 	if res.Hold != nil {
 		res.Summary.Hold = len(res.Hold.Items)
 	}
-	if res.Cave != nil {
-		res.Summary.Cave = len(res.Cave.Items)
+	if res.Entrepot != nil {
+		res.Summary.Entrepot = len(res.Entrepot.Items)
 	}
 	res.Summary.Combat = res.Combat != nil
 	res.Summary.Expedition = res.Expedition != nil
@@ -150,8 +150,8 @@ func (d *Doc) ApplyImport(r ImportResult) {
 	if r.Hold != nil {
 		d.Hold = *r.Hold
 	}
-	if r.Cave != nil {
-		d.Cave = *r.Cave
+	if r.Entrepot != nil {
+		d.Entrepot = *r.Entrepot
 	}
 	Normalize(d)
 }
@@ -620,7 +620,7 @@ func ammoID(name string) string {
 	return NewID()
 }
 
-// --- Cale et cave ------------------------------------------------------------
+// --- Cale et entrepôt -----------------------------------------------------------
 
 func isItemHeader(row []string) colMap {
 	cols := colMap{}

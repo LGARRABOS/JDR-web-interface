@@ -689,7 +689,7 @@ Les onglets :
 - **Navire** : expédition, coupons, évolution du navire et journal de bord ;
 - **Équipage** : fiches, postes, soins, équipage de sortie ([[arpenteur-postes|qui modifie quoi]]) ;
 - **Combat** : coque, canons, munitions, poudre, déroulé de la mise à feu et schéma des portées ([[arpenteur-combat|en détail]]) ;
-- **Cale & cave** : les inventaires, avec poids, valeur et coupons ;
+- **Cale & entrepôt** : les inventaires, avec poids, valeur et coupons ;
 - **Carte** : les déserts de Keld, le cap et les déplacements ([[arpenteur-carte|en détail]]) ;
 - **Atelier** : les améliorations ([[arpenteur-atelier|en détail]]).`,
     related: [
@@ -719,7 +719,7 @@ Les onglets :
 
 Par défaut :
 
-- **Capitaine** : expédition et coupons, équipage, cale, cave, carte, ordres de tir ;
+- **Capitaine** : expédition et coupons, équipage, cale, entrepôt, carte, ordres de tir ;
 - **Contremaître** : équipage, cale, ordres de tir ;
 - **Maître canonnier** : canons, munitions et poudre. Si aucun joueur n'est maître canonnier, le Capitaine ou le Contremaître prennent la relève ;
 - **Chirurgien** : vie et fatigue de l'équipage ;
@@ -778,6 +778,8 @@ Depuis la position actuelle, les destinations directes sont entourées. « Mettr
 
 **Hangar** : l'équipage peut posséder un hangar dans une ville (un seul à la fois). L'achat se joue à la table, puis le MJ sélectionne la ville sur la carte et clique « Attribuer un hangar ici » (ou « Déplacer le hangar ici », ce qui remplace l'ancien ; « Retirer le hangar » pour le céder). La ville porte alors un petit hangar doré sur la carte ; en y arrivant, l'arpenteur entre dans la nef du hangar au lieu de s'amarrer au quai, et c'est là que l'atelier peut travailler.
 
+**Entrepôt** : l'équipage peut aussi acheter un entrepôt (un seul à la fois), qui remplace l'ancienne cave. Comme le hangar, l'achat se joue à la table, puis le MJ sélectionne la ville sur la carte et clique « Attribuer un entrepôt ici » (ou « Déplacer l'entrepôt ici », « Retirer l'entrepôt »). La ville porte alors une petite caisse sur la carte. Le stock de l'entrepôt (onglet Cale & entrepôt) se consulte à tout moment, et on y dépose ou retire des objets **depuis n'importe quelle ville** où l'arpenteur est amarré, pas seulement celle de l'achat ; dans le désert, en route ou sans entrepôt, il reste en lecture seule (le MJ peut passer outre). Les parties existantes gardent le contenu de leur cave, devenu celui de l'entrepôt.
+
 Vous pouvez nommer une sous-région (« Le Désert du phare vert ») et y poser des repères : mission, danger, trésor… Le MJ peut en cacher aux joueurs.
 
 La « Carte illustrée » accueille l'image de votre choix (le MJ l'ajoute) : on y fait glisser l'arpenteur et on y pose des repères.`,
@@ -817,7 +819,7 @@ Un coût en coupons peut être déduit de l'expédition. Chaque amélioration s'
     audience: 'mj',
     keywords: ['arpenteur', 'import', 'excel', 'classeur', 'activer'],
     body: `1. Créez une partie « JDR GEMMA » avec l'aventure « Désert de Keld », ou passez une partie GEMMA existante à cette aventure avec le bouton en forme de navire sur sa carte (« Mes parties »).
-2. Dans l'onglet Réglages de l'arpenteur, importez votre classeur (Excel, LibreOffice ou CSV) : équipage, combat, cale, cave et expédition sont repris.
+2. Dans l'onglet Réglages de l'arpenteur, importez votre classeur (Excel, LibreOffice ou CSV) : équipage, combat, cale, entrepôt (feuilles « Cave », « Entrepôt », « Coffre » ou « Stock ») et expédition sont repris.
 3. Dans l'onglet Équipage, reliez chaque personnage joueur à son joueur (« Incarné par ») : ses droits suivent son poste.
 
 > Retirer l'aventure Désert de Keld ne supprime pas le navire : il revient tel quel si vous la réactivez.

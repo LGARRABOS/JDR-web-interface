@@ -94,6 +94,7 @@ export function WorldMap3D({
     hover: '',
     reachable,
     hangar: map.hangar ?? '',
+    entrepot: map.entrepot ?? '',
     withSpots: new Set<string>(),
   });
   Object.assign(state.current, {
@@ -104,6 +105,7 @@ export function WorldMap3D({
     hover: hover?.id ?? '',
     reachable,
     hangar: map.hangar ?? '',
+    entrepot: map.entrepot ?? '',
   });
   const clickRef = useRef<(id: string) => void>(() => {});
   clickRef.current = (id: string) => {

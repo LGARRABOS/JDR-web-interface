@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { RARITY_COLORS } from '../model/catalog';
+import { entrepotAccess } from '../model/entrepot';
 import {
   foldKey,
   formatCoins,
@@ -22,8 +23,9 @@ import {
   SelectField,
   TextField,
 } from './ui';
+import { useTravel } from './useTravel';
 
-type Which = 'hold' | 'cave';
+type Which = 'hold' | 'entrepot';
 type Sort = 'order' | 'name' | 'weight' | 'rarity' | 'value';
 
 const RARITY_RANK: Record<string, number> = {
@@ -40,6 +42,8 @@ interface Props {
   rights: Rights;
   update: UpdateFn;
   initial?: Which;
+  /** Le MJ ouvre l'entrepôt partout, même sans amarrage. */
+  isGM?: boolean;
 }
 
 function typeColor(type: string): string {
@@ -59,6 +63,7 @@ export function InventoryPanel({
   rights,
   update,
   initial = 'hold',
+  isGM = false,
 }: Props) {
   const [which, setWhich] = useState<Which>(initial);
   const [query, setQuery] = useState('');
@@ -67,9 +72,14 @@ export function InventoryPanel({
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<Item | null>(null);
   const inv = doc[which];
-  const other: Which = which === 'hold' ? 'cave' : 'hold';
-  const can = rights[which];
-  const canMove = rights.hold && rights.cave;
+  const other: Which = which === 'hold' ? 'entrepot' : 'hold';
+  // L'entrepôt ne s'ouvre qu'amarré dans une ville (n'importe laquelle).
+  const travel = useTravel(doc.map.travel);
+  const access = entrepotAccess(doc.map, !!travel);
+  const entrepotOpen = isGM || access.open;
+  const allowed = (w: Which) => rights[w] && (w === 'hold' || entrepotOpen);
+  const can = allowed(which);
+  const canMove = allowed('hold') && allowed('entrepot');
   const totals = inventoryTotals(inv.items);
   const types = useMemo(
     () => [...new Set(inv.items.map((i) => i.type).filter(Boolean))],
@@ -114,7 +124,7 @@ export function InventoryPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-1.5">
-        {(['hold', 'cave'] as Which[]).map((w) => (
+        {(['hold', 'entrepot'] as Which[]).map((w) => (
           <button
             key={w}
             type="button"
@@ -172,7 +182,18 @@ export function InventoryPanel({
           )
         }
       >
-        {!can && <ReadOnlyHint doc={doc} section={which} />}
+        {which === 'entrepot' && (
+          <p
+            className={`text-xs mb-2 ${access.open ? 'text-fantasy-muted' : 'text-amber-200/90'}`}
+          >
+            {access.open
+              ? `📦 Entrepôt acheté à ${access.cityName} : accessible depuis toutes les villes.`
+              : isGM
+                ? `${access.reason} (Le MJ peut passer outre.)`
+                : access.reason}
+          </p>
+        )}
+        {!rights[which] && <ReadOnlyHint doc={doc} section={which} />}
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <input
             value={query}

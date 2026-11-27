@@ -55,6 +55,8 @@ export interface WorldState {
   hover: string;
   reachable: Set<string>;
   hangar: string;
+  /** Ville de l'entrepôt de l'équipage ('' : aucun). */
+  entrepot: string;
   /** Nœuds qui ont des points d'intérêt (petite étoile). */
   withSpots: Set<string>;
 }
@@ -341,6 +343,7 @@ export class WorldMapScene {
   private vortex: THREE.Group;
   private pins = new THREE.Group();
   private hangarMark: THREE.Group;
+  private entrepotMark: THREE.Group;
   private flash: THREE.Sprite;
   private cabin: Cabin;
   private linkU = { uTime: { value: 0 } };
@@ -800,6 +803,20 @@ void main(){ float dash = step(.45, fract(vUv.x * uLen * .9 - uTime * (.6 + uOn)
     nef.position.y = 0.05;
     this.hangarMark.add(nef);
     sc.add(this.hangarMark);
+    // Entrepôt de l'équipage : caisse de bois cerclée de laiton.
+    this.entrepotMark = new THREE.Group();
+    const crate = new THREE.Mesh(
+      keep(new THREE.BoxGeometry(0.62, 0.5, 0.62)),
+      lib.hullWood
+    );
+    crate.position.y = 0.25;
+    const band = new THREE.Mesh(
+      keep(new THREE.BoxGeometry(0.66, 0.08, 0.66)),
+      lib.brass
+    );
+    band.position.y = 0.3;
+    this.entrepotMark.add(crate, band);
+    sc.add(this.entrepotMark);
     // Repères (épingles).
     sc.add(this.pins);
     // Éclair d'Aether (téléportation vers ou depuis la position inconnue).
@@ -1052,6 +1069,12 @@ void main(){ float dash = step(.45, fract(vUv.x * uLen * .9 - uTime * (.6 + uOn)
     this.hangarMark.visible = !!hp;
     if (hp)
       this.hangarMark.position.copy(hp).add(new THREE.Vector3(1.5, 0.15, 0.6));
+    const ep = st.entrepot ? this.nodePoint(st.entrepot) : null;
+    this.entrepotMark.visible = !!ep;
+    if (ep)
+      this.entrepotMark.position
+        .copy(ep)
+        .add(new THREE.Vector3(-1.4, 0.05, 0.7));
   }
 
   dispose() {

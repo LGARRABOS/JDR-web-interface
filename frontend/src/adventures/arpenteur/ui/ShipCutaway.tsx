@@ -14,7 +14,7 @@ export type CutawayTarget =
   | 'crew'
   | 'combat'
   | 'hold'
-  | 'cave'
+  | 'entrepot'
   | 'map'
   | 'atelier';
 
@@ -208,7 +208,7 @@ function levels(build: Build, fit: Fit): Level[] {
         label: 'Salle aux butins',
         short: 'Butins',
         weight: 1.1,
-        target: 'cave',
+        target: 'entrepot',
         kind: 'loot',
       },
     ],
@@ -2168,7 +2168,10 @@ function Furniture({
       break;
     }
     case 'loot': {
-      const n = Math.min(4, Math.max(1, Math.ceil(doc.cave.items.length / 3)));
+      const n = Math.min(
+        4,
+        Math.max(1, Math.ceil(doc.entrepot.items.length / 3))
+      );
       for (let k = 0; k < n; k++) {
         const x = bx.x0 + 16 + k * 26;
         if (x > bx.x1 - 12) break;
@@ -2203,7 +2206,7 @@ function Furniture({
           </g>
         );
       }
-      doc.cave.items.slice(0, 6).forEach((_, k) => {
+      doc.entrepot.items.slice(0, 6).forEach((_, k) => {
         const x = bx.x1 - 10 - k * 7;
         out.push(
           <path

@@ -92,7 +92,7 @@ export function rightsFor(
     'combat',
     'orders',
     'hold',
-    'cave',
+    'entrepot',
     'map',
     'permissions',
     'crewSelf',

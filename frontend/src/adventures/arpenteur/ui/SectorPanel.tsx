@@ -14,7 +14,8 @@ import { MarkerList } from './MapMarkers';
 import { Btn, Card, ReadOnlyHint, TextField } from './ui';
 
 // Fiche d'un secteur ou d'une ville (maquette 3D des déserts) : nom, accès,
-// départ, cap, outils du MJ (placer, hangar, position inconnue), repères.
+// départ, cap, outils du MJ (placer, hangar, entrepôt, position inconnue),
+// repères.
 
 export function SectorPanel({
   doc,
@@ -169,44 +170,29 @@ export function SectorPanel({
                 )}
               </div>
             )}
-            {sel.city && (map.hangar === sel.id || (isGM && can)) && (
-              <div className="flex flex-col gap-1.5 rounded-lg bg-black/25 p-2.5">
-                <span className="text-sm text-fantasy-text">
-                  {map.hangar === sel.id
-                    ? "🏗 Hangar de l'équipage : l'arpenteur s'y amarre et l'atelier y travaille."
-                    : 'Pas de hangar dans cette ville.'}
-                </span>
-                {isGM && can && (
-                  <div className="flex flex-wrap gap-2">
-                    {map.hangar === sel.id ? (
-                      <Btn
-                        variant="ghost"
-                        onClick={() =>
-                          save(
-                            { ...map, hangar: '' },
-                            `Hangar de ${nodeName(sel.id, map.sectorNames)} cédé`
-                          )
-                        }
-                      >
-                        Retirer le hangar
-                      </Btn>
-                    ) : (
-                      <Btn
-                        onClick={() =>
-                          save(
-                            { ...map, hangar: sel.id },
-                            `Hangar acquis à ${nodeName(sel.id, map.sectorNames)}`
-                          )
-                        }
-                      >
-                        {map.hangar
-                          ? `Déplacer le hangar ici (remplace ${nodeName(map.hangar, map.sectorNames)})`
-                          : 'Attribuer un hangar ici'}
-                      </Btn>
-                    )}
-                  </div>
-                )}
-              </div>
+            {sel.city && (
+              <>
+                <Property
+                  label="hangar"
+                  owned={map.hangar === sel.id}
+                  current={map.hangar ?? ''}
+                  here={sel.id}
+                  names={map.sectorNames}
+                  ownedText="🏗 Hangar de l'équipage : l'arpenteur s'y amarre et l'atelier y travaille."
+                  editable={isGM && can}
+                  onSet={(id, log) => save({ ...map, hangar: id }, log)}
+                />
+                <Property
+                  label="entrepôt"
+                  owned={map.entrepot === sel.id}
+                  current={map.entrepot ?? ''}
+                  here={sel.id}
+                  names={map.sectorNames}
+                  ownedText="📦 Entrepôt de l'équipage : son stock se dépose et se retire depuis n'importe quelle ville."
+                  editable={isGM && can}
+                  onSet={(id, log) => save({ ...map, entrepot: id }, log)}
+                />
+              </>
             )}
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -269,5 +255,60 @@ export function SectorPanel({
         )}
       </Card>
     </>
+  );
+}
+
+/**
+ * Bien de l'équipage dans une ville (hangar, entrepôt) : acheté à la table,
+ * puis attribué, déplacé ou cédé par le MJ. Un seul de chaque à la fois.
+ */
+function Property({
+  label,
+  owned,
+  current,
+  here,
+  names,
+  ownedText,
+  editable,
+  onSet,
+}: {
+  label: 'hangar' | 'entrepôt';
+  owned: boolean;
+  current: string;
+  here: string;
+  names: Record<string, string>;
+  ownedText: string;
+  editable: boolean;
+  onSet: (id: string, log: string) => void;
+}) {
+  if (!owned && !editable) return null;
+  const Label = label[0].toUpperCase() + label.slice(1);
+  const city = nodeName(here, names);
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg bg-black/25 p-2.5">
+      <span className="text-sm text-fantasy-text">
+        {owned
+          ? ownedText
+          : `Pas ${label === 'hangar' ? 'de hangar' : "d'entrepôt"} dans cette ville.`}
+      </span>
+      {editable && (
+        <div className="flex flex-wrap gap-2">
+          {owned ? (
+            <Btn
+              variant="ghost"
+              onClick={() => onSet('', `${Label} de ${city} cédé`)}
+            >
+              Retirer {label === 'hangar' ? 'le hangar' : "l'entrepôt"}
+            </Btn>
+          ) : (
+            <Btn onClick={() => onSet(here, `${Label} acquis à ${city}`)}>
+              {current
+                ? `Déplacer ${label === 'hangar' ? 'le hangar' : "l'entrepôt"} ici (remplace ${nodeName(current, names)})`
+                : `Attribuer ${label === 'hangar' ? 'un hangar' : 'un entrepôt'} ici`}
+            </Btn>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

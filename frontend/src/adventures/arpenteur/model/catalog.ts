@@ -256,7 +256,7 @@ export const SECTIONS: { id: Section; label: string; hint: string }[] = [
   { id: 'combat', label: 'Canons', hint: 'Canons, munitions, poudre, tirs' },
   { id: 'orders', label: 'Ordres de tir', hint: 'Déroulé, cible, munition' },
   { id: 'hold', label: 'Cale', hint: 'Inventaire du navire' },
-  { id: 'cave', label: 'Cave', hint: 'Stockage en ville' },
+  { id: 'entrepot', label: 'Entrepôt', hint: 'Stock accessible en ville' },
   { id: 'map', label: 'Carte', hint: 'Cap, déplacements, repères' },
 ];
 

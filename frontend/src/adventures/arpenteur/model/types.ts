@@ -243,6 +243,11 @@ export interface MapState {
   mood?: '' | 'dusk' | 'night';
   /** Ville (id) où l'équipage possède son hangar, attribué par le MJ ('' : aucun). */
   hangar?: string;
+  /**
+   * Ville (id) où l'équipage a acheté son entrepôt, attribué par le MJ comme
+   * le hangar ('' : aucun). Son stock s'utilise depuis n'importe quelle ville.
+   */
+  entrepot?: string;
   /** Point d'intérêt de la zone où l'arpenteur est arrêté ('' : au large). */
   spot?: string;
   /** Trajet en cours vers un point d'intérêt, sans changer de zone ('~' : le large). */
@@ -281,7 +286,8 @@ export interface ArpenteurDoc {
   combat: Combat;
   orders: Orders;
   hold: Inventory;
-  cave: Inventory;
+  /** Entrepôt : stock en ville (anciennement « cave »). */
+  entrepot: Inventory;
   map: MapState;
   permissions: Record<string, Perm>;
   log: LogEntry[];
@@ -295,7 +301,7 @@ export type Section =
   | 'combat'
   | 'orders'
   | 'hold'
-  | 'cave'
+  | 'entrepot'
   | 'map'
   | 'permissions'
   /** Points de vie maximum de son propre personnage (joueur lié). */
@@ -331,7 +337,7 @@ export interface ArpenteurPayload {
 export interface ImportSummary {
   crew: number;
   hold: number;
-  cave: number;
+  entrepot: number;
   combat: boolean;
   expedition: boolean;
   ignored: string[];

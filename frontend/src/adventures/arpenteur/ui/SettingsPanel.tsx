@@ -112,7 +112,7 @@ export function SettingsPanel({ gameId, doc, update, store, onError }: Props) {
         <p className="text-sm text-fantasy-text-soft">
           Les tableaux reconnus remplacent ceux de l’arpenteur : équipage
           (colonnes « Nom … Poste affecté »), combat (« Constitution », « Canons
-          A1 »…), cale et cave (« Type, Nom, Effet, Poids… »), expédition et
+          A1 »…), cale et entrepôt (« Type, Nom, Effet, Poids… »), expédition et
           coupons. Les feuilles de sauvegarde sont ignorées ; un personnage noté
           « Malrik (Luc) » est relié au joueur Luc s’il est dans la partie.
         </p>
@@ -137,7 +137,7 @@ export function SettingsPanel({ gameId, doc, update, store, onError }: Props) {
           <p className="mt-3 text-sm text-emerald-300">
             Importé : {summary.crew} membre{summary.crew > 1 ? 's' : ''}{' '}
             d’équipage, {summary.hold} objet{summary.hold > 1 ? 's' : ''} en
-            cale, {summary.cave} dans la cave
+            cale, {summary.entrepot} dans l'entrepôt
             {summary.combat ? ', feuille de combat' : ''}
             {summary.expedition ? ', expédition' : ''}.
             {summary.ignored.length > 0 && (
@@ -223,7 +223,7 @@ export function SettingsPanel({ gameId, doc, update, store, onError }: Props) {
         {confirmReset ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-red-300">
-              Tout sera effacé (construction, équipage, cale, cave, carte,
+              Tout sera effacé (construction, équipage, cale, entrepôt, carte,
               journal).
             </span>
             <Btn

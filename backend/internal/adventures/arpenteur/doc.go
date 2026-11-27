@@ -1,6 +1,6 @@
 // Package arpenteur décrit l'arpenteur d'une partie GEMMA « Arpenteur » : le
 // vaisseau des sables commun au groupe, son équipage, son armement, sa cale,
-// sa cave et sa position dans les déserts de Keld.
+// son entrepôt et sa position dans les déserts de Keld.
 //
 // L'état complet tient dans un seul document JSON (une ligne par partie). Il
 // est modifié section par section : chaque section a ses propres droits
@@ -10,21 +10,26 @@ package arpenteur
 // Doc : l'état complet de l'arpenteur. Doit rester aligné avec le type
 // ArpenteurDoc de frontend/src/adventures/arpenteur/model/types.ts.
 type Doc struct {
-	Name        string      `json:"name"`
-	Number      int         `json:"number"`
-	FormerOwner string      `json:"formerOwner"`
-	Build       Build       `json:"build"`
-	Pending     *Works      `json:"pending"`
-	History     []Upgrade   `json:"history"`
-	Expedition  Expedition  `json:"expedition"`
-	Crew        Crew        `json:"crew"`
-	Combat      Combat      `json:"combat"`
-	Orders      Orders      `json:"orders"`
-	Hold        Inventory   `json:"hold"`
-	Cave        Inventory   `json:"cave"`
+	Name        string     `json:"name"`
+	Number      int        `json:"number"`
+	FormerOwner string     `json:"formerOwner"`
+	Build       Build      `json:"build"`
+	Pending     *Works     `json:"pending"`
+	History     []Upgrade  `json:"history"`
+	Expedition  Expedition `json:"expedition"`
+	Crew        Crew       `json:"crew"`
+	Combat      Combat     `json:"combat"`
+	Orders      Orders     `json:"orders"`
+	Hold        Inventory  `json:"hold"`
+	// Entrepôt : stock de l'équipage en ville, accessible depuis n'importe
+	// quelle ville une fois acheté (voir MapState.Entrepot).
+	Entrepot    Inventory   `json:"entrepot"`
 	Map         MapState    `json:"map"`
 	Permissions Permissions `json:"permissions"`
 	Log         []LogEntry  `json:"log"`
+	// LegacyCave : ancien nom de l'entrepôt (« cave »), lu dans les parties
+	// enregistrées avant le changement puis versé dans Entrepot par Normalize.
+	LegacyCave *Inventory `json:"cave,omitempty"`
 }
 
 // --- Construction (atelier) --------------------------------------------------
@@ -243,7 +248,7 @@ type Target struct {
 	Label string  `json:"label"`
 }
 
-// --- Cale et cave ------------------------------------------------------------
+// --- Cale et entrepôt -----------------------------------------------------------
 
 type Inventory struct {
 	Title       string  `json:"title"`
@@ -283,6 +288,10 @@ type MapState struct {
 	// Hangar : secteur de la ville où l'équipage possède son hangar ("" : aucun).
 	// Attribué par le MJ ; le navire s'y amarre et l'atelier n'y travaille que là.
 	Hangar string `json:"hangar"`
+	// Entrepot : ville où l'équipage a acheté son entrepôt ("" : aucun).
+	// Attribué par le MJ comme le hangar ; son stock se consulte et se
+	// remplit depuis n'importe quelle ville où l'arpenteur est amarré.
+	Entrepot string `json:"entrepot"`
 	// Spot : lieu-dit de la zone où l'arpenteur est arrêté ("" : au large).
 	Spot string `json:"spot"`
 	// Hop : trajet en cours d'un lieu-dit à l'autre, sans changer de zone

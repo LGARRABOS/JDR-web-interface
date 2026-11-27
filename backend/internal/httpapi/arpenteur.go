@@ -23,7 +23,7 @@ import (
 )
 
 // Mode GEMMA « Arpenteur » : le groupe commande un vaisseau des sables. Son
-// état (construction, équipage, canons, cale, cave, carte) tient dans un
+// état (construction, équipage, canons, cale, entrepôt, carte) tient dans un
 // document JSON par partie, modifié section par section selon les postes
 // occupés par les personnages des joueurs (voir internal/adventures/arpenteur).
 
@@ -259,8 +259,8 @@ func (s *Server) handleImportArpenteur(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res := arpenteur.ImportContent(content, s.arpenteurPlayerRefs(gameID))
-	if res.Crew == nil && res.Combat == nil && res.Hold == nil && res.Cave == nil && res.Expedition == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucun tableau d'arpenteur reconnu (équipage, combat, cale ou cave)."})
+	if res.Crew == nil && res.Combat == nil && res.Hold == nil && res.Entrepot == nil && res.Expedition == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Aucun tableau d'arpenteur reconnu (équipage, combat, cale ou entrepôt)."})
 		return
 	}
 

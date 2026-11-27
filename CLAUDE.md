@@ -70,7 +70,8 @@ adventures/
     index.ts    point d'entrée public : types et valeurs par défaut du document
     model/      données et règles, sans React ni 3D : types.ts (ArpenteurDoc), catalog.ts,
                 defaults.ts, logic.ts (droits, prix, canons), travel.ts, keld.ts (carte),
-                spots.ts, mapActions.ts, shipGeometry.ts, useArpenteur.ts (hook d'état)
+                spots.ts, mapActions.ts, entrepot.ts (accès à l'entrepôt), shipGeometry.ts,
+                useArpenteur.ts (hook d'état)
     ui/         composants React : ArpenteurView (vue principale, chargée à la demande),
                 panneaux (Atelier, Combat, Crew, Inventory, Map, Overview, Sector, Settings),
                 ShipCutaway / ShipProfile (vues 2D), ShipScene3D, WorldMap3D, ZoneMap3D, ui.tsx

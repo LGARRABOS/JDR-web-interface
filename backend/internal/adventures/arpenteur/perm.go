@@ -13,14 +13,17 @@ var Posts = []string{"Capitaine", "Contremaître", "Maître canonnier", "Chirurg
 
 // Sections modifiables du document, chacune avec ses droits.
 const (
-	SectionShip        = "ship"        // atelier : nom, construction, travaux, évolution
-	SectionExpedition  = "expedition"  // expédition, coupons, quêtes
-	SectionCrew        = "crew"        // recrutement, postes, fiches
-	SectionCrewHealth  = "crewHealth"  // vie et fatigue seulement
-	SectionCombat      = "combat"      // canons, munitions, poudre, salves
-	SectionOrders      = "orders"      // déroulé de la mise à feu, cible
-	SectionHold        = "hold"        // cale
-	SectionCave        = "cave"        // cave
+	SectionShip       = "ship"       // atelier : nom, construction, travaux, évolution
+	SectionExpedition = "expedition" // expédition, coupons, quêtes
+	SectionCrew       = "crew"       // recrutement, postes, fiches
+	SectionCrewHealth = "crewHealth" // vie et fatigue seulement
+	SectionCombat     = "combat"     // canons, munitions, poudre, salves
+	SectionOrders     = "orders"     // déroulé de la mise à feu, cible
+	SectionHold       = "hold"       // cale
+	SectionEntrepot   = "entrepot"   // entrepôt (stock en ville)
+	// SectionCave : ancien nom de l'entrepôt, accepté pour les pages pas
+	// encore rechargées.
+	SectionCave        = "cave"
 	SectionMap         = "map"         // carte, cap, repères
 	SectionPermissions = "permissions" // droits par poste (MJ seul)
 	// SectionCrewSelf : un joueur règle les points de vie maximum du
@@ -29,7 +32,7 @@ const (
 )
 
 // EditableSections : sections dont le MJ peut confier les droits à des postes.
-var EditableSections = []string{SectionShip, SectionExpedition, SectionCrew, SectionCrewHealth, SectionCombat, SectionOrders, SectionHold, SectionCave, SectionMap}
+var EditableSections = []string{SectionShip, SectionExpedition, SectionCrew, SectionCrewHealth, SectionCombat, SectionOrders, SectionHold, SectionEntrepot, SectionMap}
 
 // Perm : postes qui modifient une section. Fallback : postes qui la modifient
 // quand aucun joueur n'occupe l'un des postes principaux (ex. le Capitaine
@@ -51,7 +54,7 @@ func DefaultPermissions() Permissions {
 		SectionCombat:     {Posts: []string{"Maître canonnier"}, Fallback: []string{"Capitaine", "Contremaître"}},
 		SectionOrders:     {Posts: []string{"Capitaine", "Guetteur", "Contremaître", "Maître canonnier"}, Fallback: []string{}},
 		SectionHold:       {Posts: []string{"Capitaine", "Contremaître", "Mousse"}, Fallback: []string{}},
-		SectionCave:       {Posts: []string{"Capitaine"}, Fallback: []string{}},
+		SectionEntrepot:   {Posts: []string{"Capitaine"}, Fallback: []string{}},
 		SectionMap:        {Posts: []string{"Capitaine", "Guetteur"}, Fallback: []string{}},
 	}
 }
@@ -61,6 +64,11 @@ func NormalizePermissions(p *Permissions) {
 	out := Permissions{}
 	for _, s := range EditableSections {
 		cur, ok := (*p)[s]
+		if old, had := (*p)[SectionCave]; had && s == SectionEntrepot {
+			// Droits réglés pour l'ancienne cave (partie d'avant le
+			// renommage) : ils passent à l'entrepôt.
+			cur, ok = old, true
+		}
 		if !ok {
 			cur = def[s]
 		}
@@ -154,6 +162,9 @@ func (d *Doc) playerHoldsAny(posts []string) bool {
 func (d *Doc) CanEdit(section string, userID int64, isGM bool) bool {
 	if isGM {
 		return true
+	}
+	if section == SectionCave {
+		section = SectionEntrepot
 	}
 	if section == SectionPermissions {
 		return false
@@ -300,12 +311,12 @@ func (d *Doc) Apply(section string, raw json.RawMessage, isGM bool) error {
 			return err
 		}
 		d.Hold = v
-	case SectionCave:
+	case SectionEntrepot, SectionCave:
 		var v Inventory
 		if err := json.Unmarshal(raw, &v); err != nil {
 			return err
 		}
-		d.Cave = v
+		d.Entrepot = v
 	case SectionMap:
 		var v MapState
 		if err := json.Unmarshal(raw, &v); err != nil {
@@ -313,8 +324,9 @@ func (d *Doc) Apply(section string, raw json.RawMessage, isGM bool) error {
 		}
 		if !isGM {
 			keepHiddenMarkers(&v, d.Map)
-			// Le hangar s'achète à la table : seul le MJ l'attribue.
+			// Hangar et entrepôt s'achètent à la table : seul le MJ les attribue.
 			v.Hangar = d.Map.Hangar
+			v.Entrepot = d.Map.Entrepot
 		}
 		now := time.Now()
 		v.Travel = stamp(v.Travel, d.Map.Travel, now)

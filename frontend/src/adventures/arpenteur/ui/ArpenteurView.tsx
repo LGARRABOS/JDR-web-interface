@@ -70,7 +70,7 @@ export function ArpenteurView({
         {node}
       </Pane>
     ) : null;
-  const [holdSide, setHoldSide] = useState<'hold' | 'cave'>('hold');
+  const [holdSide, setHoldSide] = useState<'hold' | 'entrepot'>('hold');
   const [view, setView] = useState<'profil' | 'coupe'>('profil');
   const [preview, setPreview] = useState<{
     id: string;
@@ -147,11 +147,11 @@ export function ArpenteurView({
       crew: 'equipage',
       combat: 'combat',
       hold: 'cale',
-      cave: 'cale',
+      entrepot: 'cale',
       map: 'carte',
       atelier: 'atelier',
     };
-    if (target === 'hold' || target === 'cave') setHoldSide(target);
+    if (target === 'hold' || target === 'entrepot') setHoldSide(target);
     setTab(map[target]);
     requestAnimationFrame(() =>
       tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -190,7 +190,7 @@ export function ArpenteurView({
     { id: 'navire', label: 'Navire' },
     { id: 'equipage', label: 'Équipage' },
     { id: 'combat', label: 'Combat' },
-    { id: 'cale', label: 'Cale & cave' },
+    { id: 'cale', label: 'Cale & entrepôt' },
     { id: 'carte', label: 'Carte' },
     { id: 'atelier', label: 'Atelier' },
     ...(isGM ? [{ id: 'reglages' as Tab, label: 'Réglages' }] : []),
@@ -428,6 +428,7 @@ export function ArpenteurView({
               rights={rights}
               update={update}
               initial={holdSide}
+              isGM={isGM}
             />
           )}
           {pane(
