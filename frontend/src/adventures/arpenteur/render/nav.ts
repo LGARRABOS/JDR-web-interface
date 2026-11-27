@@ -16,6 +16,34 @@ export interface Nav {
 export const STOP_DX = 200;
 export const STOP_DZ = 190;
 
+/**
+ * Distance d'arrêt au centre du repère (m), selon sa taille : l'arpenteur se
+ * gare tout près, au bord du lieu (au ras de la faille, au-dessus des eaux).
+ */
+const STOP_DIST: Record<string, number> = {
+  arche: 135,
+  epave: 135,
+  aiguille: 115,
+  sanctuaire: 140,
+  orgues: 115,
+  aspizos: 95,
+  faille: 125,
+  etangs: 85,
+  lagon: 95,
+  cascade: 100,
+  sylvabaob: 95,
+  troupeaux: 95,
+  barkhane: 175,
+  kraigs: 105,
+};
+
+/** Décalage (x, z) du point d'arrêt par rapport au repère. */
+export function stopOffset(look?: string): [number, number] {
+  const d = (look && STOP_DIST[look]) || Math.hypot(STOP_DX, STOP_DZ);
+  const k = d / Math.hypot(STOP_DX, STOP_DZ);
+  return [STOP_DX * k, STOP_DZ * k];
+}
+
 /** Valeur ramenée dans [-period/2, period/2[. */
 export function wrapC(v: number, period: number) {
   return ((((v + period / 2) % period) + period) % period) - period / 2;

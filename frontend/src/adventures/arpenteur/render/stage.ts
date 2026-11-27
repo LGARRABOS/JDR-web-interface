@@ -40,8 +40,7 @@ import type { SceneInfo } from './debug';
 import {
   along,
   route,
-  STOP_DX,
-  STOP_DZ,
+  stopOffset,
   toShip,
   wrapC,
   type Nav,
@@ -369,8 +368,9 @@ export class Stage {
   private stopOf(sp: SpotView) {
     const P = this.period;
     const lap = Math.floor((this.nav.x - this.zoneCx + P / 2) / P);
-    const x0 = this.zoneCx + wrapC(sp.x + STOP_DX - this.zoneCx, P);
-    return { x: x0 + lap * P, z: sp.z + STOP_DZ };
+    const [dx, dz] = stopOffset(sp.look);
+    const x0 = this.zoneCx + wrapC(sp.x + dx - this.zoneCx, P);
+    return { x: x0 + lap * P, z: sp.z + dz };
   }
 
   /**

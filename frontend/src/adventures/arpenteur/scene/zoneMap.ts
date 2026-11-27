@@ -1,13 +1,6 @@
 import * as THREE from 'three';
 import type { Spot } from '../model/spots';
-import {
-  along,
-  STOP_DX,
-  STOP_DZ,
-  wrapC,
-  type Nav,
-  type Route,
-} from '../render/nav';
+import { along, stopOffset, wrapC, type Nav, type Route } from '../render/nav';
 import type { AetherRealm } from './native/aether';
 import { buildCabin, type Cabin } from './cabin';
 import { Landmarks, onGround } from './native/landmarks';
@@ -469,7 +462,10 @@ void main(){ float m = texture2D(uMap, gl_PointCoord).a; float a = smoothstep(.1
     return this.spots.some(
       (s) =>
         Math.hypot(this.mx(s.x) - x, this.mz(s.z) - z) < d ||
-        Math.hypot(this.mx(s.x + STOP_DX) - x, this.mz(s.z + STOP_DZ) - z) <
+        Math.hypot(
+          this.mx(s.x + stopOffset(s.look)[0]) - x,
+          this.mz(s.z + stopOffset(s.look)[1]) - z
+        ) <
           d * 0.7
     );
   }

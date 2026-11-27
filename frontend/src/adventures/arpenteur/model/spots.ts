@@ -1,6 +1,6 @@
 import { isUnknown } from './keld';
 import type { MapState } from './types';
-import { routeLength, STOP_DX, STOP_DZ, wrapC } from '../render/nav';
+import { routeLength, stopOffset, wrapC } from '../render/nav';
 
 // Points d'intérêt : endroits nommés d'une zone où l'arpenteur peut se rendre
 // sans changer de zone. Il quitte le large (ou un autre point d'intérêt),
@@ -236,7 +236,10 @@ export const spotName = (id: string | undefined | null) =>
 export function hopSeconds(from: string, to: string) {
   const a = spotById(from),
     b = spotById(to);
-  const stop = (s: Spot) => ({ x: s.x + STOP_DX, z: s.z + STOP_DZ });
+  const stop = (s: Spot) => {
+    const [dx, dz] = stopOffset(s.look);
+    return { x: s.x + dx, z: s.z + dz };
+  };
   let len: number;
   if (a && b) {
     const sa = stop(a),
