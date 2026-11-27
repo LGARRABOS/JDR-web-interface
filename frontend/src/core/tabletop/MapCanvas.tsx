@@ -250,16 +250,18 @@ export function MapCanvas({
     [onMapViewChange, scale, offset]
   );
 
-  // Zoom et déplacement : pour le MJ, la vue est partagée avec les joueurs ;
-  // un joueur peut ajuster sa propre vue (utile sur téléphone), jusqu'au
-  // prochain recadrage du MJ.
+  // Zoom et déplacement : réservés au MJ, dont la vue est partagée avec les
+  // joueurs. Un joueur suit la vue du MJ sans pouvoir la modifier (molette,
+  // glisser et pincer sont ignorés de son côté).
   const handleWheel = (e: React.WheelEvent) => {
+    if (!isGM) return;
     e.preventDefault();
     const newScale = Math.max(0.25, Math.min(3, scale - e.deltaY * 0.002));
     updateView({ scale: newScale });
   };
 
   const handleMapMouseDown = (e: React.PointerEvent) => {
+    if (!isGM) return;
     if ((e.target as HTMLElement).closest('[data-token]')) return;
     if (pinchRef.current) return;
     if (e.button === 0) {
@@ -275,7 +277,7 @@ export function MapCanvas({
 
   const handleMapMouseMove = useCallback(
     (e: MouseEvent) => {
-      if (panRef.current && onMapViewChange && !pinchRef.current) {
+      if (panRef.current && isGM && onMapViewChange && !pinchRef.current) {
         didPanRef.current = true;
         const dx = e.clientX - panRef.current.startX;
         const dy = e.clientY - panRef.current.startY;
@@ -288,7 +290,7 @@ export function MapCanvas({
         });
       }
     },
-    [onMapViewChange, scale]
+    [isGM, onMapViewChange, scale]
   );
 
   const handleMapMouseUp = useCallback(() => {
@@ -411,7 +413,7 @@ export function MapCanvas({
   updateViewRef.current = updateView;
   useEffect(() => {
     const el = canvasRef.current;
-    if (!el) return;
+    if (!el || !isGM) return;
     const dist = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
     const onStart = (e: TouchEvent) => {
@@ -445,7 +447,7 @@ export function MapCanvas({
       el.removeEventListener('touchend', onEnd);
       el.removeEventListener('touchcancel', onEnd);
     };
-  }, [map?.id, onMapPanEnd]);
+  }, [map?.id, isGM, onMapPanEnd]);
 
   const placementClickRef = useRef(false);
   // Flèches du clavier : le personnage sélectionné regarde dans cette direction
@@ -545,7 +547,8 @@ export function MapCanvas({
       className="flex-1 overflow-hidden relative bg-fantasy-bg select-none"
       onWheel={handleWheel}
       style={{
-        cursor: isDragging || isPanning ? 'grabbing' : 'grab',
+        cursor:
+          isDragging || isPanning ? 'grabbing' : isGM ? 'grab' : 'default',
         touchAction: 'none',
       }}
     >
@@ -616,7 +619,11 @@ export function MapCanvas({
       >
         <div
           ref={mapContainerRef}
-          className="relative"
+          // shrink-0 : sans ça, une carte plus large que la zone d'affichage
+          // était rétrécie par le flex parent ; l'image ne correspondait plus
+          // à la taille logique de la carte et les clics (placement, règle,
+          // déplacement des jetons) tombaient à côté de la souris.
+          className="relative shrink-0"
           style={{ width: map.width, height: map.height }}
           onPointerDown={handleMapMouseDown}
           onClick={handleCanvasClick}
