@@ -96,6 +96,9 @@ const HOVER = 13;
 const HOVER_DOCK = 9;
 /** Vitesse de croisière (défilement du sable, m/s). */
 const CRUISE = 9;
+/** Lointains : temps (s) pour rejoindre le navire, écart maximal (m). */
+const FAR_FOLLOW = 90;
+const FAR_LAG = 600;
 
 /** Où se trouve le navire : en plein désert, ou amarré dans une ville. */
 export interface Place {
@@ -247,6 +250,11 @@ export class Stage {
   /** Gîte dans les virages. */
   private bank = 0;
   private lastH = 0;
+  /**
+   * Centre des lointains dans la zone : fixé, il rejoint lentement le navire
+   * (qui ne sort jamais de la couronne de montagnes).
+   */
+  private farAt: { x: number; z: number; biome: string } | null = null;
   private spotKey = '';
   private lastEye: readonly number[] = [0, 0, 0];
 
@@ -1034,6 +1042,31 @@ export class Stage {
         moonDir: rot(light.moonDir),
       };
     }
+    // Lointains (montagnes) posés dans la zone, et non collés à la caméra :
+    // ils tournent quand le navire vire et défilent un peu quand il avance.
+    const fa = this.farAt;
+    if (
+      !fa ||
+      fa.biome !== biome.id ||
+      Math.hypot(this.nav.x - fa.x, this.nav.z - fa.z) > FAR_LAG + 400
+    )
+      this.farAt = { x: this.nav.x, z: this.nav.z, biome: biome.id };
+    else {
+      const k = Math.min(1, dt / FAR_FOLLOW);
+      fa.x += (this.nav.x - fa.x) * k;
+      fa.z += (this.nav.z - fa.z) * k;
+      const d = Math.hypot(this.nav.x - fa.x, this.nav.z - fa.z);
+      if (d > FAR_LAG) {
+        fa.x = this.nav.x + ((fa.x - this.nav.x) * FAR_LAG) / d;
+        fa.z = this.nav.z + ((fa.z - this.nav.z) * FAR_LAG) / d;
+      }
+    }
+    const farOff = toShip(
+      this.nav,
+      this.farAt!.x - this.nav.x,
+      this.farAt!.z - this.nav.z
+    );
+    const farM = chain(translation(farOff[0], 0, farOff[1]), rotationY(hh));
     const turn = dt > 0 ? wrapC(hh - this.lastH, Math.PI * 2) / dt : 0;
     this.lastH = hh;
     this.bank +=
@@ -1109,7 +1142,7 @@ export class Stage {
       const bm = interior ? null : this.biomeMeshes(biome);
       if (bm) {
         items.push({ mesh: this.env.terrain, model: identity() });
-        items.push({ mesh: bm.far, model: identity() });
+        items.push({ mesh: bm.far, model: farM });
         if (!nat) items.push(...scenery);
       }
       if (cityDraw)
@@ -1272,6 +1305,7 @@ export class Stage {
             return { id: v.id, look: v.look, x, z, rot: this.nav.h };
           }),
       nav: { ...this.nav },
+      far: [farOff[0], farOff[1], hh],
       duneAmp: biome.dune,
       terrain: biome.terrain ?? 0,
       inVoid,

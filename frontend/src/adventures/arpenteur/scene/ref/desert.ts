@@ -402,7 +402,7 @@ export function ranges(
     vertexShader: /* glsl */ `
 attribute float aH;
 varying vec3 vN; varying float vH; varying vec3 vW;
-void main(){ vN = normal; vH = aH; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
+void main(){ vN = mat3(modelMatrix) * normal; vH = aH; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
   gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: /* glsl */ `
 uniform vec3 uSun, uLit, uShade, uHaze;

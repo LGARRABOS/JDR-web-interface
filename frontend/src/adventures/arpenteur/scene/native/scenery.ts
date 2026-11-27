@@ -1794,6 +1794,10 @@ export class BiomeScenery {
     if (!set.root.visible) return;
     const L = f.light;
     const pal = ROCK[f.biome] ?? ROCK.dunes;
+    // Montagnes lointaines posées dans la zone (voir Stage.farAt).
+    const fo = f.far ?? [0, 0, 0];
+    set.far.position.set(fo[0], 0, fo[1]);
+    set.far.rotation.y = fo[2];
     const fu = (set.far.material as THREE.ShaderMaterial).uniforms;
     (fu.uSun.value as THREE.Vector3)
       .set(L.sunDir[0], L.sunDir[1], L.sunDir[2])

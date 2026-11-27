@@ -39,6 +39,8 @@ export interface NativeFrame {
   spots?: { id: string; look: string; x: number; z: number; rot: number }[];
   /** Position et cap du navire dans la zone (le monde tourne autour de lui). */
   nav?: { x: number; z: number; h: number };
+  /** Lointains vus depuis le navire : décalage (x, z) et rotation. */
+  far?: [number, number, number];
   duneAmp: number;
   /** Relief propre au paysage (voir Biome.terrain). */
   terrain: number;
